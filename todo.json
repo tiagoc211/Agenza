@@ -201,7 +201,7 @@
       "id": "T017",
       "order": 17,
       "title": "Prepare and publish release 0.1.0",
-      "status": "todo",
+      "status": "in_progress",
       "depends_on": ["T015", "T016"],
       "acceptance_criteria": [
         "The version number and changelog are finalized.",

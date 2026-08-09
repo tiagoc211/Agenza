@@ -150,3 +150,6 @@ before choosing to run it.
 
 The manual release checklist is recorded in
 [docs/manual-release-test.md](docs/manual-release-test.md).
+
+Release history is available in [CHANGELOG.md](CHANGELOG.md), with the `0.1.0` publication text in
+[docs/release-notes-0.1.0.md](docs/release-notes-0.1.0.md).
