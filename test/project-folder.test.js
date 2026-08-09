@@ -116,6 +116,7 @@ test('accepts newly registered dynamic terminal ids and provides a smoke-test de
   const mainFrame = {};
   const webContents = { mainFrame };
   const activeIds = new Set(['terminal-dynamic-one']);
+  const committedFolders = [];
   const selection = registerProjectFolderIpc({
     defaultFolder: 'C:\\workspace',
     dialog: {
@@ -125,6 +126,10 @@ test('accepts newly registered dynamic terminal ids and provides a smoke-test de
     },
     ipcMain,
     isValidFolderId: (id) => activeIds.has(id),
+    onFolderSelected: async (id, folder) => {
+      committedFolders.push({ folder, id });
+      return folder;
+    },
     skipDialog: true,
     window: { webContents },
   });
@@ -137,6 +142,7 @@ test('accepts newly registered dynamic terminal ids and provides a smoke-test de
     path: 'C:\\workspace',
   });
   assert.equal(selection.getCurrentFolder('terminal-dynamic-one'), 'C:\\workspace');
+  assert.deepEqual(committedFolders, [{ folder: 'C:\\workspace', id: 'terminal-dynamic-one' }]);
 
   activeIds.delete('terminal-dynamic-one');
   await assert.rejects(

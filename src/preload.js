@@ -15,6 +15,7 @@ const subscribe = (channel, callback) => {
 };
 
 const terminalApi = Object.freeze({
+  activate: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.activate, { id }),
   create: () => ipcRenderer.invoke(TERMINAL_CHANNELS.create),
   list: () => ipcRenderer.invoke(TERMINAL_CHANNELS.list),
   remove: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.remove, { id }),

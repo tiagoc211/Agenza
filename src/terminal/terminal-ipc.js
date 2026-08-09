@@ -26,10 +26,19 @@ const writeLog = (logger, level, event, details) => {
   }
 };
 
-const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () => undefined }) => {
+const registerTerminalIpc = ({
+  catalog,
+  ipcMain,
+  window,
+  manager,
+  logger,
+  prepare = () => undefined,
+}) => {
   if (!ipcMain || !window || !manager) {
     throw new TypeError('Terminal IPC requires ipcMain, a window, and a terminal manager.');
   }
+
+  const sessionCatalog = catalog ?? manager;
 
   const sendToRenderer = (channel, payload) => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
@@ -59,26 +68,37 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     }
   };
 
-  const handleCreate = (event) => {
+  const handleActivate = async (event, payload) => {
+    requireTrustedEvent(event, 'activate');
+    const { id } = payload ?? {};
+
+    if (id !== null) {
+      assertSessionId(manager, id);
+    }
+
+    return sessionCatalog.activate?.(id) ?? { activeTerminalId: id };
+  };
+
+  const handleCreate = async (event) => {
     requireTrustedEvent(event, 'create');
-    const snapshot = manager.create();
+    const snapshot = await sessionCatalog.create();
     writeLog(logger, 'info', 'terminal.created', { terminalId: snapshot.id });
     return snapshot;
   };
 
-  const handleList = (event) => {
+  const handleList = async (event) => {
     requireTrustedEvent(event, 'list');
-    return manager.list();
+    return sessionCatalog.list();
   };
 
-  const handleRemove = (event, payload) => {
+  const handleRemove = async (event, payload) => {
     requireTrustedEvent(event, 'remove');
     const { id } = payload ?? {};
     assertSessionId(manager, id);
     writeLog(logger, 'info', 'terminal.remove_requested', { terminalId: id });
 
     try {
-      manager.remove(id);
+      await sessionCatalog.remove(id);
       writeLog(logger, 'info', 'terminal.remove_succeeded', { terminalId: id });
       return { id, removed: true };
     } catch (error) {
@@ -199,6 +219,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     manager.resize(id, columns, rows);
   };
 
+  ipcMain.handle(TERMINAL_CHANNELS.activate, handleActivate);
   ipcMain.handle(TERMINAL_CHANNELS.create, handleCreate);
   ipcMain.handle(TERMINAL_CHANNELS.list, handleList);
   ipcMain.handle(TERMINAL_CHANNELS.remove, handleRemove);
@@ -208,6 +229,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
   ipcMain.on(TERMINAL_CHANNELS.resize, handleResize);
 
   return () => {
+    ipcMain.removeHandler(TERMINAL_CHANNELS.activate);
     ipcMain.removeHandler(TERMINAL_CHANNELS.create);
     ipcMain.removeHandler(TERMINAL_CHANNELS.list);
     ipcMain.removeHandler(TERMINAL_CHANNELS.remove);

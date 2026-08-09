@@ -1,5 +1,7 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain } = require('electron');
 const startedByInstaller = require('electron-squirrel-startup');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { registerClipboardIpc } = require('./clipboard/clipboard-ipc');
 const { createResourceDisposer } = require('./lifecycle/resource-disposer');
@@ -10,11 +12,12 @@ const { TerminalManager } = require('./terminal/terminal-manager');
 const { registerTerminalIpc } = require('./terminal/terminal-ipc');
 const { isProcessRunning, killProcessTree } = require('./terminal/process-tree');
 const { createWindowOptions } = require('./window-options');
+const { WorkspaceService } = require('./workspace/workspace-service');
+const { WORKSPACE_STATE_FILENAME, WorkspaceStateStore } = require('./workspace/workspace-state');
 
 const isStartupCheck = process.argv.includes('--startup-check');
 const isMissingCodexCheck = process.argv.includes('--missing-codex-check');
 const STARTUP_CHECK_CHILD_TIMEOUT_MS = 10000;
-const INITIAL_TERMINAL_COUNT = 2;
 let appLogger = createNoopLogger();
 const startupCheckLog = (...values) => {
   if (isStartupCheck) {
@@ -62,28 +65,32 @@ if (startedByInstaller) {
   app.quit();
 }
 
-const createMainWindow = () => {
+const createMainWindow = async () => {
   startupCheckLog('creating window');
+  const terminalManager = new TerminalManager();
+  const workspaceDirectory = isStartupCheck
+    ? path.join(app.getPath('temp'), 'Agenza', `startup-check-${process.pid}`)
+    : app.getPath('userData');
+  const workspaceService = new WorkspaceService({
+    stateStore: new WorkspaceStateStore({ directory: workspaceDirectory }),
+    terminalManager,
+  });
+  await workspaceService.initialize();
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   appLogger.info('window.created');
-  const terminalManager = new TerminalManager();
-  const initialTerminalIds = Array.from(
-    { length: INITIAL_TERMINAL_COUNT },
-    () => terminalManager.create().id,
-  );
   const disposeClipboardIpc = registerClipboardIpc({ clipboard, ipcMain, window });
   const projectFolderIpc = registerProjectFolderIpc({
     defaultFolder: isStartupCheck ? process.cwd() : null,
     dialog,
-    isValidFolderId: (id) => terminalManager.has(id),
-    initialFolders: isStartupCheck
-      ? Object.fromEntries(initialTerminalIds.map((id) => [id, process.cwd()]))
-      : {},
+    isValidFolderId: (id) => workspaceService.has(id),
+    initialFolders: isStartupCheck ? {} : workspaceService.getInitialFolders(),
     ipcMain,
+    onFolderSelected: (id, folder) => workspaceService.assignFolder(id, folder),
     skipDialog: isStartupCheck,
     window,
   });
   const disposeTerminalIpc = registerTerminalIpc({
+    catalog: workspaceService,
     ipcMain,
     logger: appLogger,
     window,
@@ -91,7 +98,7 @@ const createMainWindow = () => {
     prepare: isStartupCheck
       ? undefined
       : async (id) => {
-          const projectFolder = projectFolderIpc.getCurrentFolder(id);
+          const projectFolder = workspaceService.getCurrentFolder(id);
 
           if (!projectFolder) {
             throw new Error(`Select a project folder for "${id}" before starting Codex.`);
@@ -111,6 +118,14 @@ const createMainWindow = () => {
     { dispose: projectFolderIpc.dispose, label: 'project folder IPC' },
     { dispose: disposeClipboardIpc, label: 'clipboard IPC' },
     { dispose: () => terminalManager.dispose(), label: 'terminal process trees' },
+    ...(isStartupCheck
+      ? [
+          {
+            dispose: () => fs.rmSync(workspaceDirectory, { force: true, recursive: true }),
+            label: 'startup-check workspace state',
+          },
+        ]
+      : []),
   ]);
 
   window.once('close', () => {
@@ -324,6 +339,7 @@ const createMainWindow = () => {
 
           return {
             terminalIds,
+            terminalLabels: stableLabels,
             activePaneCount: document.querySelectorAll('.terminal-pane.is-active').length,
             clearRemovedVisibleOutput,
             connectedPaneCount: document.querySelectorAll(
@@ -381,6 +397,50 @@ const createMainWindow = () => {
           throw new Error(`Unexpected terminal layout: ${JSON.stringify(layout)}`);
         }
 
+        await workspaceService.flush();
+        const persistedWorkspace = JSON.parse(
+          fs.readFileSync(path.join(workspaceDirectory, WORKSPACE_STATE_FILENAME), 'utf8'),
+        );
+        const restoredWorkspace = await new WorkspaceStateStore({
+          directory: workspaceDirectory,
+        }).load();
+        const stateMatchesLayout = (state) =>
+          state.schemaVersion === 1 &&
+          state.revision > 0 &&
+          state.terminals.length === layout.terminalIds.length &&
+          layout.terminalIds.every((id, index) => {
+            const definition = state.terminals[index];
+            return (
+              definition?.id === id &&
+              definition.label === layout.terminalLabels[index] &&
+              definition.order === index &&
+              definition.workspace.kind === 'folder' &&
+              definition.workspace.projectPath === process.cwd()
+            );
+          });
+        const workspaceWasPersisted =
+          stateMatchesLayout(persistedWorkspace) && stateMatchesLayout(restoredWorkspace.state);
+
+        if (!workspaceWasPersisted) {
+          throw new Error(
+            `The dynamic workspace layout was not persisted and restored correctly: ${JSON.stringify(
+              {
+                expectedIds: layout.terminalIds,
+                expectedLabels: layout.terminalLabels,
+                persisted: persistedWorkspace.terminals.map(({ id, label, order, workspace }) => ({
+                  id,
+                  label,
+                  order,
+                  workspace,
+                })),
+                restored: restoredWorkspace.state.terminals.map(
+                  ({ id, label, order, workspace }) => ({ id, label, order, workspace }),
+                ),
+              },
+            )}`,
+          );
+        }
+
         const lifecycleChildPids = await Promise.all([
           startLifecycleChild(terminalManager, layout.terminalIds[0], 'AGENZA_T010_CHILD_ONE='),
           startLifecycleChild(terminalManager, layout.terminalIds[1], 'AGENZA_T010_CHILD_TWO='),
@@ -430,7 +490,7 @@ const handleStartupFailure = (error) => {
 
 app
   .whenReady()
-  .then(() => {
+  .then(async () => {
     try {
       app.setAppLogsPath();
     } catch {
@@ -440,15 +500,11 @@ app
     appLogger = createAppLogger({ directory: app.getPath('logs') });
     startupCheckLog('diagnostic log', appLogger.filePath);
     appLogger.info('app.ready', { platform: process.platform, version: app.getVersion() });
-    createMainWindow();
+    await createMainWindow();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        try {
-          createMainWindow();
-        } catch (error) {
-          handleStartupFailure(error);
-        }
+        createMainWindow().catch(handleStartupFailure);
       }
     });
   })

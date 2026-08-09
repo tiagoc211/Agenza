@@ -51,6 +51,7 @@ const createHarness = () => {
   const writes = [];
   const resizes = [];
   const removedIds = [];
+  const activatedIds = [];
   let startCount = 0;
   let prepareCount = 0;
   let prepareError = null;
@@ -70,6 +71,10 @@ const createHarness = () => {
     return snapshots.find((snapshot) => snapshot.id === id);
   };
   const manager = {
+    activate: async (id) => {
+      activatedIds.push(id);
+      return { activeTerminalId: id };
+    },
     create: () => {
       const id = `terminal-00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`;
       const snapshot = { id, isRunning: false, pid: null };
@@ -125,6 +130,7 @@ const createHarness = () => {
   });
 
   return {
+    activatedIds,
     dataListeners,
     dispose,
     exitListeners,
@@ -144,18 +150,37 @@ const createHarness = () => {
   };
 };
 
-test('creates and lists dynamic sessions only for the owning renderer', () => {
+test('persists the active dynamic terminal and accepts an empty active selection', async () => {
+  const harness = createHarness();
+  const activate = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.activate);
+
+  assert.deepEqual(await activate(harness.trustedEvent, { id: SECOND_ID }), {
+    activeTerminalId: SECOND_ID,
+  });
+  assert.deepEqual(await activate(harness.trustedEvent, { id: null }), {
+    activeTerminalId: null,
+  });
+  await assert.rejects(
+    activate(harness.trustedEvent, { id: 'terminal-unknown' }),
+    /Invalid terminal session id/,
+  );
+  assert.deepEqual(harness.activatedIds, [SECOND_ID, null]);
+
+  harness.dispose();
+});
+
+test('creates and lists dynamic sessions only for the owning renderer', async () => {
   const harness = createHarness();
   const create = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.create);
   const list = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.list);
-  const created = create(harness.trustedEvent);
+  const created = await create(harness.trustedEvent);
 
   assert.equal(created.id.endsWith('000000000003'), true);
   assert.deepEqual(
-    list(harness.trustedEvent).map(({ id }) => id),
+    (await list(harness.trustedEvent)).map(({ id }) => id),
     [FIRST_ID, SECOND_ID, created.id],
   );
-  assert.throws(() => create({ sender: {}, senderFrame: {} }), /Untrusted/);
+  await assert.rejects(create({ sender: {}, senderFrame: {} }), /Untrusted/);
 
   harness.dispose();
 });
@@ -222,7 +247,7 @@ test('restarts and removes one dynamic terminal without changing another', async
   await start(harness.trustedEvent, { id: FIRST_ID });
   const secondBeforeRestart = harness.manager.getSnapshot(SECOND_ID);
   const restarted = await restart(harness.trustedEvent, { id: FIRST_ID });
-  const result = remove(harness.trustedEvent, { id: FIRST_ID });
+  const result = await remove(harness.trustedEvent, { id: FIRST_ID });
 
   assert.equal(restarted.id, FIRST_ID);
   assert.equal(restarted.isRunning, true);
@@ -264,7 +289,7 @@ test('keeps a startup failure isolated to its dynamic terminal', async () => {
   harness.dispose();
 });
 
-test('rejects unknown trusted ids and unsafe payloads while ignoring other senders', () => {
+test('rejects unknown trusted ids and unsafe payloads while ignoring other senders', async () => {
   const harness = createHarness();
   const input = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.input);
   const resize = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.resize);
@@ -286,8 +311,8 @@ test('rejects unknown trusted ids and unsafe payloads while ignoring other sende
     () => resize(harness.trustedEvent, { id: FIRST_ID, columns: 0, rows: 24 }),
     /valid terminal dimension/,
   );
-  assert.throws(
-    () => remove(harness.trustedEvent, { id: 'terminal-unknown' }),
+  await assert.rejects(
+    remove(harness.trustedEvent, { id: 'terminal-unknown' }),
     /Invalid terminal session id/,
   );
   assert.deepEqual(harness.writes, []);

@@ -38,14 +38,27 @@ const terminalTheme = {
 const terminalViews = new Map();
 let nextLabelNumber = 1;
 let resizeFrame;
+let activeTerminalId = null;
+let workspaceRecoveryIssue = null;
 
 const getOrderedViews = () => [...terminalViews.values()];
 
-const setActivePane = (activePane) => {
+const setActivePane = (activePane, { persist = true } = {}) => {
+  const nextActiveId = activePane?.dataset.paneId ?? null;
+  const previousActiveId = activeTerminalId;
+
   for (const { pane } of terminalViews.values()) {
     const isActive = pane === activePane;
     pane.classList.toggle('is-active', isActive);
     pane.dataset.activePane = String(isActive);
+  }
+
+  activeTerminalId = nextActiveId;
+
+  if (persist && nextActiveId !== previousActiveId) {
+    window.agenza.terminal.activate(nextActiveId).catch(() => {
+      // A failed active-pane save does not interrupt any running terminal.
+    });
   }
 };
 
@@ -166,6 +179,7 @@ const launchSession = async (view, { restart, failureMessage }) => {
 
     view.isConnected = true;
     view.terminal.options.disableStdin = false;
+    view.restartButton.textContent = 'Restart';
     setSessionState(view, 'connected', 'Connected', view.projectFolder);
     view.fitAddon.fit();
     window.agenza.terminal.resize(view.id, view.terminal.cols, view.terminal.rows);
@@ -312,8 +326,16 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
     throw new Error('Agenza received an invalid or duplicate terminal session.');
   }
 
-  const labelNumber = nextLabelNumber++;
-  const label = `Terminal ${labelNumber}`;
+  const fallbackLabelNumber = nextLabelNumber++;
+  const label =
+    typeof snapshot.label === 'string' && snapshot.label.length > 0
+      ? snapshot.label
+      : `Terminal ${fallbackLabelNumber}`;
+  const numberedLabel = /^Terminal (\d+)$/.exec(label);
+  const displayNumber = numberedLabel
+    ? Number.parseInt(numberedLabel[1], 10)
+    : (snapshot.order ?? fallbackLabelNumber - 1) + 1;
+  nextLabelNumber = Math.max(nextLabelNumber, displayNumber + 1);
   const pane = terminalPaneTemplate.content.firstElementChild.cloneNode(true);
   const mount = pane.querySelector('[data-terminal-mount]');
   const title = pane.querySelector('[data-terminal-title]');
@@ -330,7 +352,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   pane.setAttribute('aria-labelledby', titleId);
   title.id = titleId;
   title.textContent = label;
-  pane.querySelector('[data-terminal-number]').textContent = String(labelNumber).padStart(2, '0');
+  pane.querySelector('[data-terminal-number]').textContent = String(displayNumber).padStart(2, '0');
   mount.id = `terminal-mount-${snapshot.id}`;
   mount.setAttribute('aria-label', `${label} Codex console`);
   copyButton.setAttribute('aria-label', `Copy selected text from ${label}`);
@@ -358,7 +380,29 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   terminal.open(mount);
   terminal.writeln(`\x1b[1;36mAgenza · ${label}\x1b[0m`);
   terminal.writeln('');
-  terminal.writeln('\x1b[90mChoose a project folder to start Codex.\x1b[0m');
+  const restoredWorkspace = snapshot.workspace ?? {
+    kind: 'unassigned',
+    projectPath: null,
+    repository: null,
+  };
+  const restoredStatus = snapshot.workspaceStatus ?? { status: 'unassigned' };
+  const restoredFolder =
+    restoredStatus.status === 'available' ? restoredWorkspace.projectPath : null;
+
+  if (restoredStatus.status === 'available') {
+    terminal.writeln(`\x1b[90mRestored project: ${restoredWorkspace.projectPath}\x1b[0m`);
+    terminal.writeln('\x1b[90mUse Start above to launch Codex.\x1b[0m');
+  } else if (restoredStatus.status === 'missing') {
+    terminal.writeln('\x1b[31mThe restored project folder is missing or inaccessible.\x1b[0m');
+    terminal.writeln(`\x1b[90mSaved path: ${restoredWorkspace.projectPath}\x1b[0m`);
+    terminal.writeln('\x1b[90mChoose another folder to recover this terminal.\x1b[0m');
+  } else {
+    terminal.writeln('\x1b[90mChoose a project folder to start Codex.\x1b[0m');
+  }
+
+  if (workspaceRecoveryIssue) {
+    terminal.writeln(`\r\n\x1b[31m${workspaceRecoveryIssue}\x1b[0m`);
+  }
 
   const view = {
     clearButton,
@@ -374,7 +418,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
     pane,
     pasteButton,
     projectButton,
-    projectFolder: null,
+    projectFolder: restoredFolder,
     removeButton,
     restartButton,
     stateElement: pane.querySelector('[data-terminal-state]'),
@@ -382,6 +426,15 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   };
 
   terminalViews.set(view.id, view);
+
+  if (restoredStatus.status === 'available') {
+    projectButton.textContent = 'Change folder';
+    restartButton.textContent = 'Start';
+    restartButton.disabled = false;
+    setSessionState(view, 'waiting', 'Ready', restoredWorkspace.projectPath);
+  } else if (restoredStatus.status === 'missing') {
+    setSessionState(view, 'error', 'Unavailable', restoredWorkspace.projectPath);
+  }
 
   pane.addEventListener('pointerdown', (event) => {
     setActivePane(pane);
@@ -437,7 +490,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   fitTerminals();
 
   if (activate) {
-    setActivePane(pane);
+    setActivePane(pane, { persist: false });
     terminal.focus();
   }
 
@@ -513,16 +566,25 @@ emptyAddTerminalButton.addEventListener('click', () => addTerminal());
 
 const initializeWorkspace = async () => {
   try {
-    const snapshots = await window.agenza.terminal.list();
+    const catalog = await window.agenza.terminal.list();
+    const snapshots = Array.isArray(catalog) ? catalog : catalog.sessions;
+    workspaceRecoveryIssue = Array.isArray(catalog) ? null : catalog.recoveryIssue;
 
     for (const snapshot of snapshots) {
       createTerminalView(snapshot, { activate: false });
     }
 
-    const firstView = getOrderedViews()[0];
+    const restoredActiveId = Array.isArray(catalog)
+      ? snapshots.find(({ isActive }) => isActive)?.id
+      : catalog.activeTerminalId;
+    const firstView = terminalViews.get(restoredActiveId) ?? getOrderedViews()[0];
 
     if (firstView) {
-      setActivePane(firstView.pane);
+      setActivePane(firstView.pane, { persist: false });
+    }
+
+    if (workspaceRecoveryIssue) {
+      terminalCount.title = workspaceRecoveryIssue;
     }
   } catch (error) {
     emptyWorkspace.querySelector('p').textContent = formatUserFacingError(

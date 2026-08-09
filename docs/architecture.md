@@ -47,10 +47,19 @@ on one registered session; removal disposes its complete process tree before del
 entry. Aggregate data and exit subscriptions include their source ID, so sessions created after IPC
 registration remain isolated and observable.
 
-Until layout persistence is implemented in `T205`, each window starts by creating two generated
-terminal sessions. The renderer assigns stable runtime labels in creation order and supports an
-empty workspace, a full-width single pane, two columns, and a scrollable responsive grid for more
-panes. Removed process IDs and labels are not reused during that window's lifetime.
+`WorkspaceService` owns the persisted terminal definitions separately from `TerminalManager`'s
+runtime PTYs. On a first launch it creates two unassigned definitions; later launches restore the
+saved IDs, labels, order, active terminal, and workspace assignments. The renderer supports an empty
+workspace, a full-width single pane, two columns, and a scrollable responsive grid for more panes.
+Runtime snapshots combine the saved definition with current process and path-availability state,
+without writing process IDs, terminal content, or transient errors to disk.
+
+`WorkspaceStateStore` validates schema v1 and cross-record invariants before every read and write.
+It writes `workspace-state.json` through a validated temporary file and atomic rename, retaining the
+previous valid state as `workspace-state.backup.json`. Every saved mutation increments `revision`.
+Invalid JSON, unknown schema versions, or invalid invariants are preserved without overwrite and
+open a recoverable default view. State mutations are serialized so rapid renderer actions cannot
+race writes.
 
 Before starting a pane, Agenza verifies that `codex --version` works in the user's normal system
 environment and then starts its Codex PTY from that same environment. The application does not
@@ -67,7 +76,10 @@ Electron's native directory picker. The main process stores one folder per termi
 only IDs that still belong to the dynamic terminal registry and absolute directories that can be
 read and written. A valid first selection starts only that Codex session with the folder as `cwd`; a
 later selection stops and restarts only that session. Each pane header displays its own full project
-path. Cancellation and validation errors leave the other terminals untouched.
+path. Accessible restored folders are shown as ready without automatically starting Codex. Missing
+or inaccessible restored paths are shown locally as unavailable and can be replaced without
+preventing other definitions from loading. Cancellation and validation errors leave the other
+terminals untouched.
 
 Session controls are scoped by stable terminal IDs. For a running session, Clear sends the
 standard Ctrl+L terminal control to the selected PTY so Codex clears the screen and redraws its input
@@ -104,10 +116,10 @@ Electron boundaries. `npm run test:smoke` launches the packaged executable with 
 and a 60-second timeout. `npm run test:all` runs the unit suite, packages the application, and then
 runs the smoke test sequentially. The smoke check exercises three-, two-, one-, and zero-pane
 layouts before recreating two real ConPTY sessions. It verifies dynamic addition and removal,
-stable labels, isolated markers, restart behavior, renderer controls, keyboard focus, and that
-persistent descendant processes do not survive window closure. After `npm run make`, `npm run
-test:release` validates the Squirrel installer and package metadata plus the packaged application
-archive, executable, and native ConPTY runtime.
+versioned state persistence and reload, stable labels, isolated markers, restart behavior, renderer
+controls, keyboard focus, and that persistent descendant processes do not survive window closure.
+After `npm run make`, `npm run test:release` validates the Squirrel installer and package metadata
+plus the packaged application archive, executable, and native ConPTY runtime.
 
 `node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
 scripts, and helper scripts relative to its package directory. A build plugin copies its runtime

@@ -61,11 +61,26 @@ test('gives every pane independent controls, process state, and a stable label',
     assert.equal((html.match(new RegExp(control, 'g')) ?? []).length, 1);
   }
 
-  assert.match(renderer, /const label = `Terminal \$\{labelNumber\}`/);
+  assert.match(renderer, /typeof snapshot\.label === 'string'/);
+  assert.match(renderer, /`Terminal \$\{fallbackLabelNumber\}`/);
   assert.match(renderer, /label,/);
   assert.match(renderer, /setSessionState\(view, 'connected', 'Connected', view\.projectFolder\)/);
   assert.match(renderer, /terminalViews\.get\(id\)\?\.terminal\.write\(data\)/);
   assert.match(renderer, /window\.agenza\.terminal\.resize\(view\.id/);
+  assert.match(renderer, /window\.agenza\.terminal\.activate\(nextActiveId\)/);
+});
+
+test('restores persisted labels, active state, and available or missing project paths safely', () => {
+  assert.match(
+    renderer,
+    /const snapshots = Array\.isArray\(catalog\) \? catalog : catalog\.sessions/,
+  );
+  assert.match(renderer, /catalog\.activeTerminalId/);
+  assert.match(renderer, /snapshot\.workspaceStatus/);
+  assert.match(renderer, /Restored project:/);
+  assert.match(renderer, /restored project folder is missing or inaccessible/);
+  assert.match(renderer, /Choose another folder to recover this terminal/);
+  assert.match(renderer, /restartButton\.textContent = 'Start'/);
 });
 
 test('selects and displays an independent project folder before starting each session', () => {

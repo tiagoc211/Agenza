@@ -39,6 +39,7 @@ const registerProjectFolderIpc = ({
   initialFolders = {},
   ipcMain,
   isValidFolderId,
+  onFolderSelected = async (_id, folder) => folder,
   skipDialog = false,
   validate = validateProjectFolder,
   window,
@@ -49,6 +50,10 @@ const registerProjectFolderIpc = ({
 
   if (isValidFolderId !== undefined && typeof isValidFolderId !== 'function') {
     throw new TypeError('Project folder IPC terminal validation must be a function.');
+  }
+
+  if (typeof onFolderSelected !== 'function') {
+    throw new TypeError('Project folder IPC selection callback must be a function.');
   }
 
   if (!isValidFolderId && (!Array.isArray(folderIds) || folderIds.length === 0)) {
@@ -73,8 +78,9 @@ const registerProjectFolderIpc = ({
     const currentFolder = currentFolders.get(id) ?? defaultFolder;
 
     if (skipDialog && currentFolder) {
-      currentFolders.set(id, currentFolder);
-      return { canceled: false, id, path: currentFolder };
+      const committedFolder = (await onFolderSelected(id, currentFolder)) ?? currentFolder;
+      currentFolders.set(id, committedFolder);
+      return { canceled: false, id, path: committedFolder };
     }
 
     const result = await dialog.showOpenDialog(window, {
@@ -87,8 +93,9 @@ const registerProjectFolderIpc = ({
     }
 
     const selectedFolder = await validate(result.filePaths[0]);
-    currentFolders.set(id, selectedFolder);
-    return { canceled: false, id, path: selectedFolder };
+    const committedFolder = (await onFolderSelected(id, selectedFolder)) ?? selectedFolder;
+    currentFolders.set(id, committedFolder);
+    return { canceled: false, id, path: committedFolder };
   };
 
   ipcMain.handle(PROJECT_CHANNELS.selectFolder, handleSelectFolder);

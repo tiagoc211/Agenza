@@ -1,4 +1,5 @@
 const TERMINAL_CHANNELS = Object.freeze({
+  activate: 'agenza:terminal:activate',
   create: 'agenza:terminal:create',
   list: 'agenza:terminal:list',
   remove: 'agenza:terminal:remove',

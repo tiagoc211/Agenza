@@ -62,7 +62,7 @@
       "id": "T205",
       "order": 5,
       "title": "Persist and restore the terminal workspace layout",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T202", "T204"],
       "acceptance_criteria": [
         "Terminal definitions, labels, ordering, and assigned workspace metadata are stored locally using the versioned schema.",
