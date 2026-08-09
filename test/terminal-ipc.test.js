@@ -57,10 +57,25 @@ const createHarness = () => {
     return () => listeners.delete(id);
   };
   const manager = {
+    getSnapshot: (id) => snapshots.find((snapshot) => snapshot.id === id),
     getSnapshots: () => snapshots,
+    kill: (id) => {
+      snapshots = snapshots.map((snapshot) =>
+        snapshot.id === id ? { ...snapshot, isRunning: false, pid: null } : snapshot,
+      );
+      exitListeners.get(id)?.({ exitCode: 0, signal: 0 });
+      return true;
+    },
     onData: (id, listener) => subscribe(dataListeners, id, listener),
     onExit: (id, listener) => subscribe(exitListeners, id, listener),
     resize: (id, columns, rows) => resizes.push({ id, columns, rows }),
+    start: (id) => {
+      startCount += 1;
+      snapshots = snapshots.map((snapshot) =>
+        snapshot.id === id ? { ...snapshot, isRunning: true, pid: startCount + 200 } : snapshot,
+      );
+      return snapshots.find((snapshot) => snapshot.id === id);
+    },
     startAll: () => {
       startCount += 1;
       snapshots = snapshots.map((snapshot, index) => ({
@@ -147,6 +162,23 @@ test('forwards process output and exit events only with their source terminal id
       payload: { id: 'terminal-two', exitCode: 7, signal: 0 },
     },
   ]);
+
+  harness.dispose();
+});
+
+test('starts and restarts one terminal without changing the other', async () => {
+  const harness = createHarness();
+  const start = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.start);
+  const restart = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.restart);
+
+  await start(harness.trustedEvent, { id: 'terminal-one' });
+  const secondBeforeRestart = harness.manager.getSnapshot('terminal-two');
+  const restarted = await restart(harness.trustedEvent, { id: 'terminal-one' });
+
+  assert.equal(restarted.id, 'terminal-one');
+  assert.equal(restarted.isRunning, true);
+  assert.deepEqual(harness.manager.getSnapshot('terminal-two'), secondBeforeRestart);
+  assert.equal(harness.startCount(), 2);
 
   harness.dispose();
 });

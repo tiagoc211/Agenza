@@ -34,6 +34,13 @@ The terminal process layer uses one `TerminalSession` per PTY and a `TerminalMan
 
 The preload bridge exposes only terminal start, input, resize, output, and exit operations. The main process validates the sending frame, terminal ID, input type, and dimensions before routing any request. Renderer subscriptions are registered before the main process starts either PTY so initial shell output is not lost.
 
+Each pane has an independent folder button backed by a narrow project-selection bridge and
+Electron's native directory picker. The main process stores one folder per terminal ID and accepts
+only absolute directories that can be read and written. A valid first selection starts only that
+Codex session with the folder as `cwd`; a later selection stops and restarts only that session. Each
+pane header displays its own full project path. Cancellation and validation errors leave the other
+terminal untouched.
+
 `node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
 scripts, and helper scripts relative to its package directory. A build plugin copies its runtime
 JavaScript and the current platform's prebuilt binaries into the Webpack output. Electron Forge

@@ -23,8 +23,10 @@ conda run -n agenza npm install
 conda run -n agenza npm run dev
 ```
 
-On startup, Agenza checks that Conda can run the Codex CLI from the `agenza` environment, then
-opens one independent Codex session in each terminal pane.
+Each terminal pane has its own folder button. Choose a readable and writable project folder to start
+that pane's Codex session; the two panes may use different folders. Choosing another folder later
+restarts only that pane in the new directory. Agenza checks that Conda can run Codex from the
+`agenza` environment before each session starts.
 
 Available validation and build commands are:
 

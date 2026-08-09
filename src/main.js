@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const startedByInstaller = require('electron-squirrel-startup');
 
+const { registerProjectFolderIpc } = require('./project/project-folder');
 const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
 const { DEFAULT_SESSION_IDS, TerminalManager } = require('./terminal/terminal-manager');
 const { registerTerminalIpc } = require('./terminal/terminal-ipc');
@@ -48,15 +49,30 @@ const createMainWindow = () => {
   startupCheckLog('creating window');
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   const terminalManager = new TerminalManager();
+  const projectFolderIpc = registerProjectFolderIpc({
+    dialog,
+    folderIds: DEFAULT_SESSION_IDS,
+    initialFolders: isStartupCheck
+      ? Object.fromEntries(DEFAULT_SESSION_IDS.map((id) => [id, process.cwd()]))
+      : {},
+    ipcMain,
+    skipDialog: isStartupCheck,
+    window,
+  });
   const disposeTerminalIpc = registerTerminalIpc({
     ipcMain,
     window,
     manager: terminalManager,
     prepare: isStartupCheck
       ? undefined
-      : async () => {
-          const sessionOptions = await prepareCodexSessionOptions();
-          return Object.fromEntries(DEFAULT_SESSION_IDS.map((id) => [id, sessionOptions]));
+      : async (id) => {
+          const projectFolder = projectFolderIpc.getCurrentFolder(id);
+
+          if (!projectFolder) {
+            throw new Error(`Select a project folder for "${id}" before starting Codex.`);
+          }
+
+          return prepareCodexSessionOptions({ cwd: projectFolder });
         },
   });
 
@@ -66,6 +82,12 @@ const createMainWindow = () => {
     if (isStartupCheck) {
       try {
         const layout = await window.webContents.executeJavaScript(`(async () => {
+          for (const id of ['terminal-one', 'terminal-two']) {
+            document
+              .querySelector('[data-pane-id="' + id + '"] [data-project-button]')
+              ?.click();
+          }
+
           const deadline = Date.now() + 15000;
           while (
             document.querySelectorAll('[data-session-state="connected"]').length !== 2 &&
@@ -139,6 +161,7 @@ const createMainWindow = () => {
     }
   });
   window.once('closed', () => {
+    projectFolderIpc.dispose();
     disposeTerminalIpc();
     terminalManager.dispose();
   });

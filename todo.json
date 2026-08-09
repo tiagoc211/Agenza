@@ -80,7 +80,7 @@
       "id": "T007",
       "order": 7,
       "title": "Launch Codex in both terminals",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": ["T006"],
       "acceptance_criteria": [
         "Each pane starts the Codex CLI through the agenza Conda environment.",
@@ -92,7 +92,7 @@
       "id": "T008",
       "order": 8,
       "title": "Add project-folder selection",
-      "status": "todo",
+      "status": "in_progress",
       "depends_on": ["T007"],
       "acceptance_criteria": [
         "The user can select the working directory used by the Codex sessions.",

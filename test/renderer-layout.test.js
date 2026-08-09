@@ -29,6 +29,13 @@ test('connects each xterm view to its matching PTY session', () => {
   assert.match(renderer, /window\.agenza\.terminal\.write\(view\.id, data\)/);
   assert.match(renderer, /terminalViews\.get\(id\)\?\.terminal\.write\(data\)/);
   assert.match(renderer, /window\.agenza\.terminal\.resize\(view\.id/);
-  assert.match(renderer, /Checking Conda and Codex/);
-  assert.match(renderer, /Codex session/);
+  assert.match(renderer, /Choose a project folder to start Codex/);
+});
+
+test('selects and displays a project folder before starting sessions', () => {
+  assert.equal((html.match(/data-project-button/g) ?? []).length, 2);
+  assert.match(renderer, /window\.agenza\.project\.selectFolder\(view\.id\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.start\(view\.id\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.restart\(view\.id\)/);
+  assert.match(renderer, /setSessionState\(view, 'connected', 'Connected', result\.path\)/);
 });

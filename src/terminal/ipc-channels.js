@@ -1,5 +1,6 @@
 const TERMINAL_CHANNELS = Object.freeze({
   start: 'agenza:terminal:start',
+  restart: 'agenza:terminal:restart',
   input: 'agenza:terminal:input',
   resize: 'agenza:terminal:resize',
   data: 'agenza:terminal:data',

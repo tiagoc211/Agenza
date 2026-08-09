@@ -3,6 +3,7 @@ const { DEFAULT_SESSION_IDS } = require('./terminal-manager');
 const { MAX_TERMINAL_DIMENSION } = require('./terminal-session');
 
 const MAX_INPUT_LENGTH = 1024 * 1024;
+const STOP_TIMEOUT_MS = 10000;
 const validSessionIds = new Set(DEFAULT_SESSION_IDS);
 
 const assertSessionId = (id) => {
@@ -42,9 +43,44 @@ const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefin
     ),
   ]);
 
-  const handleStart = async (event) => {
+  const stopSession = (id) =>
+    new Promise((resolve, reject) => {
+      if (!manager.getSnapshot(id).isRunning) {
+        resolve();
+        return;
+      }
+
+      let unsubscribe = () => {};
+      const timeout = setTimeout(() => {
+        unsubscribe();
+        reject(new Error(`Terminal session "${id}" did not stop in time.`));
+      }, STOP_TIMEOUT_MS);
+
+      unsubscribe = manager.onExit(id, () => {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve();
+      });
+      manager.kill(id);
+    });
+
+  const handleStart = async (event, payload) => {
     if (!isTrustedEvent(event, window)) {
       throw new Error('Untrusted terminal start request.');
+    }
+
+    const { id } = payload ?? {};
+
+    if (id !== undefined) {
+      assertSessionId(id);
+      const snapshot = manager.getSnapshot(id);
+
+      if (snapshot.isRunning) {
+        return snapshot;
+      }
+
+      const options = (await prepare(id)) ?? {};
+      return manager.start(id, options);
     }
 
     const snapshots = manager.getSnapshots();
@@ -66,6 +102,18 @@ const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefin
       console.log('[startup-check] terminal sessions started');
     }
     return startedSessions;
+  };
+
+  const handleRestart = async (event, payload) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error('Untrusted terminal restart request.');
+    }
+
+    const { id } = payload ?? {};
+    assertSessionId(id);
+    const options = (await prepare(id)) ?? {};
+    await stopSession(id);
+    return manager.start(id, options);
   };
 
   const handleInput = (event, payload) => {
@@ -96,11 +144,13 @@ const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefin
   };
 
   ipcMain.handle(TERMINAL_CHANNELS.start, handleStart);
+  ipcMain.handle(TERMINAL_CHANNELS.restart, handleRestart);
   ipcMain.on(TERMINAL_CHANNELS.input, handleInput);
   ipcMain.on(TERMINAL_CHANNELS.resize, handleResize);
 
   return () => {
     ipcMain.removeHandler(TERMINAL_CHANNELS.start);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.restart);
     ipcMain.removeListener(TERMINAL_CHANNELS.input, handleInput);
     ipcMain.removeListener(TERMINAL_CHANNELS.resize, handleResize);
 
@@ -112,6 +162,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefin
 
 module.exports = {
   MAX_INPUT_LENGTH,
+  STOP_TIMEOUT_MS,
   isTrustedEvent,
   registerTerminalIpc,
 };

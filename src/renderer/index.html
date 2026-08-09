@@ -29,7 +29,7 @@
         <section
           class="terminal-pane is-active"
           data-pane-id="terminal-one"
-          data-session-state="starting"
+          data-session-state="waiting"
           aria-labelledby="terminal-one-title"
         >
           <header class="pane-header">
@@ -37,10 +37,15 @@
               <span class="pane-number" aria-hidden="true">01</span>
               <div>
                 <h2 id="terminal-one-title">Codex one</h2>
-                <p data-terminal-description>Checking Codex</p>
+                <p data-terminal-description>Choose a project folder</p>
               </div>
             </div>
-            <span class="pane-state" data-terminal-state>Starting</span>
+            <div class="pane-actions">
+              <button class="pane-project-button" type="button" data-project-button>
+                Choose folder
+              </button>
+              <span class="pane-state" data-terminal-state>Waiting</span>
+            </div>
           </header>
           <div class="terminal-frame">
             <div class="terminal-mount" id="terminal-one" aria-label="Codex terminal one"></div>
@@ -50,7 +55,7 @@
         <section
           class="terminal-pane"
           data-pane-id="terminal-two"
-          data-session-state="starting"
+          data-session-state="waiting"
           aria-labelledby="terminal-two-title"
         >
           <header class="pane-header">
@@ -58,10 +63,15 @@
               <span class="pane-number" aria-hidden="true">02</span>
               <div>
                 <h2 id="terminal-two-title">Codex two</h2>
-                <p data-terminal-description>Checking Codex</p>
+                <p data-terminal-description>Choose a project folder</p>
               </div>
             </div>
-            <span class="pane-state" data-terminal-state>Starting</span>
+            <div class="pane-actions">
+              <button class="pane-project-button" type="button" data-project-button>
+                Choose folder
+              </button>
+              <span class="pane-state" data-terminal-state>Waiting</span>
+            </div>
           </header>
           <div class="terminal-frame">
             <div class="terminal-mount" id="terminal-two" aria-label="Codex terminal two"></div>

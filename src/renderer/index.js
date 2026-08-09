@@ -46,8 +46,9 @@ const setActivePane = (activePane) => {
 for (const definition of paneDefinitions) {
   const mount = document.querySelector(`#${definition.id}`);
   const pane = mount?.closest('.terminal-pane');
+  const projectButton = pane?.querySelector('[data-project-button]');
 
-  if (!mount || !pane) {
+  if (!mount || !pane || !projectButton) {
     continue;
   }
 
@@ -68,7 +69,7 @@ for (const definition of paneDefinitions) {
   terminal.open(mount);
   terminal.writeln(`\x1b[1;36mAgenza terminal ${definition.label}\x1b[0m`);
   terminal.writeln('');
-  terminal.writeln('\x1b[90mChecking Conda and Codex...\x1b[0m');
+  terminal.writeln('\x1b[90mChoose a project folder to start Codex.\x1b[0m');
 
   pane.addEventListener('pointerdown', () => {
     setActivePane(pane);
@@ -79,7 +80,10 @@ for (const definition of paneDefinitions) {
   const view = {
     id: definition.id,
     fitAddon,
+    isRestarting: false,
     pane,
+    projectButton,
+    projectFolder: null,
     terminal,
     isConnected: false,
   };
@@ -101,7 +105,9 @@ for (const definition of paneDefinitions) {
 const setSessionState = (view, state, label, description) => {
   view.pane.dataset.sessionState = state;
   view.pane.querySelector('[data-terminal-state]').textContent = label;
-  view.pane.querySelector('[data-terminal-description]').textContent = description;
+  const descriptionElement = view.pane.querySelector('[data-terminal-description]');
+  descriptionElement.textContent = description;
+  descriptionElement.title = description;
 };
 
 const disposeDataSubscription = window.agenza.terminal.onData(({ id, data }) => {
@@ -117,6 +123,11 @@ const disposeExitSubscription = window.agenza.terminal.onExit(({ id, exitCode })
 
   view.isConnected = false;
   view.terminal.options.disableStdin = true;
+
+  if (view.isRestarting) {
+    return;
+  }
+
   view.terminal.writeln(`\r\n\x1b[90mProcess exited with code ${exitCode}.\x1b[0m`);
   setSessionState(view, 'exited', 'Exited', 'Codex stopped');
 });
@@ -140,34 +151,57 @@ if (terminalGrid) {
 
 fitTerminals();
 
-const startTerminalSessions = async () => {
+const chooseProjectFolder = async (view) => {
+  if (view.projectButton.disabled) {
+    return;
+  }
+
+  view.projectButton.disabled = true;
+  view.projectButton.textContent = 'Selecting...';
+
   try {
-    const snapshots = await window.agenza.terminal.start();
+    const result = await window.agenza.project.selectFolder(view.id);
 
-    for (const snapshot of snapshots) {
-      const view = terminalViews.get(snapshot.id);
-
-      if (!view) {
-        continue;
-      }
-
-      view.isConnected = snapshot.isRunning;
-      view.terminal.options.disableStdin = !snapshot.isRunning;
-      setSessionState(view, 'connected', 'Connected', 'Codex session');
-      view.fitAddon.fit();
-      window.agenza.terminal.resize(view.id, view.terminal.cols, view.terminal.rows);
+    if (result.canceled) {
+      return;
     }
 
-    terminalViews.get('terminal-one')?.terminal.focus();
+    const isRestart = view.isConnected;
+    view.projectFolder = result.path;
+    view.isRestarting = isRestart;
+    view.isConnected = false;
+    view.terminal.options.disableStdin = true;
+    view.terminal.reset();
+    view.terminal.writeln(`\x1b[1;36mAgenza ${view.id}\x1b[0m`);
+    view.terminal.writeln(`\x1b[90mProject: ${result.path}\x1b[0m`);
+    setSessionState(view, isRestart ? 'restarting' : 'starting', 'Starting', result.path);
+
+    const snapshot = isRestart
+      ? await window.agenza.terminal.restart(view.id)
+      : await window.agenza.terminal.start(view.id);
+
+    view.isRestarting = false;
+    view.isConnected = snapshot.isRunning;
+    view.terminal.options.disableStdin = !snapshot.isRunning;
+    setSessionState(view, 'connected', 'Connected', result.path);
+    view.fitAddon.fit();
+    window.agenza.terminal.resize(view.id, view.terminal.cols, view.terminal.rows);
+    view.terminal.focus();
   } catch (error) {
-    for (const view of terminalViews.values()) {
-      view.terminal.writeln(`\r\n\x1b[31mUnable to start terminal: ${error.message}\x1b[0m`);
-      setSessionState(view, 'error', 'Error', 'Terminal unavailable');
-    }
+    view.isRestarting = false;
+    view.isConnected = false;
+    view.terminal.options.disableStdin = true;
+    view.terminal.writeln(`\r\n\x1b[31mUnable to use project folder: ${error.message}\x1b[0m`);
+    setSessionState(view, 'error', 'Error', 'Project folder unavailable');
+  } finally {
+    view.projectButton.disabled = false;
+    view.projectButton.textContent = view.projectFolder ? 'Change folder' : 'Choose folder';
   }
 };
 
-startTerminalSessions();
+for (const view of terminalViews.values()) {
+  view.projectButton.addEventListener('click', () => chooseProjectFolder(view));
+}
 
 window.addEventListener('beforeunload', () => {
   resizeObserver.disconnect();

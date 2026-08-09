@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const { PROJECT_CHANNELS } = require('./project/ipc-channels');
 const { TERMINAL_CHANNELS } = require('./terminal/ipc-channels');
 
 const subscribe = (channel, callback) => {
@@ -13,17 +14,23 @@ const subscribe = (channel, callback) => {
 };
 
 const terminalApi = Object.freeze({
-  start: () => ipcRenderer.invoke(TERMINAL_CHANNELS.start),
+  start: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.start, { id }),
+  restart: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.restart, { id }),
   write: (id, data) => ipcRenderer.send(TERMINAL_CHANNELS.input, { id, data }),
   resize: (id, columns, rows) => ipcRenderer.send(TERMINAL_CHANNELS.resize, { id, columns, rows }),
   onData: (callback) => subscribe(TERMINAL_CHANNELS.data, callback),
   onExit: (callback) => subscribe(TERMINAL_CHANNELS.exit, callback),
 });
 
+const projectApi = Object.freeze({
+  selectFolder: (id) => ipcRenderer.invoke(PROJECT_CHANNELS.selectFolder, { id }),
+});
+
 contextBridge.exposeInMainWorld(
   'agenza',
   Object.freeze({
     platform: process.platform,
+    project: projectApi,
     terminal: terminalApi,
   }),
 );

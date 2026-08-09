@@ -89,6 +89,13 @@ body {
   font-size: 0.72rem;
 }
 
+.pane-header p {
+  max-width: min(32vw, 30rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-status {
   gap: 0.5rem;
   color: #a5afbf;
@@ -176,6 +183,34 @@ body {
   border-radius: 999px;
   color: #8290a5;
   font-size: 0.66rem;
+}
+
+.pane-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pane-project-button {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #31566b;
+  border-radius: 5px;
+  background: #102532;
+  color: #91e0ff;
+  font-size: 0.66rem;
+  cursor: pointer;
+}
+
+.pane-project-button:hover:not(:disabled),
+.pane-project-button:focus-visible {
+  border-color: #68d5ff;
+  outline: none;
+}
+
+.pane-project-button:disabled {
+  color: #718093;
+  cursor: wait;
 }
 
 .terminal-pane[data-session-state='connected'] .pane-state {
