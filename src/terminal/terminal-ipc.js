@@ -1,13 +1,10 @@
 const { TERMINAL_CHANNELS } = require('./ipc-channels');
-const { DEFAULT_SESSION_IDS } = require('./terminal-manager');
 const { MAX_TERMINAL_DIMENSION } = require('./terminal-session');
 
 const MAX_INPUT_LENGTH = 1024 * 1024;
-const STOP_TIMEOUT_MS = 10000;
-const validSessionIds = new Set(DEFAULT_SESSION_IDS);
 
-const assertSessionId = (id) => {
-  if (!validSessionIds.has(id)) {
+const assertSessionId = (manager, id) => {
+  if (typeof id !== 'string' || !manager.has(id)) {
     throw new Error('Invalid terminal session id.');
   }
 };
@@ -40,9 +37,9 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     }
   };
 
-  const outputSubscriptions = DEFAULT_SESSION_IDS.flatMap((id) => [
-    manager.onData(id, (data) => sendToRenderer(TERMINAL_CHANNELS.data, { id, data })),
-    manager.onExit(id, (event) => {
+  const outputSubscriptions = [
+    manager.onSessionData(({ id, data }) => sendToRenderer(TERMINAL_CHANNELS.data, { id, data })),
+    manager.onSessionExit(({ id, event }) => {
       writeLog(logger, 'warn', 'terminal.exited', {
         exitCode: event.exitCode,
         signal: event.signal,
@@ -54,38 +51,48 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
         signal: event.signal,
       });
     }),
-  ]);
+  ];
 
-  const stopSession = (id) =>
-    new Promise((resolve, reject) => {
-      if (!manager.getSnapshot(id).isRunning) {
-        resolve();
-        return;
-      }
+  const requireTrustedEvent = (event, action) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error(`Untrusted terminal ${action} request.`);
+    }
+  };
 
-      let unsubscribe = () => {};
-      const timeout = setTimeout(() => {
-        unsubscribe();
-        reject(new Error(`Terminal session "${id}" did not stop in time.`));
-      }, STOP_TIMEOUT_MS);
+  const handleCreate = (event) => {
+    requireTrustedEvent(event, 'create');
+    const snapshot = manager.create();
+    writeLog(logger, 'info', 'terminal.created', { terminalId: snapshot.id });
+    return snapshot;
+  };
 
-      unsubscribe = manager.onExit(id, () => {
-        clearTimeout(timeout);
-        unsubscribe();
-        resolve();
-      });
-      manager.kill(id);
-    });
+  const handleList = (event) => {
+    requireTrustedEvent(event, 'list');
+    return manager.list();
+  };
+
+  const handleRemove = (event, payload) => {
+    requireTrustedEvent(event, 'remove');
+    const { id } = payload ?? {};
+    assertSessionId(manager, id);
+    writeLog(logger, 'info', 'terminal.remove_requested', { terminalId: id });
+
+    try {
+      manager.remove(id);
+      writeLog(logger, 'info', 'terminal.remove_succeeded', { terminalId: id });
+      return { id, removed: true };
+    } catch (error) {
+      writeLog(logger, 'error', 'terminal.remove_failed', { error, terminalId: id });
+      throw error;
+    }
+  };
 
   const handleStart = async (event, payload) => {
-    if (!isTrustedEvent(event, window)) {
-      throw new Error('Untrusted terminal start request.');
-    }
-
+    requireTrustedEvent(event, 'start');
     const { id } = payload ?? {};
 
     if (id !== undefined) {
-      assertSessionId(id);
+      assertSessionId(manager, id);
     }
 
     const terminalId = id ?? 'all';
@@ -112,7 +119,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
         return startedSession;
       }
 
-      const snapshots = manager.getSnapshots();
+      const snapshots = manager.list();
 
       if (snapshots.every((snapshot) => snapshot.isRunning)) {
         writeLog(logger, 'info', 'terminal.start_skipped', {
@@ -146,18 +153,14 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
   };
 
   const handleRestart = async (event, payload) => {
-    if (!isTrustedEvent(event, window)) {
-      throw new Error('Untrusted terminal restart request.');
-    }
-
+    requireTrustedEvent(event, 'restart');
     const { id } = payload ?? {};
-    assertSessionId(id);
+    assertSessionId(manager, id);
     writeLog(logger, 'info', 'terminal.restart_requested', { terminalId: id });
 
     try {
       const options = (await prepare(id)) ?? {};
-      await stopSession(id);
-      const restartedSession = manager.start(id, options);
+      const restartedSession = await manager.restart(id, options);
       writeLog(logger, 'info', 'terminal.restart_succeeded', {
         pid: restartedSession.pid,
         terminalId: id,
@@ -175,7 +178,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     }
 
     const { id, data } = payload ?? {};
-    assertSessionId(id);
+    assertSessionId(manager, id);
 
     if (typeof data !== 'string' || data.length > MAX_INPUT_LENGTH) {
       throw new TypeError('Terminal input must be a valid string.');
@@ -190,18 +193,24 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     }
 
     const { id, columns, rows } = payload ?? {};
-    assertSessionId(id);
+    assertSessionId(manager, id);
     assertDimension(columns, 'columns');
     assertDimension(rows, 'rows');
     manager.resize(id, columns, rows);
   };
 
+  ipcMain.handle(TERMINAL_CHANNELS.create, handleCreate);
+  ipcMain.handle(TERMINAL_CHANNELS.list, handleList);
+  ipcMain.handle(TERMINAL_CHANNELS.remove, handleRemove);
   ipcMain.handle(TERMINAL_CHANNELS.start, handleStart);
   ipcMain.handle(TERMINAL_CHANNELS.restart, handleRestart);
   ipcMain.on(TERMINAL_CHANNELS.input, handleInput);
   ipcMain.on(TERMINAL_CHANNELS.resize, handleResize);
 
   return () => {
+    ipcMain.removeHandler(TERMINAL_CHANNELS.create);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.list);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.remove);
     ipcMain.removeHandler(TERMINAL_CHANNELS.start);
     ipcMain.removeHandler(TERMINAL_CHANNELS.restart);
     ipcMain.removeListener(TERMINAL_CHANNELS.input, handleInput);
@@ -215,7 +224,6 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
 
 module.exports = {
   MAX_INPUT_LENGTH,
-  STOP_TIMEOUT_MS,
   isTrustedEvent,
   registerTerminalIpc,
   writeLog,

@@ -1,4 +1,4 @@
-# Agenza 0.1.0 technical decision
+# Agenza technical architecture
 
 This document records the shipped `0.1.0` architecture that `0.2.0` builds on. The new release scope
 and non-destructive Git boundaries are defined in [scope-0.2.0.md](scope-0.2.0.md). The dynamic
@@ -15,7 +15,7 @@ The selected stack is:
 - Plain JavaScript, HTML, and CSS for the application and interface.
 - `@xterm/xterm` for terminal rendering and input.
 - `@xterm/addon-fit` for fitting each terminal to its pane.
-- `node-pty` for two independent interactive Windows ConPTY processes.
+- `node-pty` for independent interactive Windows ConPTY processes.
 - Electron Forge with its Webpack template for development and packaging.
 - The Electron Forge Squirrel maker for the first Windows installer.
 - npm for JavaScript package management.
@@ -24,20 +24,42 @@ Package versions will be pinned when the application is scaffolded in task `T003
 
 ## Architecture
 
-The Electron renderer process will display two xterm.js instances. It will not receive direct access to Node.js, Electron, or operating-system APIs.
+The `0.1.0` Electron renderer displays two xterm.js instances. Task `T204` replaces that fixed
+layout with dynamic panes. The renderer does not receive direct access to Node.js, Electron, or
+operating-system APIs.
 
 A preload script will expose a small, explicit API for terminal input, output, resize, restart, and cleanup. Electron context isolation and renderer sandboxing will remain enabled, and Node.js integration will remain disabled in the renderer.
 
-The Electron main process will own two `node-pty` sessions. Each session will run Codex independently in the selected project folder. Output will be sent only to the matching terminal pane, and closing or restarting a session will terminate its complete child process tree.
+The Electron main process owns a dynamic registry of `node-pty` sessions. Each session runs Codex
+independently in its selected project folder. Output is sent only with the stable ID of its source
+terminal, and removing, closing, or restarting a session terminates its complete child process tree.
 
 ```text
-Renderer: xterm pane 1  <-- secure IPC -->  Main: PTY session 1  --> Codex
-Renderer: xterm pane 2  <-- secure IPC -->  Main: PTY session 2  --> Codex
+Renderer: xterm pane A  <-- stable terminal ID -->  Main: dynamic PTY registry  --> Codex
+Renderer: xterm pane B  <-- stable terminal ID -->  Main: dynamic PTY registry  --> Codex
 ```
 
-The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Before starting a pane, Agenza verifies that `codex --version` works in the user's normal system environment and then starts its Codex PTY from that same environment. The application does not activate or require Conda at runtime. A missing Codex installation or `PATH` entry produces a concise startup error in the affected pane.
+The terminal process layer uses one `TerminalSession` per PTY. `TerminalManager` starts empty and can
+create, list, start, restart, remove, and dispose any number of sessions. New sessions receive
+cryptographically generated `terminal-<UUIDv4>` IDs, which are used for registry membership, IPC,
+and event routing. Removed IDs are retired for the lifetime of the manager. Restart and removal act
+on one registered session; removal disposes its complete process tree before deleting its registry
+entry. Aggregate data and exit subscriptions include their source ID, so sessions created after IPC
+registration remain isolated and observable.
 
-The preload bridge exposes only terminal start, input, resize, output, and exit operations. The main process validates the sending frame, terminal ID, input type, and dimensions before routing any request. Renderer subscriptions are registered before the main process starts either PTY so initial shell output is not lost.
+Until `T204` replaces the fixed renderer markup, the application bootstrap explicitly registers the
+two legacy renderer slot IDs. This compatibility bridge is outside the dynamic process layer and is
+the only place where those IDs initialize terminal sessions.
+
+Before starting a pane, Agenza verifies that `codex --version` works in the user's normal system
+environment and then starts its Codex PTY from that same environment. The application does not
+activate or require Conda at runtime. A missing Codex installation or `PATH` entry produces a concise
+startup error in the affected pane.
+
+The preload bridge exposes narrow terminal create, list, remove, start, restart, input, resize,
+output, and exit operations. The main process validates the sending frame, live registry membership,
+input type, and dimensions before routing a request. Aggregate renderer subscriptions are registered
+before PTYs start and also cover sessions created later, so initial output is not lost.
 
 Each pane has an independent folder button backed by a narrow project-selection bridge and
 Electron's native directory picker. The main process stores one folder per terminal ID and accepts
@@ -46,7 +68,7 @@ Codex session with the folder as `cwd`; a later selection stops and restarts onl
 pane header displays its own full project path. Cancellation and validation errors leave the other
 terminal untouched.
 
-Session controls are scoped by the same fixed terminal IDs. For a running session, Clear sends the
+Session controls are scoped by stable terminal IDs. For a running session, Clear sends the
 standard Ctrl+L terminal control to the selected PTY so Codex clears the screen and redraws its input
 at the correct cursor position. A stopped or not-yet-started pane is reset locally. Restarting asks
 the main process to replace only the selected PTY. An unexpected exit disables input in that pane,
@@ -60,8 +82,8 @@ outline as the active pane.
 
 On Windows, stopping a session uses the system `taskkill` executable with tree and force flags for
 the PTY's root PID. This synchronously terminates Codex and any descendant shell processes before a
-restart can create the replacement session. The same cleanup runs for both terminal managers on the
-window's `close` event, before Electron exits. The regular node-pty kill remains a fallback when the
+restart can create the replacement session. The same cleanup runs for every registered session on
+the window's `close` event, before Electron exits. The regular node-pty kill remains a fallback when the
 root process has already exited, and resource disposal attempts every session even if another
 cleanup reports an error.
 

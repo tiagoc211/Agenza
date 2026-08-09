@@ -38,7 +38,7 @@
       "id": "T203",
       "order": 3,
       "title": "Refactor the terminal process layer for dynamic sessions",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T202"],
       "acceptance_criteria": [
         "The terminal manager can create, list, restart, and remove sessions using generated IDs instead of two fixed IDs.",

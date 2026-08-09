@@ -6,7 +6,7 @@ const { createResourceDisposer } = require('./lifecycle/resource-disposer');
 const { createAppLogger, createNoopLogger } = require('./logging/app-logger');
 const { registerProjectFolderIpc } = require('./project/project-folder');
 const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
-const { DEFAULT_SESSION_IDS, TerminalManager } = require('./terminal/terminal-manager');
+const { TerminalManager } = require('./terminal/terminal-manager');
 const { registerTerminalIpc } = require('./terminal/terminal-ipc');
 const { isProcessRunning, killProcessTree } = require('./terminal/process-tree');
 const { createWindowOptions } = require('./window-options');
@@ -14,6 +14,8 @@ const { createWindowOptions } = require('./window-options');
 const isStartupCheck = process.argv.includes('--startup-check');
 const isMissingCodexCheck = process.argv.includes('--missing-codex-check');
 const STARTUP_CHECK_CHILD_TIMEOUT_MS = 10000;
+// T204 replaces these temporary renderer slots with terminal definitions from the dynamic registry.
+const LEGACY_RENDERER_SESSION_IDS = Object.freeze(['terminal-one', 'terminal-two']);
 let appLogger = createNoopLogger();
 const startupCheckLog = (...values) => {
   if (isStartupCheck) {
@@ -65,13 +67,16 @@ const createMainWindow = () => {
   startupCheckLog('creating window');
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   appLogger.info('window.created');
-  const terminalManager = new TerminalManager();
+  const terminalManager = new TerminalManager({
+    allowLegacyInitialSessionIds: true,
+    initialSessionIds: LEGACY_RENDERER_SESSION_IDS,
+  });
   const disposeClipboardIpc = registerClipboardIpc({ clipboard, ipcMain, window });
   const projectFolderIpc = registerProjectFolderIpc({
     dialog,
-    folderIds: DEFAULT_SESSION_IDS,
+    folderIds: LEGACY_RENDERER_SESSION_IDS,
     initialFolders: isStartupCheck
-      ? Object.fromEntries(DEFAULT_SESSION_IDS.map((id) => [id, process.cwd()]))
+      ? Object.fromEntries(LEGACY_RENDERER_SESSION_IDS.map((id) => [id, process.cwd()]))
       : {},
     ipcMain,
     skipDialog: isStartupCheck,
