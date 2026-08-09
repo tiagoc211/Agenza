@@ -108,7 +108,7 @@ body {
 }
 
 .pane-header p {
-  max-width: min(32vw, 30rem);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -250,13 +250,13 @@ body {
 }
 
 .pane-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
   min-width: 0;
   min-height: 54px;
-  gap: 0.5rem;
-  padding: 0.55rem 0.75rem;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
   border-bottom: 1px solid #1c2330;
   background: #111620;
 }
@@ -268,7 +268,13 @@ body {
 
 .pane-identity {
   min-width: 0;
+  width: 100%;
   gap: 0.6rem;
+}
+
+.pane-identity > div {
+  min-width: 0;
+  flex: 1;
 }
 
 .pane-number {
@@ -288,6 +294,7 @@ body {
 
 .pane-state {
   flex: none;
+  margin-inline-start: auto;
   padding: 0.2rem 0.5rem;
   border: 1px solid #2b3545;
   border-radius: 999px;
@@ -297,10 +304,11 @@ body {
 
 .pane-actions {
   display: flex;
-  flex: none;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  min-width: 0;
+  width: 100%;
   gap: 0.5rem;
 }
 

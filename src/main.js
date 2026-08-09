@@ -168,6 +168,39 @@ const createMainWindow = () => {
           const getIds = () => getPanes().map((pane) => pane.dataset.paneId);
           const getTerminalText = (id) =>
             getPane(id)?.querySelector('.xterm-rows')?.textContent ?? '';
+          const paneHeaderHasNoOverlap = (pane) => {
+            const header = pane.querySelector('.pane-header');
+            const identity = pane.querySelector('.pane-identity');
+            const actions = pane.querySelector('.pane-actions');
+
+            if (!header || !identity || !actions) {
+              return false;
+            }
+
+            const headerRect = header.getBoundingClientRect();
+            const identityRect = identity.getBoundingClientRect();
+            const actionsRect = actions.getBoundingClientRect();
+            const controls = [...actions.children].map((element) =>
+              element.getBoundingClientRect(),
+            );
+            const controlsDoNotIntersect = controls.every((first, index) =>
+              controls.slice(index + 1).every(
+                (second) =>
+                  first.right <= second.left ||
+                  second.right <= first.left ||
+                  first.bottom <= second.top ||
+                  second.bottom <= first.top,
+              ),
+            );
+
+            return (
+              identityRect.bottom <= actionsRect.top + 1 &&
+              identityRect.right <= headerRect.right + 1 &&
+              actionsRect.right <= headerRect.right + 1 &&
+              actionsRect.bottom <= headerRect.bottom + 1 &&
+              controlsDoNotIntersect
+            );
+          };
           const addTerminal = async () => {
             const previousCount = getPanes().length;
             document.querySelector('[data-add-terminal]')?.click();
@@ -187,6 +220,7 @@ const createMainWindow = () => {
 
           await addTerminal();
           const severalLayoutHadThree = getPanes().length === 3;
+          const severalHeadersAvoidedOverlap = getPanes().every(paneHeaderHasNoOverlap);
           const addedId = getIds().find((id) => !initialIds.includes(id));
           await removeTerminal(addedId);
           const dynamicRemovalRestoredTwo = getPanes().length === 2;
@@ -197,6 +231,7 @@ const createMainWindow = () => {
             window
               .getComputedStyle(document.querySelector('[data-terminal-grid]'))
               .gridTemplateColumns.split(' ').length === 1;
+          const onePaneHeaderAvoidedOverlap = getPanes().every(paneHeaderHasNoOverlap);
           await removeTerminal(initialIds[1]);
           const emptyStateWasUsable =
             getPanes().length === 0 &&
@@ -216,6 +251,7 @@ const createMainWindow = () => {
           await waitFor(
             () => document.querySelectorAll('[data-session-state="connected"]').length === 2,
           );
+          await new Promise((resolve) => setTimeout(resolve, 250));
 
           const [firstId, secondId] = terminalIds;
           const firstMarker = 'AGENZA_T006_TERMINAL_ONE';
@@ -241,9 +277,11 @@ const createMainWindow = () => {
           const keyboardFirstPane = getPane(firstId);
           const keyboardSecondPane = getPane(secondId);
           keyboardFirstPane?.querySelector('.xterm-helper-textarea')?.focus();
+          await new Promise((resolve) => setTimeout(resolve, 50));
           document.dispatchEvent(
             new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'F6' }),
           );
+          await new Promise((resolve) => setTimeout(resolve, 50));
           const focusMovedForward =
             keyboardSecondPane?.classList.contains('is-active') &&
             keyboardSecondPane.contains(document.activeElement);
@@ -255,6 +293,7 @@ const createMainWindow = () => {
               shiftKey: true,
             }),
           );
+          await new Promise((resolve) => setTimeout(resolve, 50));
           const focusMovedBackward =
             keyboardFirstPane?.classList.contains('is-active') &&
             keyboardFirstPane.contains(document.activeElement);
@@ -295,6 +334,10 @@ const createMainWindow = () => {
             firstOutputIsIsolated,
             focusMovedBackward,
             focusMovedForward,
+            headersAvoidedOverlap:
+              severalHeadersAvoidedOverlap &&
+              onePaneHeaderAvoidedOverlap &&
+              getPanes().every(paneHeaderHasNoOverlap),
             initialLayoutHadTwo,
             labelsStayedStable: terminalIds.every(
               (id, index) =>
@@ -323,6 +366,7 @@ const createMainWindow = () => {
           !layout.firstOutputIsIsolated ||
           !layout.focusMovedBackward ||
           !layout.focusMovedForward ||
+          !layout.headersAvoidedOverlap ||
           !layout.initialLayoutHadTwo ||
           !layout.labelsStayedStable ||
           !layout.onePaneUsedOneColumn ||

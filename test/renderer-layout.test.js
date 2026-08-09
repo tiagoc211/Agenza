@@ -40,6 +40,15 @@ test('keeps zero, one, two, and several terminal layouts usable', () => {
   assert.match(renderer, /new ResizeObserver\(fitTerminals\)/);
 });
 
+test('keeps the directory and wrapping controls in separate non-overlapping header rows', () => {
+  assert.match(styles, /\.pane-header \{[\s\S]*display: grid/);
+  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(styles, /\.pane-header p \{[\s\S]*max-width: 100%/);
+  assert.match(styles, /\.pane-actions \{[\s\S]*flex-wrap: wrap/);
+  assert.match(styles, /\.pane-actions \{[\s\S]*width: 100%/);
+  assert.match(styles, /\.pane-identity > div \{[\s\S]*min-width: 0/);
+});
+
 test('gives every pane independent controls, process state, and a stable label', () => {
   for (const control of [
     'data-project-button',
