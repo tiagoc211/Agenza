@@ -54,9 +54,10 @@ When the user tells a new agent to follow the default new-task prompt, the agent
 
 ## Release scope
 
-- Release `0.1.0` targets Windows.
-- Keep release `0.1.0` focused on two independent embedded terminals that run the Codex CLI.
-- Features such as linked agents, additional CLI tools, accounts, and cloud synchronization are out of scope unless the user changes the release scope.
+- Release `0.2.0` targets Windows and builds on the completed `0.1.0` baseline.
+- Keep release `0.2.0` focused on dynamic Codex terminals and safe branch/worktree isolation for each terminal.
+- Treat terminal removal, worktree cleanup, and branch deletion as separate operations. Never delete a branch or worktree merely because its terminal was removed.
+- Features such as automatic merge, rebase, push, pull, linked agents, additional CLI tools, accounts, and cloud synchronization are out of scope unless the user changes the release scope.
 
 ## Terminal safety and privacy
 

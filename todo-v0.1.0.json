@@ -1,0 +1,214 @@
+{
+  "project": "Agenza",
+  "release": "0.1.0",
+  "archived": true,
+  "goal": "Ship a local desktop app with two independent terminal panes, each capable of running the Codex CLI.",
+  "status_values": ["todo", "in_progress", "blocked", "done"],
+  "tasks": [
+    {
+      "id": "T001",
+      "order": 1,
+      "title": "Define the v1 scope and acceptance criteria",
+      "status": "done",
+      "depends_on": [],
+      "acceptance_criteria": [
+        "The supported operating system for v1 is documented.",
+        "The app is confirmed to be local-only and single-user.",
+        "Out-of-scope features are documented, including linked agents, extra CLI tools, accounts, and cloud sync."
+      ]
+    },
+    {
+      "id": "T002",
+      "order": 2,
+      "title": "Choose the desktop application stack",
+      "status": "done",
+      "depends_on": ["T001"],
+      "acceptance_criteria": [
+        "The UI framework, desktop shell, terminal emulator, and PTY library are selected.",
+        "The selected stack can create and control two interactive shell processes.",
+        "The decision and local prerequisites are documented."
+      ]
+    },
+    {
+      "id": "T003",
+      "order": 3,
+      "title": "Scaffold the application",
+      "status": "done",
+      "depends_on": ["T002"],
+      "acceptance_criteria": [
+        "The application starts successfully from the agenza Conda environment.",
+        "Development, build, test, and lint commands are available.",
+        "The repository ignores generated files, dependencies, build output, and local secrets."
+      ]
+    },
+    {
+      "id": "T004",
+      "order": 4,
+      "title": "Create the main two-pane interface",
+      "status": "done",
+      "depends_on": ["T003"],
+      "acceptance_criteria": [
+        "The main window displays two clearly separated terminal panes.",
+        "Both panes remain usable when the window is resized.",
+        "The layout has clear focus and active-pane states."
+      ]
+    },
+    {
+      "id": "T005",
+      "order": 5,
+      "title": "Implement the terminal process layer",
+      "status": "done",
+      "depends_on": ["T003"],
+      "acceptance_criteria": [
+        "The app can start an interactive PTY process for each pane.",
+        "Input, output, terminal resizing, and Unicode text work correctly.",
+        "The two PTY processes are isolated from one another."
+      ]
+    },
+    {
+      "id": "T006",
+      "order": 6,
+      "title": "Connect both terminal panes to their PTY processes",
+      "status": "done",
+      "depends_on": ["T004", "T005"],
+      "acceptance_criteria": [
+        "Typing in either pane sends input only to its own process.",
+        "Output from each process appears only in its own pane.",
+        "Common terminal controls, colors, cursor movement, scrolling, copy, and paste work."
+      ]
+    },
+    {
+      "id": "T007",
+      "order": 7,
+      "title": "Launch Codex in both terminals",
+      "status": "done",
+      "depends_on": ["T006"],
+      "acceptance_criteria": [
+        "Each pane starts the Codex CLI from the user's normal system environment.",
+        "Both Codex sessions can run at the same time and accept input independently.",
+        "A missing Codex installation or PATH entry produces a useful error message."
+      ]
+    },
+    {
+      "id": "T008",
+      "order": 8,
+      "title": "Add project-folder selection",
+      "status": "done",
+      "depends_on": ["T007"],
+      "acceptance_criteria": [
+        "The user can select the working directory used by the Codex sessions.",
+        "Both terminals clearly show which project folder they are using.",
+        "Invalid or inaccessible folders are handled without crashing."
+      ]
+    },
+    {
+      "id": "T009",
+      "order": 9,
+      "title": "Add terminal session controls",
+      "status": "done",
+      "depends_on": ["T007"],
+      "acceptance_criteria": [
+        "Each terminal can be restarted independently.",
+        "The user can clear the visible terminal output.",
+        "Unexpected process exits are shown in the affected pane with a restart action."
+      ]
+    },
+    {
+      "id": "T010",
+      "order": 10,
+      "title": "Handle application and process lifecycle safely",
+      "status": "done",
+      "depends_on": ["T007", "T009"],
+      "acceptance_criteria": [
+        "Closing the app terminates both child process trees cleanly.",
+        "Restarting one session does not affect the other session.",
+        "The app does not leave orphaned Codex or shell processes after exit."
+      ]
+    },
+    {
+      "id": "T011",
+      "order": 11,
+      "title": "Add essential keyboard and accessibility behavior",
+      "status": "done",
+      "depends_on": ["T006", "T009"],
+      "acceptance_criteria": [
+        "The user can switch focus between terminals with the keyboard.",
+        "Terminal text is readable and the active pane is visually identifiable.",
+        "Standard terminal keyboard shortcuts are not accidentally intercepted by the app."
+      ]
+    },
+    {
+      "id": "T012",
+      "order": 12,
+      "title": "Add application logging and user-facing error handling",
+      "status": "done",
+      "depends_on": ["T007", "T010"],
+      "acceptance_criteria": [
+        "Startup and process failures provide concise recovery instructions.",
+        "Diagnostic logs are stored locally without recording terminal input or secrets.",
+        "An error in one terminal does not crash the whole application."
+      ]
+    },
+    {
+      "id": "T013",
+      "order": 13,
+      "title": "Add automated tests",
+      "status": "done",
+      "depends_on": ["T010", "T012"],
+      "acceptance_criteria": [
+        "Tests cover process startup, input and output routing, resize events, restart behavior, and cleanup.",
+        "A smoke test verifies that two independent terminal sessions can run concurrently.",
+        "All automated tests pass in the agenza Conda environment."
+      ]
+    },
+    {
+      "id": "T014",
+      "order": 14,
+      "title": "Perform manual release testing",
+      "status": "done",
+      "depends_on": ["T008", "T009", "T011", "T012", "T013"],
+      "acceptance_criteria": [
+        "Both Codex sessions complete a real interactive workflow independently.",
+        "Copy, paste, scrolling, resizing, focus switching, restart, and app shutdown are verified.",
+        "Missing prerequisites and process crashes are verified.",
+        "No orphaned processes remain after repeated open and close cycles."
+      ]
+    },
+    {
+      "id": "T015",
+      "order": 15,
+      "title": "Create a distributable application build",
+      "status": "done",
+      "depends_on": ["T014"],
+      "acceptance_criteria": [
+        "A clean machine can install or run the packaged application.",
+        "The app detects and explains a missing Codex prerequisite.",
+        "The packaged build opens two working Codex terminals."
+      ]
+    },
+    {
+      "id": "T016",
+      "order": 16,
+      "title": "Finish release documentation",
+      "status": "done",
+      "depends_on": ["T015"],
+      "acceptance_criteria": [
+        "The README includes setup, development, build, install, and usage instructions.",
+        "Development requirements and the user-facing Codex prerequisite are documented separately.",
+        "Known limitations and troubleshooting steps are documented."
+      ]
+    },
+    {
+      "id": "T017",
+      "order": 17,
+      "title": "Prepare and publish release 0.1.0",
+      "status": "done",
+      "depends_on": ["T015", "T016"],
+      "acceptance_criteria": [
+        "The version number and changelog are finalized.",
+        "All release checks pass from a clean checkout.",
+        "The distributable build and release notes are published."
+      ]
+    }
+  ]
+}

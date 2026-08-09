@@ -153,3 +153,9 @@ The manual release checklist is recorded in
 
 Release history is available in [CHANGELOG.md](CHANGELOG.md), with the `0.1.0` publication text in
 [docs/release-notes-0.1.0.md](docs/release-notes-0.1.0.md).
+
+## Development roadmap
+
+Current development targets `0.2.0`: dynamic terminal panes and safe Git branch/worktree isolation
+for each agent. See [todo.json](todo.json) for the ordered plan. The completed first-release plan is
+archived in [todo-v0.1.0.json](todo-v0.1.0.json).

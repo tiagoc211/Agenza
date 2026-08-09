@@ -1,212 +1,265 @@
 {
   "project": "Agenza",
-  "release": "0.1.0",
-  "goal": "Ship a local desktop app with two independent terminal panes, each capable of running the Codex CLI.",
+  "release": "0.2.0",
+  "goal": "Ship dynamic Codex terminal management with safe, isolated Git branches and worktrees for each agent workspace.",
   "status_values": ["todo", "in_progress", "blocked", "done"],
+  "release_principles": [
+    "A terminal session and a Git workspace are separate resources.",
+    "Removing a terminal never deletes its branch or worktree.",
+    "Destructive Git operations require an explicit user action and safety validation.",
+    "Automatic merge, rebase, push, pull, and branch deletion are out of scope for 0.2.0."
+  ],
   "tasks": [
     {
-      "id": "T001",
+      "id": "T201",
       "order": 1,
-      "title": "Define the v1 scope and acceptance criteria",
-      "status": "done",
+      "title": "Define the 0.2.0 scope and workspace safety rules",
+      "status": "todo",
       "depends_on": [],
       "acceptance_criteria": [
-        "The supported operating system for v1 is documented.",
-        "The app is confirmed to be local-only and single-user.",
-        "Out-of-scope features are documented, including linked agents, extra CLI tools, accounts, and cloud sync."
+        "The user workflows for adding and removing terminals and assigning Git workspaces are documented.",
+        "Terminal removal, worktree removal, and branch deletion are defined as separate operations.",
+        "Out-of-scope behavior is documented, including automatic merge, rebase, push, pull, agent linking, branch deletion, and additional CLI tools."
       ]
     },
     {
-      "id": "T002",
+      "id": "T202",
       "order": 2,
-      "title": "Choose the desktop application stack",
-      "status": "done",
-      "depends_on": ["T001"],
+      "title": "Design the dynamic terminal and Git workspace model",
+      "status": "todo",
+      "depends_on": ["T201"],
       "acceptance_criteria": [
-        "The UI framework, desktop shell, terminal emulator, and PTY library are selected.",
-        "The selected stack can create and control two interactive shell processes.",
-        "The decision and local prerequisites are documented."
+        "The model defines stable session IDs, labels, process state, project path, repository root, branch, worktree path, and Agenza ownership metadata.",
+        "Terminal lifecycle and Git workspace lifecycle have separate state transitions and ownership boundaries.",
+        "The persisted state schema is versioned and documented without storing terminal content or secrets."
       ]
     },
     {
-      "id": "T003",
+      "id": "T203",
       "order": 3,
-      "title": "Scaffold the application",
-      "status": "done",
-      "depends_on": ["T002"],
+      "title": "Refactor the terminal process layer for dynamic sessions",
+      "status": "todo",
+      "depends_on": ["T202"],
       "acceptance_criteria": [
-        "The application starts successfully from the agenza Conda environment.",
-        "Development, build, test, and lint commands are available.",
-        "The repository ignores generated files, dependencies, build output, and local secrets."
+        "The terminal manager can create, list, restart, and remove sessions using generated IDs instead of two fixed IDs.",
+        "Input, output, resize, exit events, and IPC validation remain isolated by dynamic session ID.",
+        "Removing or disposing a session terminates its complete process tree without affecting other sessions."
       ]
     },
     {
-      "id": "T004",
+      "id": "T204",
       "order": 4,
-      "title": "Create the main two-pane interface",
-      "status": "done",
-      "depends_on": ["T003"],
+      "title": "Build the dynamic terminal workspace interface",
+      "status": "todo",
+      "depends_on": ["T202", "T203"],
       "acceptance_criteria": [
-        "The main window displays two clearly separated terminal panes.",
-        "Both panes remain usable when the window is resized.",
-        "The layout has clear focus and active-pane states."
+        "The user can add terminals and remove any selected terminal from the interface.",
+        "The layout remains usable with zero, one, two, and several terminal panes without a hard-coded two-pane structure.",
+        "Each pane keeps independent controls, active state, process state, and a stable user-facing label."
       ]
     },
     {
-      "id": "T005",
+      "id": "T205",
       "order": 5,
-      "title": "Implement the terminal process layer",
-      "status": "done",
-      "depends_on": ["T003"],
+      "title": "Persist and restore the terminal workspace layout",
+      "status": "todo",
+      "depends_on": ["T202", "T204"],
       "acceptance_criteria": [
-        "The app can start an interactive PTY process for each pane.",
-        "Input, output, terminal resizing, and Unicode text work correctly.",
-        "The two PTY processes are isolated from one another."
+        "Terminal definitions, labels, ordering, and assigned workspace metadata are stored locally using the versioned schema.",
+        "A first launch starts with a useful default layout, while later launches restore the previous layout.",
+        "Missing or inaccessible restored paths are shown safely without preventing other terminals from loading."
       ]
     },
     {
-      "id": "T006",
+      "id": "T206",
       "order": 6,
-      "title": "Connect both terminal panes to their PTY processes",
-      "status": "done",
-      "depends_on": ["T004", "T005"],
+      "title": "Add read-only Git repository and worktree discovery",
+      "status": "todo",
+      "depends_on": ["T201", "T202"],
       "acceptance_criteria": [
-        "Typing in either pane sends input only to its own process.",
-        "Output from each process appears only in its own pane.",
-        "Common terminal controls, colors, cursor movement, scrolling, copy, and paste work."
+        "Agenza can identify a selected folder's repository root, current branch, and worktree state using bounded Git commands.",
+        "Local branches and registered worktrees can be listed without changing repository state.",
+        "Folders without Git and missing Git installations produce concise terminal-local errors."
       ]
     },
     {
-      "id": "T007",
+      "id": "T207",
       "order": 7,
-      "title": "Launch Codex in both terminals",
-      "status": "done",
-      "depends_on": ["T006"],
+      "title": "Plan and validate branch and worktree assignments",
+      "status": "todo",
+      "depends_on": ["T206"],
       "acceptance_criteria": [
-        "Each pane starts the Codex CLI from the user's normal system environment.",
-        "Both Codex sessions can run at the same time and accept input independently.",
-        "A missing Codex installation or PATH entry produces a useful error message."
+        "New branch names and worktree paths are validated with Git before any mutation occurs.",
+        "Agenza detects branch-name conflicts, branches already checked out elsewhere, duplicate paths, and unsupported repository states.",
+        "The user sees the base branch, target branch, and worktree path before confirming creation."
       ]
     },
     {
-      "id": "T008",
+      "id": "T208",
       "order": 8,
-      "title": "Add project-folder selection",
-      "status": "done",
-      "depends_on": ["T007"],
+      "title": "Create a branch and worktree for a terminal",
+      "status": "todo",
+      "depends_on": ["T203", "T204", "T207"],
       "acceptance_criteria": [
-        "The user can select the working directory used by the Codex sessions.",
-        "Both terminals clearly show which project folder they are using.",
-        "Invalid or inaccessible folders are handled without crashing."
+        "The user can create a new local branch from a selected base and assign its new worktree to one terminal.",
+        "The terminal starts Codex with the created worktree as its working directory while other terminals remain unchanged.",
+        "Partial failures roll back only resources created by the failed operation and preserve pre-existing Git data."
       ]
     },
     {
-      "id": "T009",
+      "id": "T209",
       "order": 9,
-      "title": "Add terminal session controls",
-      "status": "done",
-      "depends_on": ["T007"],
+      "title": "Attach an existing branch or worktree to a terminal",
+      "status": "todo",
+      "depends_on": ["T203", "T204", "T207"],
       "acceptance_criteria": [
-        "Each terminal can be restarted independently.",
-        "The user can clear the visible terminal output.",
-        "Unexpected process exits are shown in the affected pane with a restart action."
+        "The user can attach a registered worktree to a terminal without recreating it.",
+        "The user can create a worktree for an eligible existing local branch after previewing the target path.",
+        "Branches already checked out in another worktree and paths assigned to another terminal are handled without mutation or crashes."
       ]
     },
     {
-      "id": "T010",
+      "id": "T210",
       "order": 10,
-      "title": "Handle application and process lifecycle safely",
-      "status": "done",
-      "depends_on": ["T007", "T009"],
+      "title": "Show terminal repository and workspace status",
+      "status": "todo",
+      "depends_on": ["T206", "T208", "T209"],
       "acceptance_criteria": [
-        "Closing the app terminates both child process trees cleanly.",
-        "Restarting one session does not affect the other session.",
-        "The app does not leave orphaned Codex or shell processes after exit."
+        "Each terminal clearly shows its label, repository, branch, and worktree path.",
+        "The user can refresh read-only Git status and see whether the worktree has tracked, untracked, or conflicted changes.",
+        "A status failure in one terminal does not affect any other terminal or Codex process."
       ]
     },
     {
-      "id": "T011",
+      "id": "T211",
       "order": 11,
-      "title": "Add essential keyboard and accessibility behavior",
-      "status": "done",
-      "depends_on": ["T006", "T009"],
+      "title": "Remove terminals without deleting Git workspaces",
+      "status": "todo",
+      "depends_on": ["T203", "T204", "T205"],
       "acceptance_criteria": [
-        "The user can switch focus between terminals with the keyboard.",
-        "Terminal text is readable and the active pane is visually identifiable.",
-        "Standard terminal keyboard shortcuts are not accidentally intercepted by the app."
+        "Removing a terminal terminates only its process tree and removes only its saved terminal definition.",
+        "The assigned branch, worktree directory, and repository registration remain untouched.",
+        "The interface clearly explains that removing a terminal does not delete Git work."
       ]
     },
     {
-      "id": "T012",
+      "id": "T212",
       "order": 12,
-      "title": "Add application logging and user-facing error handling",
-      "status": "done",
-      "depends_on": ["T007", "T010"],
+      "title": "Add explicit safe cleanup for Agenza-created worktrees",
+      "status": "todo",
+      "depends_on": ["T207", "T208", "T211"],
       "acceptance_criteria": [
-        "Startup and process failures provide concise recovery instructions.",
-        "Diagnostic logs are stored locally without recording terminal input or secrets.",
-        "An error in one terminal does not crash the whole application."
+        "Worktree cleanup is a separate confirmed action available only for worktrees recorded as created by Agenza.",
+        "Cleanup refuses dirty, untracked, conflicted, locked, missing, or actively assigned worktrees instead of forcing removal.",
+        "Successful cleanup unregisters and removes the worktree but never deletes its Git branch automatically."
       ]
     },
     {
-      "id": "T013",
+      "id": "T213",
       "order": 13,
-      "title": "Add automated tests",
-      "status": "done",
-      "depends_on": ["T010", "T012"],
+      "title": "Recover safely from stale workspace state",
+      "status": "todo",
+      "depends_on": ["T205", "T206", "T208", "T209", "T212"],
       "acceptance_criteria": [
-        "Tests cover process startup, input and output routing, resize events, restart behavior, and cleanup.",
-        "A smoke test verifies that two independent terminal sessions can run concurrently.",
-        "All automated tests pass in the agenza Conda environment."
+        "Externally moved or deleted worktrees, branches, and repositories are detected during restore and refresh.",
+        "Agenza offers non-destructive detach or reassignment recovery without silently pruning Git metadata.",
+        "Application restart and crash recovery do not leave terminal processes running or corrupt persisted workspace state."
       ]
     },
     {
-      "id": "T014",
+      "id": "T214",
       "order": 14,
-      "title": "Perform manual release testing",
-      "status": "done",
-      "depends_on": ["T008", "T009", "T011", "T012", "T013"],
+      "title": "Extend keyboard and accessibility behavior for dynamic panes",
+      "status": "todo",
+      "depends_on": ["T204", "T210", "T211"],
       "acceptance_criteria": [
-        "Both Codex sessions complete a real interactive workflow independently.",
-        "Copy, paste, scrolling, resizing, focus switching, restart, and app shutdown are verified.",
-        "Missing prerequisites and process crashes are verified.",
-        "No orphaned processes remain after repeated open and close cycles."
+        "Keyboard focus cycles predictably through any number of terminals after additions, removals, and reordering.",
+        "Add, remove, branch, worktree, and recovery controls have accessible names, focus states, and status announcements.",
+        "Terminal keyboard shortcuts remain isolated from application workspace shortcuts."
       ]
     },
     {
-      "id": "T015",
+      "id": "T215",
       "order": 15,
-      "title": "Create a distributable application build",
-      "status": "done",
-      "depends_on": ["T014"],
+      "title": "Add Git workspace logging and user-facing error handling",
+      "status": "todo",
+      "depends_on": ["T206", "T208", "T209", "T212", "T213"],
       "acceptance_criteria": [
-        "A clean machine can install or run the packaged application.",
-        "The app detects and explains a missing Codex prerequisite.",
-        "The packaged build opens two working Codex terminals."
+        "Git discovery and mutation failures provide concise recovery actions scoped to the affected terminal.",
+        "Logs record safe workspace lifecycle metadata without terminal content, commands containing secrets, remote credentials, or environment values.",
+        "Git command timeouts and unexpected output cannot freeze or crash the whole application."
       ]
     },
     {
-      "id": "T016",
+      "id": "T216",
       "order": 16,
-      "title": "Finish release documentation",
-      "status": "done",
-      "depends_on": ["T015"],
+      "title": "Add automated tests for dynamic terminals and Git workspaces",
+      "status": "todo",
+      "depends_on": [
+        "T203",
+        "T204",
+        "T205",
+        "T208",
+        "T209",
+        "T210",
+        "T211",
+        "T212",
+        "T213",
+        "T214",
+        "T215"
+      ],
       "acceptance_criteria": [
-        "The README includes setup, development, build, install, and usage instructions.",
-        "Development requirements and the user-facing Codex prerequisite are documented separately.",
-        "Known limitations and troubleshooting steps are documented."
+        "Tests cover dynamic session creation, routing, removal, persistence, restore, focus, and complete process cleanup.",
+        "Temporary Git repositories test discovery, new and existing branch worktrees, conflicts, dirty-state refusal, cleanup, and stale recovery.",
+        "A packaged smoke test adds and removes terminals assigned to isolated worktrees and verifies no orphaned processes."
       ]
     },
     {
-      "id": "T017",
+      "id": "T217",
       "order": 17,
-      "title": "Prepare and publish release 0.1.0",
-      "status": "done",
-      "depends_on": ["T015", "T016"],
+      "title": "Perform manual 0.2.0 workspace release testing",
+      "status": "todo",
+      "depends_on": ["T216"],
       "acceptance_criteria": [
-        "The version number and changelog are finalized.",
-        "All release checks pass from a clean checkout.",
-        "The distributable build and release notes are published."
+        "Zero, one, two, and several terminal layouts remain usable across restart and restore.",
+        "Two Codex agents complete independent workflows on different branches and worktrees of the same repository.",
+        "Terminal removal preserves Git work, safe cleanup refuses dirty worktrees, and app shutdown leaves no orphaned processes."
+      ]
+    },
+    {
+      "id": "T218",
+      "order": 18,
+      "title": "Create and validate the 0.2.0 distributable build",
+      "status": "todo",
+      "depends_on": ["T217"],
+      "acceptance_criteria": [
+        "Application and installer metadata use version 0.2.0 and the Windows installer is generated successfully.",
+        "An existing 0.1.0 user can install or run 0.2.0 without corrupting local state or Git workspaces.",
+        "The packaged app opens dynamic Codex terminals and explains missing Codex or Git prerequisites."
+      ]
+    },
+    {
+      "id": "T219",
+      "order": 19,
+      "title": "Finish 0.2.0 usage, safety, and troubleshooting documentation",
+      "status": "todo",
+      "depends_on": ["T217", "T218"],
+      "acceptance_criteria": [
+        "The README explains dynamic terminal management and new/existing branch and worktree workflows.",
+        "Worktree ownership, terminal removal, safe cleanup, recovery, and out-of-scope Git operations are documented clearly.",
+        "The changelog, release notes, known limitations, and troubleshooting guidance are ready for publication."
+      ]
+    },
+    {
+      "id": "T220",
+      "order": 20,
+      "title": "Prepare and publish release 0.2.0",
+      "status": "todo",
+      "depends_on": ["T218", "T219"],
+      "acceptance_criteria": [
+        "All release checks pass from the merged clean main commit.",
+        "The v0.2.0 tag and GitHub Release are created from the validated commit.",
+        "The validated installer and release notes are published and the 0.2.0 todo is archived."
       ]
     }
   ]
