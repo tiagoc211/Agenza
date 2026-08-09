@@ -20,7 +20,7 @@ Do not run multiple `conda run` commands concurrently. On Windows, concurrent in
 
 ## Project workflow
 
-- Before changing code, read `README.md`, `todo.json`, and `docs/architecture.md`, as well as the closest applicable `AGENTS.md` file.
+- Before changing code, read `README.md`, `todo.json`, `docs/architecture.md`, and the current release scope in `docs/scope-0.2.0.md`, as well as the closest applicable `AGENTS.md` file.
 - Confirm that the assigned task's dependencies in `todo.json` are complete before starting implementation.
 - Keep `todo.json` updated when a task is started or completed.
 - Run the relevant tests, linting, and validation before marking a task as complete.
@@ -34,7 +34,7 @@ Do not run multiple `conda run` commands concurrently. On Windows, concurrent in
 
 When the user tells a new agent to follow the default new-task prompt, the agent must:
 
-1. Read `AGENTS.md`, `README.md`, `todo.json`, and `docs/architecture.md` completely.
+1. Read `AGENTS.md`, `README.md`, `todo.json`, `docs/architecture.md`, and `docs/scope-0.2.0.md` completely.
 2. Inspect the current branch and working tree without discarding or overwriting existing changes.
 3. Sort the tasks in `todo.json` by `order` and select the first task whose status is not `done`.
 4. Confirm that all dependencies for the selected task are `done`. Do not silently skip a blocked task or a task with incomplete dependencies; report the problem to the user.

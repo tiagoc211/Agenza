@@ -22,7 +22,7 @@ test('defines an ordered and dependency-safe 0.2.0 plan', () => {
 
   for (const [index, task] of currentTodo.tasks.entries()) {
     assert.equal(task.order, index + 1);
-    assert.equal(task.status, 'todo');
+    assert.equal(currentTodo.status_values.includes(task.status), true);
     assert.ok(task.acceptance_criteria.length > 0);
 
     for (const dependencyId of task.depends_on) {
@@ -36,6 +36,14 @@ test('defines an ordered and dependency-safe 0.2.0 plan', () => {
         dependency.order < task.order,
         `${task.id} depends on a later task ${dependencyId}`,
       );
+
+      if (task.status !== 'todo') {
+        assert.equal(
+          dependency.status,
+          'done',
+          `${task.id} started before dependency ${dependencyId} was done`,
+        );
+      }
     }
   }
 });

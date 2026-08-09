@@ -1,5 +1,9 @@
 # Agenza 0.1.0 technical decision
 
+This document records the shipped `0.1.0` architecture that `0.2.0` builds on. The new release scope
+and non-destructive Git boundaries are defined in [scope-0.2.0.md](scope-0.2.0.md). Task `T202` will
+document the dynamic terminal and workspace model before implementation begins.
+
 ## Decision
 
 Agenza will be a Windows desktop application built with Electron and plain JavaScript. The first release will not use TypeScript, React, or another UI framework.
