@@ -1,0 +1,86 @@
+const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const test = require('node:test');
+
+const html = readFileSync('src/renderer/index.html', 'utf8');
+const renderer = readFileSync('src/renderer/index.js', 'utf8');
+const styles = readFileSync('src/renderer/styles.css', 'utf8');
+
+test('defines two independent terminal panes', () => {
+  const mounts = html.match(/class="terminal-mount"/g) ?? [];
+
+  assert.equal(mounts.length, 2);
+  assert.match(html, /data-pane-id="terminal-one"/);
+  assert.match(html, /data-pane-id="terminal-two"/);
+  assert.match(renderer, /new Terminal/);
+  assert.match(renderer, /new FitAddon/);
+});
+
+test('keeps panes responsive and exposes an active state', () => {
+  assert.match(styles, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.terminal-pane\.is-active/);
+  assert.match(renderer, /new ResizeObserver\(fitTerminals\)/);
+  assert.match(renderer, /classList\.toggle\('is-active'/);
+});
+
+test('connects each xterm view to its matching PTY session', () => {
+  assert.match(renderer, /terminal\.onData/);
+  assert.match(renderer, /terminal\.onResize/);
+  assert.match(renderer, /window\.agenza\.terminal\.write\(view\.id, data\)/);
+  assert.match(renderer, /terminalViews\.get\(id\)\?\.terminal\.write\(data\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.resize\(view\.id/);
+  assert.match(renderer, /Choose a project folder to start Codex/);
+});
+
+test('selects and displays a project folder before starting sessions', () => {
+  assert.equal((html.match(/data-project-button/g) ?? []).length, 2);
+  assert.match(renderer, /window\.agenza\.project\.selectFolder\(view\.id\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.start\(view\.id\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.restart\(view\.id\)/);
+  assert.match(renderer, /setSessionState\(view, 'connected', 'Connected', view\.projectFolder\)/);
+});
+
+test('provides independent clear and restart controls for each terminal', () => {
+  assert.equal((html.match(/data-clear-button/g) ?? []).length, 2);
+  assert.equal((html.match(/data-restart-button/g) ?? []).length, 2);
+  assert.match(renderer, /window\.agenza\.terminal\.write\(view\.id, '\\x0c'\)/);
+  assert.match(renderer, /view\.terminal\.reset\(\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.restart\(view\.id\)/);
+  assert.match(renderer, /Use Restart above to launch this session again/);
+  assert.match(renderer, /setSessionState\(view, 'exited', 'Exited'/);
+});
+
+test('supports accessible terminal focus switching without taking terminal shortcuts', () => {
+  assert.match(html, /aria-keyshortcuts="F6 Shift\+F6"/);
+  assert.equal((html.match(/aria-live="polite"/g) ?? []).length, 2);
+  assert.match(renderer, /screenReaderMode: true/);
+  assert.match(renderer, /event\.key !== 'F6'/);
+  assert.match(renderer, /event\.altKey \|\| event\.ctrlKey \|\| event\.metaKey/);
+  assert.match(renderer, /event\.shiftKey \? -1 : 1/);
+  assert.match(renderer, /nextView\.terminal\.focus\(\)/);
+  assert.match(styles, /\.terminal-pane:focus-within/);
+  assert.match(styles, /\.pane-action-button:focus-visible/);
+});
+
+test('supports mouse selection and terminal-safe clipboard shortcuts', () => {
+  assert.equal((html.match(/data-copy-button/g) ?? []).length, 2);
+  assert.equal((html.match(/data-paste-button/g) ?? []).length, 2);
+  assert.match(renderer, /terminal\.onSelectionChange/);
+  assert.match(renderer, /view\.terminal\.getSelection\(\)/);
+  assert.match(renderer, /window\.agenza\.clipboard\.writeText\(selectedText\)/);
+  assert.match(renderer, /window\.agenza\.clipboard\.readText\(\)/);
+  assert.match(renderer, /view\.terminal\.paste\(text\)/);
+  assert.match(renderer, /attachCustomKeyEventHandler/);
+  assert.match(renderer, /event\.shiftKey \|\| view\.terminal\.hasSelection\(\)/);
+  assert.equal((renderer.match(/event\.preventDefault\(\)/g) ?? []).length, 3);
+  assert.equal((renderer.match(/event\.stopPropagation\(\)/g) ?? []).length, 2);
+  assert.match(renderer, /return true;/);
+});
+
+test('shows concise, terminal-local recovery instructions for failures', () => {
+  assert.match(renderer, /const formatUserFacingError/);
+  assert.match(renderer, /\.slice\(0, 500\)/);
+  assert.match(renderer, /Check that Codex works in a normal terminal/);
+  assert.match(renderer, /Choose a readable and writable project folder/);
+  assert.match(renderer, /showSessionFailure\(view/);
+});

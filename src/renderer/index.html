@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agenza</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-bar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <div>
+            <h1>Agenza</h1>
+            <p>Codex workspace</p>
+          </div>
+        </div>
+        <div class="workspace-status" aria-label="Workspace status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>2 independent terminals</span>
+        </div>
+      </header>
+
+      <main
+        class="terminal-grid"
+        aria-label="Codex terminal workspace"
+        aria-describedby="terminal-keyboard-help"
+        aria-keyshortcuts="F6 Shift+F6"
+      >
+        <span class="visually-hidden" id="terminal-keyboard-help">
+          Press F6 to focus the next terminal or Shift plus F6 to focus the previous terminal.
+        </span>
+        <section
+          class="terminal-pane is-active"
+          data-pane-id="terminal-one"
+          data-session-state="waiting"
+          aria-labelledby="terminal-one-title"
+        >
+          <header class="pane-header">
+            <div class="pane-identity">
+              <span class="pane-number" aria-hidden="true">01</span>
+              <div>
+                <h2 id="terminal-one-title">Codex one</h2>
+                <p data-terminal-description>Choose a project folder</p>
+              </div>
+            </div>
+            <div class="pane-actions">
+              <button
+                class="pane-action-button pane-project-button"
+                type="button"
+                data-project-button
+              >
+                Choose folder
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Copy selected text from Codex terminal one"
+                data-copy-button
+                disabled
+              >
+                Copy
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Paste text into Codex terminal one"
+                data-paste-button
+                disabled
+              >
+                Paste
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Clear Codex terminal one"
+                data-clear-button
+              >
+                Clear
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Restart Codex terminal one"
+                data-restart-button
+                disabled
+              >
+                Restart
+              </button>
+              <span
+                class="pane-state"
+                role="status"
+                aria-atomic="true"
+                aria-live="polite"
+                data-terminal-state
+              >
+                Waiting
+              </span>
+            </div>
+          </header>
+          <div class="terminal-frame">
+            <div class="terminal-mount" id="terminal-one" aria-label="Codex terminal one"></div>
+          </div>
+        </section>
+
+        <section
+          class="terminal-pane"
+          data-pane-id="terminal-two"
+          data-session-state="waiting"
+          aria-labelledby="terminal-two-title"
+        >
+          <header class="pane-header">
+            <div class="pane-identity">
+              <span class="pane-number" aria-hidden="true">02</span>
+              <div>
+                <h2 id="terminal-two-title">Codex two</h2>
+                <p data-terminal-description>Choose a project folder</p>
+              </div>
+            </div>
+            <div class="pane-actions">
+              <button
+                class="pane-action-button pane-project-button"
+                type="button"
+                data-project-button
+              >
+                Choose folder
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Copy selected text from Codex terminal two"
+                data-copy-button
+                disabled
+              >
+                Copy
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Paste text into Codex terminal two"
+                data-paste-button
+                disabled
+              >
+                Paste
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Clear Codex terminal two"
+                data-clear-button
+              >
+                Clear
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Restart Codex terminal two"
+                data-restart-button
+                disabled
+              >
+                Restart
+              </button>
+              <span
+                class="pane-state"
+                role="status"
+                aria-atomic="true"
+                aria-live="polite"
+                data-terminal-state
+              >
+                Waiting
+              </span>
+            </div>
+          </header>
+          <div class="terminal-frame">
+            <div class="terminal-mount" id="terminal-two" aria-label="Codex terminal two"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="status-bar">
+        <span>Local workspace</span>
+        <span class="keyboard-hint">
+          <kbd>Ctrl+C</kbd> copy selection · <kbd>Ctrl+V</kbd> paste · <kbd>F6</kbd> switch
+        </span>
+        <span id="environment"></span>
+      </footer>
+    </div>
+  </body>
+</html>

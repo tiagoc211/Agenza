@@ -1,0 +1,53 @@
+{
+  "name": "agenza",
+  "productName": "Agenza",
+  "version": "0.1.0",
+  "description": "A local desktop workspace for independent Codex CLI sessions.",
+  "main": ".webpack/main",
+  "private": true,
+  "author": "Tiago",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "electron-forge start",
+    "dev": "electron-forge start",
+    "build": "electron-forge package",
+    "make": "electron-forge make",
+    "test": "node test/run-tests.js",
+    "test:all": "node test/run-all-tests.js",
+    "test:release": "node test/validate-release-artifacts.js",
+    "test:smoke": "node test/run-smoke-test.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "electron-squirrel-startup": "1.0.1",
+    "node-pty": "1.1.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "@electron-forge/plugin-auto-unpack-natives": "7.11.2",
+    "@electron-forge/plugin-webpack": "7.11.2",
+    "@vercel/webpack-asset-relocator-loader": "1.7.3",
+    "electron": "43.3.0",
+    "eslint": "10.8.1",
+    "node-loader": "2.1.0",
+    "prettier": "3.9.6"
+  },
+  "overrides": {
+    "tar": "7.5.22",
+    "tmp": "0.2.7",
+    "uuid": "11.1.1",
+    "webpack-dev-server": "5.2.6"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.4": true,
+    "node-pty@1.1.0": true
+  }
+}

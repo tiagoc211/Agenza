@@ -2,18 +2,13 @@
   "project": "Agenza",
   "release": "0.1.0",
   "goal": "Ship a local desktop app with two independent terminal panes, each capable of running the Codex CLI.",
-  "status_values": [
-    "todo",
-    "in_progress",
-    "blocked",
-    "done"
-  ],
+  "status_values": ["todo", "in_progress", "blocked", "done"],
   "tasks": [
     {
       "id": "T001",
       "order": 1,
       "title": "Define the v1 scope and acceptance criteria",
-      "status": "todo",
+      "status": "done",
       "depends_on": [],
       "acceptance_criteria": [
         "The supported operating system for v1 is documented.",
@@ -25,10 +20,8 @@
       "id": "T002",
       "order": 2,
       "title": "Choose the desktop application stack",
-      "status": "todo",
-      "depends_on": [
-        "T001"
-      ],
+      "status": "done",
+      "depends_on": ["T001"],
       "acceptance_criteria": [
         "The UI framework, desktop shell, terminal emulator, and PTY library are selected.",
         "The selected stack can create and control two interactive shell processes.",
@@ -39,10 +32,8 @@
       "id": "T003",
       "order": 3,
       "title": "Scaffold the application",
-      "status": "todo",
-      "depends_on": [
-        "T002"
-      ],
+      "status": "done",
+      "depends_on": ["T002"],
       "acceptance_criteria": [
         "The application starts successfully from the agenza Conda environment.",
         "Development, build, test, and lint commands are available.",
@@ -53,10 +44,8 @@
       "id": "T004",
       "order": 4,
       "title": "Create the main two-pane interface",
-      "status": "todo",
-      "depends_on": [
-        "T003"
-      ],
+      "status": "done",
+      "depends_on": ["T003"],
       "acceptance_criteria": [
         "The main window displays two clearly separated terminal panes.",
         "Both panes remain usable when the window is resized.",
@@ -67,10 +56,8 @@
       "id": "T005",
       "order": 5,
       "title": "Implement the terminal process layer",
-      "status": "todo",
-      "depends_on": [
-        "T003"
-      ],
+      "status": "done",
+      "depends_on": ["T003"],
       "acceptance_criteria": [
         "The app can start an interactive PTY process for each pane.",
         "Input, output, terminal resizing, and Unicode text work correctly.",
@@ -81,11 +68,8 @@
       "id": "T006",
       "order": 6,
       "title": "Connect both terminal panes to their PTY processes",
-      "status": "todo",
-      "depends_on": [
-        "T004",
-        "T005"
-      ],
+      "status": "done",
+      "depends_on": ["T004", "T005"],
       "acceptance_criteria": [
         "Typing in either pane sends input only to its own process.",
         "Output from each process appears only in its own pane.",
@@ -96,24 +80,20 @@
       "id": "T007",
       "order": 7,
       "title": "Launch Codex in both terminals",
-      "status": "todo",
-      "depends_on": [
-        "T006"
-      ],
+      "status": "done",
+      "depends_on": ["T006"],
       "acceptance_criteria": [
-        "Each pane starts the Codex CLI through the agenza Conda environment.",
+        "Each pane starts the Codex CLI from the user's normal system environment.",
         "Both Codex sessions can run at the same time and accept input independently.",
-        "A missing Conda environment or Codex installation produces a useful error message."
+        "A missing Codex installation or PATH entry produces a useful error message."
       ]
     },
     {
       "id": "T008",
       "order": 8,
       "title": "Add project-folder selection",
-      "status": "todo",
-      "depends_on": [
-        "T007"
-      ],
+      "status": "done",
+      "depends_on": ["T007"],
       "acceptance_criteria": [
         "The user can select the working directory used by the Codex sessions.",
         "Both terminals clearly show which project folder they are using.",
@@ -124,10 +104,8 @@
       "id": "T009",
       "order": 9,
       "title": "Add terminal session controls",
-      "status": "todo",
-      "depends_on": [
-        "T007"
-      ],
+      "status": "done",
+      "depends_on": ["T007"],
       "acceptance_criteria": [
         "Each terminal can be restarted independently.",
         "The user can clear the visible terminal output.",
@@ -138,11 +116,8 @@
       "id": "T010",
       "order": 10,
       "title": "Handle application and process lifecycle safely",
-      "status": "todo",
-      "depends_on": [
-        "T007",
-        "T009"
-      ],
+      "status": "done",
+      "depends_on": ["T007", "T009"],
       "acceptance_criteria": [
         "Closing the app terminates both child process trees cleanly.",
         "Restarting one session does not affect the other session.",
@@ -153,11 +128,8 @@
       "id": "T011",
       "order": 11,
       "title": "Add essential keyboard and accessibility behavior",
-      "status": "todo",
-      "depends_on": [
-        "T006",
-        "T009"
-      ],
+      "status": "done",
+      "depends_on": ["T006", "T009"],
       "acceptance_criteria": [
         "The user can switch focus between terminals with the keyboard.",
         "Terminal text is readable and the active pane is visually identifiable.",
@@ -168,11 +140,8 @@
       "id": "T012",
       "order": 12,
       "title": "Add application logging and user-facing error handling",
-      "status": "todo",
-      "depends_on": [
-        "T007",
-        "T010"
-      ],
+      "status": "done",
+      "depends_on": ["T007", "T010"],
       "acceptance_criteria": [
         "Startup and process failures provide concise recovery instructions.",
         "Diagnostic logs are stored locally without recording terminal input or secrets.",
@@ -183,11 +152,8 @@
       "id": "T013",
       "order": 13,
       "title": "Add automated tests",
-      "status": "todo",
-      "depends_on": [
-        "T010",
-        "T012"
-      ],
+      "status": "done",
+      "depends_on": ["T010", "T012"],
       "acceptance_criteria": [
         "Tests cover process startup, input and output routing, resize events, restart behavior, and cleanup.",
         "A smoke test verifies that two independent terminal sessions can run concurrently.",
@@ -198,14 +164,8 @@
       "id": "T014",
       "order": 14,
       "title": "Perform manual release testing",
-      "status": "todo",
-      "depends_on": [
-        "T008",
-        "T009",
-        "T011",
-        "T012",
-        "T013"
-      ],
+      "status": "done",
+      "depends_on": ["T008", "T009", "T011", "T012", "T013"],
       "acceptance_criteria": [
         "Both Codex sessions complete a real interactive workflow independently.",
         "Copy, paste, scrolling, resizing, focus switching, restart, and app shutdown are verified.",
@@ -217,13 +177,11 @@
       "id": "T015",
       "order": 15,
       "title": "Create a distributable application build",
-      "status": "todo",
-      "depends_on": [
-        "T014"
-      ],
+      "status": "done",
+      "depends_on": ["T014"],
       "acceptance_criteria": [
         "A clean machine can install or run the packaged application.",
-        "The app detects and explains missing Conda or Codex prerequisites.",
+        "The app detects and explains a missing Codex prerequisite.",
         "The packaged build opens two working Codex terminals."
       ]
     },
@@ -231,13 +189,11 @@
       "id": "T016",
       "order": 16,
       "title": "Finish release documentation",
-      "status": "todo",
-      "depends_on": [
-        "T015"
-      ],
+      "status": "done",
+      "depends_on": ["T015"],
       "acceptance_criteria": [
         "The README includes setup, development, build, install, and usage instructions.",
-        "Required versions of Conda, the agenza environment, and Codex are documented.",
+        "Development requirements and the user-facing Codex prerequisite are documented separately.",
         "Known limitations and troubleshooting steps are documented."
       ]
     },
@@ -245,11 +201,8 @@
       "id": "T017",
       "order": 17,
       "title": "Prepare and publish release 0.1.0",
-      "status": "todo",
-      "depends_on": [
-        "T015",
-        "T016"
-      ],
+      "status": "in_progress",
+      "depends_on": ["T015", "T016"],
       "acceptance_criteria": [
         "The version number and changelog are finalized.",
         "All release checks pass from a clean checkout.",

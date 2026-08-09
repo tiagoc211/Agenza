@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Electron and build output
+.webpack/
+out/
+dist/
+
+# Tests and tooling
+coverage/
+*.log
+npm-debug.log*
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.npmrc
+*.key
+*.pem
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
