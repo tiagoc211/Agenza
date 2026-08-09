@@ -106,6 +106,22 @@ those facts before any mutation. Previews remain only in a bounded main-process 
 five minutes; a new preview for the same terminal invalidates the old one, and previews are never
 persisted.
 
+The new-branch confirmation path revalidates its preview inside a per-repository mutation queue,
+then invokes Git directly with `worktree add --no-track -b` from the previewed base revision. After
+Git returns, Agenza rediscovers the target path and verifies the repository root, worktree path,
+branch ref, exact starting revision, and lifecycle flags before recording the worktree as
+Agenza-created. `WorkspaceService` atomically assigns that versioned ownership record only to the
+selected terminal, and the main process starts or restarts only that terminal's Codex PTY with the
+new worktree as its working directory. The renderer requires a second, exact preview of repository,
+base revision, target branch, and path before it enables creation.
+
+If creation, verification, or persistence fails, rollback considers only the branch and worktree
+named by that operation. It rediscovers Git state before each cleanup step, requires the exact
+previewed branch ref and revision, refuses locked or ambiguous resources, removes the worktree and
+branch without force, and reports manual recovery instead of risking pre-existing Git data. A Codex
+startup failure after successful persistence does not roll back completed Git work: the new
+workspace remains assigned and the affected pane offers Restart.
+
 Session controls are scoped by stable terminal IDs. For a running session, Clear sends the
 standard Ctrl+L terminal control to the selected PTY so Codex clears the screen and redraws its input
 at the correct cursor position. A stopped or not-yet-started pane is reset locally. Restarting asks

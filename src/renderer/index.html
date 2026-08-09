@@ -71,6 +71,14 @@
               >
                 Choose folder
               </button>
+              <button
+                class="pane-action-button pane-worktree-button"
+                type="button"
+                data-worktree-button
+                disabled
+              >
+                New worktree
+              </button>
               <button class="pane-action-button" type="button" data-copy-button disabled>
                 Copy
               </button>
@@ -104,6 +112,106 @@
           </div>
         </section>
       </template>
+
+      <dialog class="workspace-dialog" data-worktree-dialog>
+        <form class="workspace-dialog-form" method="dialog" data-worktree-form>
+          <header class="workspace-dialog-header">
+            <div>
+              <p class="workspace-dialog-eyebrow">Git workspace</p>
+              <h2>Create an isolated branch and worktree</h2>
+            </div>
+            <button
+              class="workspace-dialog-close"
+              type="button"
+              data-cancel-worktree
+              aria-label="Close new worktree dialog"
+            >
+              &times;
+            </button>
+          </header>
+
+          <p class="workspace-dialog-intro" data-worktree-intro>
+            Loading the selected terminal repository&hellip;
+          </p>
+
+          <div class="workspace-dialog-fields" data-worktree-fields hidden>
+            <label>
+              <span>Repository</span>
+              <output data-worktree-repository></output>
+            </label>
+            <label>
+              <span>Base branch</span>
+              <select data-worktree-base required></select>
+            </label>
+            <label>
+              <span>New branch</span>
+              <input
+                type="text"
+                maxlength="1024"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="agenza/my-task"
+                data-worktree-branch
+                required
+              />
+            </label>
+            <label>
+              <span>New worktree path</span>
+              <input
+                type="text"
+                maxlength="32767"
+                autocomplete="off"
+                spellcheck="false"
+                data-worktree-path
+                required
+              />
+            </label>
+          </div>
+
+          <p class="workspace-dialog-error" role="alert" data-worktree-error hidden></p>
+
+          <section class="workspace-preview" data-worktree-preview hidden>
+            <h3>Confirm this Git operation</h3>
+            <dl>
+              <div>
+                <dt>Repository</dt>
+                <dd data-preview-repository></dd>
+              </div>
+              <div>
+                <dt>Base branch</dt>
+                <dd data-preview-base></dd>
+              </div>
+              <div>
+                <dt>New branch</dt>
+                <dd data-preview-target></dd>
+              </div>
+              <div>
+                <dt>Worktree path</dt>
+                <dd data-preview-path></dd>
+              </div>
+            </dl>
+            <p>
+              Agenza will create only this local branch and worktree, then assign and start this
+              terminal. Other terminals and existing Git work remain unchanged.
+            </p>
+          </section>
+
+          <footer class="workspace-dialog-actions">
+            <button class="dialog-button" type="button" data-cancel-worktree>Cancel</button>
+            <button class="dialog-button dialog-button-secondary" type="button" data-preview-button>
+              Review operation
+            </button>
+            <button
+              class="dialog-button dialog-button-primary"
+              type="button"
+              data-confirm-worktree
+              disabled
+            >
+              Create branch and worktree
+            </button>
+          </footer>
+        </form>
+      </dialog>
 
       <footer class="status-bar">
         <span>Local workspace</span>

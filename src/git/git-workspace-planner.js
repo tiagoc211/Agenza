@@ -27,6 +27,8 @@ const GIT_PLAN_ERROR_CODES = Object.freeze({
   pathInsideWorktree: 'WORKTREE_PATH_INSIDE_WORKTREE',
   pathRegistered: 'WORKTREE_PATH_REGISTERED',
   parentUnavailable: 'WORKTREE_PARENT_UNAVAILABLE',
+  previewExpired: 'WORKSPACE_PREVIEW_EXPIRED',
+  previewStale: 'WORKSPACE_PREVIEW_STALE',
   repositoryUnsupported: 'UNSUPPORTED_REPOSITORY_STATE',
   worktreeDetached: 'WORKTREE_DETACHED',
   worktreeLocked: 'WORKTREE_LOCKED',
@@ -51,6 +53,10 @@ const GIT_PLAN_ERROR_MESSAGES = Object.freeze({
   [GIT_PLAN_ERROR_CODES.pathRegistered]: 'That path is already registered as a Git worktree.',
   [GIT_PLAN_ERROR_CODES.parentUnavailable]:
     'The worktree parent folder must exist and be writable.',
+  [GIT_PLAN_ERROR_CODES.previewExpired]:
+    'This workspace preview expired. Review the current Git state and try again.',
+  [GIT_PLAN_ERROR_CODES.previewStale]:
+    'The repository changed after this preview. Review the updated details before confirming.',
   [GIT_PLAN_ERROR_CODES.repositoryUnsupported]:
     'This repository state is not supported for a safe worktree operation.',
   [GIT_PLAN_ERROR_CODES.worktreeDetached]:
@@ -201,21 +207,7 @@ class GitWorkspacePlanner {
     const discovery = await this._discover(projectPath);
     this._assertSupportedRepository(discovery);
 
-    let planDetails;
-
-    switch (request.type) {
-      case GIT_PLAN_TYPES.createNewBranch:
-        planDetails = await this._planNewBranch(discovery, request, assignedWorktrees);
-        break;
-      case GIT_PLAN_TYPES.createExistingBranch:
-        planDetails = await this._planExistingBranch(discovery, request, assignedWorktrees);
-        break;
-      case GIT_PLAN_TYPES.attachWorktree:
-        planDetails = await this._planExistingWorktree(discovery, request, assignedWorktrees);
-        break;
-      default:
-        throw new GitWorkspacePlanningError(GIT_PLAN_ERROR_CODES.invalidRequest);
-    }
+    const planDetails = await this._buildPlanDetails(discovery, request, assignedWorktrees);
 
     const preview = freezePreview({
       operationId: this._operationIdFactory(),
@@ -231,6 +223,33 @@ class GitWorkspacePlanner {
     return preview;
   }
 
+  async revalidatePreview(operationId, terminalId, { assignedWorktrees = [], projectPath } = {}) {
+    const preview = this.getPreview(operationId, terminalId);
+
+    if (!preview) {
+      throw new GitWorkspacePlanningError(GIT_PLAN_ERROR_CODES.previewExpired);
+    }
+
+    const request = this._requestFromPreview(preview);
+    const discovery = await this._discover(projectPath);
+    this._assertSupportedRepository(discovery);
+    const planDetails = await this._buildPlanDetails(discovery, request, assignedWorktrees);
+    const currentFacts = {
+      repositoryRoot: discovery.root,
+      validationFingerprint: createDiscoveryFingerprint(discovery, assignedWorktrees),
+      ...planDetails,
+    };
+    const originalFacts = Object.fromEntries(
+      Object.keys(currentFacts).map((key) => [key, preview[key]]),
+    );
+
+    if (JSON.stringify(currentFacts) !== JSON.stringify(originalFacts)) {
+      throw new GitWorkspacePlanningError(GIT_PLAN_ERROR_CODES.previewStale);
+    }
+
+    return preview;
+  }
+
   getPreview(operationId, terminalId) {
     this._purgeExpiredPreviews();
     const stored = this._previews.get(operationId);
@@ -243,6 +262,41 @@ class GitWorkspacePlanner {
 
   clearPreviews() {
     this._previews.clear();
+  }
+
+  async _buildPlanDetails(discovery, request, assignedWorktrees) {
+    switch (request.type) {
+      case GIT_PLAN_TYPES.createNewBranch:
+        return this._planNewBranch(discovery, request, assignedWorktrees);
+      case GIT_PLAN_TYPES.createExistingBranch:
+        return this._planExistingBranch(discovery, request, assignedWorktrees);
+      case GIT_PLAN_TYPES.attachWorktree:
+        return this._planExistingWorktree(discovery, request, assignedWorktrees);
+      default:
+        throw new GitWorkspacePlanningError(GIT_PLAN_ERROR_CODES.invalidRequest);
+    }
+  }
+
+  _requestFromPreview(preview) {
+    switch (preview.type) {
+      case GIT_PLAN_TYPES.createNewBranch:
+        return {
+          baseBranch: preview.baseBranch,
+          targetBranch: preview.targetBranch,
+          type: preview.type,
+          worktreePath: preview.worktreePath,
+        };
+      case GIT_PLAN_TYPES.createExistingBranch:
+        return {
+          targetBranch: preview.targetBranch,
+          type: preview.type,
+          worktreePath: preview.worktreePath,
+        };
+      case GIT_PLAN_TYPES.attachWorktree:
+        return { type: preview.type, worktreePath: preview.worktreePath };
+      default:
+        throw new GitWorkspacePlanningError(GIT_PLAN_ERROR_CODES.invalidRequest);
+    }
   }
 
   async _planNewBranch(discovery, request, assignedWorktrees) {

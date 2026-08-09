@@ -78,11 +78,35 @@ const createMainWindow = async () => {
   });
   await workspaceService.initialize();
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
+  const prepareTerminal = isStartupCheck
+    ? async () => undefined
+    : async (id) => {
+        const projectFolder = workspaceService.getCurrentFolder(id);
+
+        if (!projectFolder) {
+          throw new Error(`Select a project folder for "${id}" before starting Codex.`);
+        }
+
+        if (isMissingCodexCheck) {
+          throw new Error(
+            'Codex CLI was not found on PATH. Install Codex CLI, make "codex" available in a normal terminal, and restart Agenza.',
+          );
+        }
+
+        return prepareCodexSessionOptions({ cwd: projectFolder });
+      };
+  const startTerminal = async (id) => {
+    const options = (await prepareTerminal(id)) ?? {};
+    return terminalManager.getSnapshot(id).isRunning
+      ? terminalManager.restart(id, options)
+      : terminalManager.start(id, options);
+  };
   appLogger.info('window.created');
   const disposeClipboardIpc = registerClipboardIpc({ clipboard, ipcMain, window });
   const disposeGitIpc = registerGitIpc({
     ipcMain,
     logger: appLogger,
+    startTerminal,
     window,
     workspaceService,
   });
@@ -102,23 +126,7 @@ const createMainWindow = async () => {
     logger: appLogger,
     window,
     manager: terminalManager,
-    prepare: isStartupCheck
-      ? undefined
-      : async (id) => {
-          const projectFolder = workspaceService.getCurrentFolder(id);
-
-          if (!projectFolder) {
-            throw new Error(`Select a project folder for "${id}" before starting Codex.`);
-          }
-
-          if (isMissingCodexCheck) {
-            throw new Error(
-              'Codex CLI was not found on PATH. Install Codex CLI, make "codex" available in a normal terminal, and restart Agenza.',
-            );
-          }
-
-          return prepareCodexSessionOptions({ cwd: projectFolder });
-        },
+    prepare: prepareTerminal,
   });
   const disposeWindowResources = createResourceDisposer([
     { dispose: disposeTerminalIpc, label: 'terminal IPC' },

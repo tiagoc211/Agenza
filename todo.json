@@ -98,7 +98,7 @@
       "id": "T208",
       "order": 8,
       "title": "Create a branch and worktree for a terminal",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T203", "T204", "T207"],
       "acceptance_criteria": [
         "The user can create a new local branch from a selected base and assign its new worktree to one terminal.",

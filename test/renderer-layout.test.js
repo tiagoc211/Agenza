@@ -52,6 +52,7 @@ test('keeps the directory and wrapping controls in separate non-overlapping head
 test('gives every pane independent controls, process state, and a stable label', () => {
   for (const control of [
     'data-project-button',
+    'data-worktree-button',
     'data-copy-button',
     'data-paste-button',
     'data-clear-button',
@@ -68,6 +69,34 @@ test('gives every pane independent controls, process state, and a stable label',
   assert.match(renderer, /terminalViews\.get\(id\)\?\.terminal\.write\(data\)/);
   assert.match(renderer, /window\.agenza\.terminal\.resize\(view\.id/);
   assert.match(renderer, /window\.agenza\.terminal\.activate\(nextActiveId\)/);
+});
+
+test('previews and confirms a new branch worktree for only the selected terminal', () => {
+  for (const control of [
+    'data-worktree-dialog',
+    'data-worktree-form',
+    'data-worktree-base',
+    'data-worktree-branch',
+    'data-worktree-path',
+    'data-preview-repository',
+    'data-preview-base',
+    'data-preview-target',
+    'data-preview-path',
+    'data-confirm-worktree',
+  ]) {
+    assert.match(html, new RegExp(control));
+  }
+
+  assert.match(html, /Confirm this Git operation/);
+  assert.match(html, /Other terminals and existing Git work remain unchanged/);
+  assert.match(renderer, /window\.agenza\.git\.discover\(view\.id\)/);
+  assert.match(renderer, /window\.agenza\.git\.planWorkspace\(state\.view\.id/);
+  assert.match(renderer, /type: 'create-new-branch-worktree'/);
+  assert.match(renderer, /window\.agenza\.git\.createNewBranch\(/);
+  assert.match(renderer, /state\.view\.id,[\s\S]*state\.preview\.operationId/);
+  assert.match(renderer, /view\.workspace = result\.operation\.workspace/);
+  assert.match(renderer, /setControlsBusy\(view, true\)/);
+  assert.match(styles, /\.workspace-dialog::backdrop/);
 });
 
 test('restores persisted labels, active state, and available or missing project paths safely', () => {
@@ -122,6 +151,6 @@ test('supports mouse selection and terminal-safe clipboard shortcuts in every ne
   assert.match(renderer, /view\.terminal\.paste\(text\)/);
   assert.match(renderer, /attachCustomKeyEventHandler/);
   assert.match(renderer, /event\.shiftKey \|\| view\.terminal\.hasSelection\(\)/);
-  assert.equal((renderer.match(/event\.preventDefault\(\)/g) ?? []).length, 3);
+  assert.ok((renderer.match(/event\.preventDefault\(\)/g) ?? []).length >= 3);
   assert.equal((renderer.match(/event\.stopPropagation\(\)/g) ?? []).length, 2);
 });

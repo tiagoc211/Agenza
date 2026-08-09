@@ -1,5 +1,10 @@
 const { discoverGitRepository } = require('./git-discovery');
 const { toGitErrorPayload } = require('./git-command');
+const {
+  GitWorkspaceExecutionError,
+  GitWorkspaceExecutor,
+  toGitWorkspaceExecutionErrorPayload,
+} = require('./git-workspace-executor');
 const { GitWorkspacePlanner, toGitWorkspacePlanErrorPayload } = require('./git-workspace-planner');
 const { GIT_CHANNELS } = require('./ipc-channels');
 
@@ -18,20 +23,34 @@ const registerGitIpc = ({
   discover = discoverGitRepository,
   ipcMain,
   logger,
+  executor,
   planner,
+  startTerminal = async () => null,
   window,
   workspaceService,
 } = {}) => {
-  if (!ipcMain || !window || !workspaceService || typeof discover !== 'function') {
+  if (
+    !ipcMain ||
+    !window ||
+    !workspaceService ||
+    typeof discover !== 'function' ||
+    typeof startTerminal !== 'function'
+  ) {
     throw new TypeError(
       'Git IPC requires ipcMain, a window, workspace access, and repository discovery.',
     );
   }
 
   const workspacePlanner = planner ?? new GitWorkspacePlanner({ discover });
+  const workspaceExecutor =
+    executor ?? new GitWorkspaceExecutor({ discover, planner: workspacePlanner });
 
   if (!workspacePlanner || typeof workspacePlanner.plan !== 'function') {
     throw new TypeError('Git IPC workspace planner must provide a plan function.');
+  }
+
+  if (!workspaceExecutor || typeof workspaceExecutor.createNewBranch !== 'function') {
+    throw new TypeError('Git IPC workspace executor must provide a createNewBranch function.');
   }
 
   const getTerminalProjectPath = (id) => {
@@ -121,11 +140,72 @@ const registerGitIpc = ({
     }
   };
 
+  const handleCreateNewBranch = async (event, payload) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error('Untrusted Git workspace confirmation request.');
+    }
+
+    const { id, operationId } = payload ?? {};
+    const projectPath = getTerminalProjectPath(id);
+
+    if (typeof operationId !== 'string' || operationId.length > 100) {
+      throw new Error('Invalid Git workspace operation id.');
+    }
+
+    writeLog(logger, 'info', 'git.workspace_create_requested', { operationId, terminalId: id });
+
+    try {
+      const operation = await workspaceExecutor.createNewBranch({
+        assignedWorktrees: workspaceService.getAssignedGitWorktrees?.(id) ?? [],
+        commitAssignment: (workspace) => workspaceService.assignGitWorktree(id, workspace),
+        operationId,
+        projectPath,
+        terminalId: id,
+      });
+      let session = null;
+      let terminalError = null;
+
+      try {
+        session = await startTerminal(id);
+      } catch (error) {
+        terminalError = {
+          code: 'TERMINAL_START_FAILED',
+          message:
+            'The workspace was created, but Codex could not start. Verify Codex in a normal terminal and retry.',
+        };
+        writeLog(logger, 'error', 'git.workspace_terminal_start_failed', {
+          error,
+          operationId,
+          terminalId: id,
+        });
+      }
+
+      writeLog(logger, 'info', 'git.workspace_create_succeeded', {
+        operationId,
+        terminalId: id,
+      });
+      return { id, ok: true, operation, session, terminalError };
+    } catch (error) {
+      const errorPayload =
+        error instanceof GitWorkspaceExecutionError
+          ? toGitWorkspaceExecutionErrorPayload(error)
+          : toGitWorkspacePlanErrorPayload(error);
+      writeLog(logger, 'error', 'git.workspace_create_failed', {
+        error: { code: errorPayload.code },
+        operationId,
+        terminalId: id,
+      });
+      return { error: errorPayload, id, ok: false };
+    }
+  };
+
+  ipcMain.handle(GIT_CHANNELS.createNewBranch, handleCreateNewBranch);
   ipcMain.handle(GIT_CHANNELS.discover, handleDiscover);
   ipcMain.handle(GIT_CHANNELS.planWorkspace, handlePlanWorkspace);
 
   return () => {
     workspacePlanner.clearPreviews?.();
+    ipcMain.removeHandler(GIT_CHANNELS.createNewBranch);
     ipcMain.removeHandler(GIT_CHANNELS.discover);
     ipcMain.removeHandler(GIT_CHANNELS.planWorkspace);
   };

@@ -2,6 +2,10 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const { GIT_ERROR_CODES, GitDiscoveryError } = require('../src/git/git-command');
+const {
+  GIT_EXECUTION_ERROR_CODES,
+  GitWorkspaceExecutionError,
+} = require('../src/git/git-workspace-executor');
 const { registerGitIpc } = require('../src/git/git-ipc');
 const { GIT_CHANNELS } = require('../src/git/ipc-channels');
 
@@ -22,7 +26,9 @@ class FakeIpcMain {
 const createHarness = ({
   currentFolder = 'C:\\repo',
   discoveryError = null,
+  executionError = null,
   planError = null,
+  terminalStartError = null,
 } = {}) => {
   const ipcMain = new FakeIpcMain();
   const logs = [];
@@ -35,12 +41,27 @@ const createHarness = ({
     worktrees: [],
   };
   const planRequests = [];
+  const executionRequests = [];
+  const startedIds = [];
+  const assignedWorkspaces = [];
   const preview = {
     baseBranch: 'main',
     operationId: 'operation-one',
     repositoryRoot: 'C:\\repo',
     targetBranch: 'agent-one',
     worktreePath: 'C:\\repo-agent-one',
+  };
+  const workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\repo-agent-one',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\repo',
+      worktree: {
+        ownership: { creationId: 'worktree-one', kind: 'agenza' },
+        path: 'C:\\repo-agent-one',
+      },
+    },
   };
   const dispose = registerGitIpc({
     discover: async () => {
@@ -49,6 +70,23 @@ const createHarness = ({
       }
 
       return repository;
+    },
+    executor: {
+      createNewBranch: async (request) => {
+        executionRequests.push(request);
+
+        if (executionError) {
+          throw executionError;
+        }
+
+        const workspaceSnapshot = await request.commitAssignment(workspace);
+        return {
+          operationId: request.operationId,
+          state: 'succeeded',
+          workspace,
+          workspaceSnapshot,
+        };
+      },
     },
     ipcMain,
     logger: {
@@ -66,8 +104,21 @@ const createHarness = ({
         return preview;
       },
     },
+    startTerminal: async (id) => {
+      startedIds.push(id);
+
+      if (terminalStartError) {
+        throw terminalStartError;
+      }
+
+      return { id, isRunning: true, pid: 123 };
+    },
     window: { webContents },
     workspaceService: {
+      assignGitWorktree: async (id, assignedWorkspace) => {
+        assignedWorkspaces.push({ id, workspace: assignedWorkspace });
+        return { id, workspace: assignedWorkspace };
+      },
       getAssignedGitWorktrees: (id) => [
         {
           path: 'C:\\assigned',
@@ -80,14 +131,18 @@ const createHarness = ({
   });
 
   return {
+    assignedWorkspaces,
     discover: ipcMain.handlers.get(GIT_CHANNELS.discover),
     dispose,
+    executionRequests,
     ipcMain,
     logs,
     planRequests,
     preview,
     repository,
+    startedIds,
     trustedEvent: { sender: webContents, senderFrame: mainFrame },
+    workspace,
   };
 };
 
@@ -153,6 +208,67 @@ test('returns a terminal-scoped immutable workspace preview before confirmation'
   );
 
   harness.dispose();
+});
+
+test('confirms one preview, persists its workspace, and starts only the owning terminal', async () => {
+  const harness = createHarness();
+  const createNewBranch = harness.ipcMain.handlers.get(GIT_CHANNELS.createNewBranch);
+  const result = await createNewBranch(harness.trustedEvent, {
+    id: 'terminal-one',
+    operationId: 'operation-one',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.id, 'terminal-one');
+  assert.equal(result.operation.state, 'succeeded');
+  assert.deepEqual(result.session, { id: 'terminal-one', isRunning: true, pid: 123 });
+  assert.equal(result.terminalError, null);
+  assert.deepEqual(harness.assignedWorkspaces, [
+    { id: 'terminal-one', workspace: harness.workspace },
+  ]);
+  assert.deepEqual(harness.startedIds, ['terminal-one']);
+  assert.equal(harness.executionRequests[0].terminalId, 'terminal-one');
+  assert.deepEqual(harness.executionRequests[0].assignedWorktrees, [
+    { path: 'C:\\assigned', terminalId: 'terminal-two' },
+  ]);
+  await assert.rejects(
+    createNewBranch(
+      { sender: {}, senderFrame: {} },
+      { id: 'terminal-one', operationId: 'operation-one' },
+    ),
+    /Untrusted/,
+  );
+
+  harness.dispose();
+});
+
+test('reports rollback failures and keeps a completed workspace when only Codex startup fails', async () => {
+  const failedMutation = createHarness({
+    executionError: new GitWorkspaceExecutionError(GIT_EXECUTION_ERROR_CODES.createFailed, {
+      operationId: 'operation-one',
+      rollbackState: 'rolled-back',
+    }),
+  });
+  const failedStart = createHarness({ terminalStartError: new Error('Codex unavailable') });
+  const confirmMutation = failedMutation.ipcMain.handlers.get(GIT_CHANNELS.createNewBranch);
+  const confirmStart = failedStart.ipcMain.handlers.get(GIT_CHANNELS.createNewBranch);
+  const payload = { id: 'terminal-one', operationId: 'operation-one' };
+  const mutationResult = await confirmMutation(failedMutation.trustedEvent, payload);
+  const startResult = await confirmStart(failedStart.trustedEvent, payload);
+
+  assert.equal(mutationResult.ok, false);
+  assert.equal(mutationResult.error.code, GIT_EXECUTION_ERROR_CODES.createFailed);
+  assert.equal(mutationResult.error.rollbackState, 'rolled-back');
+  assert.deepEqual(failedMutation.startedIds, []);
+  assert.equal(startResult.ok, true);
+  assert.equal(startResult.session, null);
+  assert.equal(startResult.terminalError.code, 'TERMINAL_START_FAILED');
+  assert.deepEqual(failedStart.assignedWorkspaces, [
+    { id: 'terminal-one', workspace: failedStart.workspace },
+  ]);
+
+  failedMutation.dispose();
+  failedStart.dispose();
 });
 
 test('returns concise terminal-local errors for unavailable folders and Git failures', async () => {

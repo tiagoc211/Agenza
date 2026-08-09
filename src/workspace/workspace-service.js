@@ -189,6 +189,45 @@ class WorkspaceService {
     });
   }
 
+  assignGitWorktree(id, workspace) {
+    return this._enqueueMutation(async () => {
+      const definition = this._getDefinition(id);
+
+      if (!workspace || workspace.kind !== 'git-worktree') {
+        throw new Error('A Git worktree assignment is required.');
+      }
+
+      const validatedPath = await this._validateFolder(workspace.projectPath);
+      const committedWorkspace = {
+        ...copyValue(workspace),
+        projectPath: validatedPath,
+        repository: {
+          ...copyValue(workspace.repository),
+          worktree: {
+            ...copyValue(workspace.repository?.worktree),
+            path: validatedPath,
+          },
+        },
+      };
+      const nextDefinition = {
+        ...copyValue(definition),
+        updatedAt: this._now(),
+        workspace: committedWorkspace,
+      };
+      const nextState = {
+        ...copyValue(this._state),
+        revision: this._state.revision + 1,
+        terminals: this._state.terminals.map((terminal) =>
+          terminal.id === id ? nextDefinition : copyValue(terminal),
+        ),
+      };
+
+      await this._commit(nextState);
+      this._workspaceAvailability.set(id, { path: validatedPath, status: 'available' });
+      return this._createSessionSnapshot(nextDefinition);
+    });
+  }
+
   getCurrentFolder(id) {
     this._getDefinition(id);
     const availability = this._workspaceAvailability.get(id);

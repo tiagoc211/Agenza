@@ -10,6 +10,23 @@ const addTerminalButton = document.querySelector('[data-add-terminal]');
 const emptyAddTerminalButton = document.querySelector('[data-empty-add-terminal]');
 const emptyWorkspace = document.querySelector('[data-empty-workspace]');
 const terminalCount = document.querySelector('[data-terminal-count]:not(.terminal-grid)');
+const worktreeDialog = document.querySelector('[data-worktree-dialog]');
+const worktreeForm = document.querySelector('[data-worktree-form]');
+const worktreeIntro = document.querySelector('[data-worktree-intro]');
+const worktreeFields = document.querySelector('[data-worktree-fields]');
+const worktreeRepository = document.querySelector('[data-worktree-repository]');
+const worktreeBase = document.querySelector('[data-worktree-base]');
+const worktreeBranch = document.querySelector('[data-worktree-branch]');
+const worktreePath = document.querySelector('[data-worktree-path]');
+const worktreeError = document.querySelector('[data-worktree-error]');
+const worktreePreview = document.querySelector('[data-worktree-preview]');
+const previewRepository = document.querySelector('[data-preview-repository]');
+const previewBase = document.querySelector('[data-preview-base]');
+const previewTarget = document.querySelector('[data-preview-target]');
+const previewPath = document.querySelector('[data-preview-path]');
+const previewButton = document.querySelector('[data-preview-button]');
+const confirmWorktreeButton = document.querySelector('[data-confirm-worktree]');
+const cancelWorktreeButtons = document.querySelectorAll('[data-cancel-worktree]');
 
 const terminalTheme = {
   background: '#090c12',
@@ -40,6 +57,7 @@ let nextLabelNumber = 1;
 let resizeFrame;
 let activeTerminalId = null;
 let workspaceRecoveryIssue = null;
+let worktreeDialogState = null;
 
 const getOrderedViews = () => [...terminalViews.values()];
 
@@ -119,9 +137,232 @@ const setControlsBusy = (view, isBusy) => {
   view.isBusy = isBusy;
   view.clearButton.disabled = isBusy;
   view.projectButton.disabled = isBusy;
+  view.worktreeButton.disabled = isBusy || !view.projectFolder;
   view.pasteButton.disabled = isBusy || !view.isConnected;
   view.restartButton.disabled = isBusy || !view.projectFolder;
   view.removeButton.disabled = isBusy;
+};
+
+const branchToPathSegment = (branch) =>
+  branch
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'workspace';
+
+const deriveWorktreePath = (repositoryRoot, branch) => {
+  const separator = repositoryRoot.includes('\\') ? '\\' : '/';
+  const trimmedRoot = repositoryRoot.replace(/[\\/]+$/, '');
+  const lastSeparator = Math.max(trimmedRoot.lastIndexOf('\\'), trimmedRoot.lastIndexOf('/'));
+  const parent = lastSeparator >= 0 ? trimmedRoot.slice(0, lastSeparator) : trimmedRoot;
+  const repositoryName = lastSeparator >= 0 ? trimmedRoot.slice(lastSeparator + 1) : 'repository';
+  return `${parent}${separator}${repositoryName}-${branchToPathSegment(branch)}`;
+};
+
+const resetWorktreePreview = () => {
+  if (worktreeDialogState) {
+    worktreeDialogState.preview = null;
+  }
+
+  worktreePreview.hidden = true;
+  confirmWorktreeButton.disabled = true;
+};
+
+const setWorktreeDialogError = (error = null, fallback) => {
+  worktreeError.textContent = error ? formatUserFacingError(error, fallback) : '';
+  worktreeError.hidden = !error;
+};
+
+const closeWorktreeDialog = () => {
+  if (worktreeDialog.open) {
+    worktreeDialog.close();
+  }
+};
+
+const openNewWorktreeDialog = async (view) => {
+  if (view.isBusy || !view.projectFolder || worktreeDialog.open) {
+    return;
+  }
+
+  const token = Symbol('worktree-dialog');
+  worktreeDialogState = {
+    isCreating: false,
+    pathIsAutomatic: true,
+    preview: null,
+    repository: null,
+    token,
+    view,
+  };
+  setControlsBusy(view, true);
+  worktreeForm.reset();
+  worktreeFields.hidden = true;
+  worktreeIntro.hidden = false;
+  worktreeIntro.textContent = `Loading the repository for ${view.label}...`;
+  previewButton.disabled = true;
+  resetWorktreePreview();
+  setWorktreeDialogError();
+  worktreeDialog.showModal();
+
+  try {
+    const result = await window.agenza.git.discover(view.id);
+
+    if (worktreeDialogState?.token !== token) {
+      return;
+    }
+
+    if (!result.ok) {
+      throw result.error;
+    }
+
+    const repository = result.repository;
+    worktreeDialogState.repository = repository;
+    worktreeRepository.textContent = repository.root;
+    worktreeBase.replaceChildren(
+      ...repository.branches.map(({ name }) => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        return option;
+      }),
+    );
+    worktreeBase.value = repository.currentBranch ?? repository.branches[0]?.name ?? '';
+    worktreeBranch.value = `agenza/${branchToPathSegment(view.label).toLowerCase()}`;
+    worktreePath.value = deriveWorktreePath(repository.root, worktreeBranch.value);
+    worktreeIntro.textContent =
+      'Choose the local base branch, new branch name, and an empty sibling path.';
+    worktreeFields.hidden = false;
+    previewButton.disabled = false;
+    worktreeBranch.focus();
+    worktreeBranch.select();
+  } catch (error) {
+    if (worktreeDialogState?.token === token) {
+      worktreeIntro.textContent = "Agenza could not inspect this terminal's repository.";
+      setWorktreeDialogError(error, 'Unable to inspect this Git repository.');
+    }
+  }
+};
+
+const previewNewWorktree = async () => {
+  const state = worktreeDialogState;
+
+  if (!state?.repository || previewButton.disabled || !worktreeForm.reportValidity()) {
+    return;
+  }
+
+  resetWorktreePreview();
+  setWorktreeDialogError();
+  previewButton.disabled = true;
+  previewButton.textContent = 'Reviewing...';
+
+  try {
+    const result = await window.agenza.git.planWorkspace(state.view.id, {
+      baseBranch: worktreeBase.value,
+      targetBranch: worktreeBranch.value.trim(),
+      type: 'create-new-branch-worktree',
+      worktreePath: worktreePath.value.trim(),
+    });
+
+    if (worktreeDialogState !== state) {
+      return;
+    }
+
+    if (!result.ok) {
+      throw result.error;
+    }
+
+    state.preview = result.preview;
+    previewRepository.textContent = result.preview.repositoryRoot;
+    previewBase.textContent = `${result.preview.baseBranch} (${result.preview.baseRevision.slice(0, 12)})`;
+    previewTarget.textContent = result.preview.targetBranch;
+    previewPath.textContent = result.preview.worktreePath;
+    worktreePreview.hidden = false;
+    confirmWorktreeButton.disabled = false;
+    confirmWorktreeButton.focus();
+  } catch (error) {
+    if (worktreeDialogState === state) {
+      setWorktreeDialogError(error, 'Unable to preview this Git operation.');
+    }
+  } finally {
+    if (worktreeDialogState === state) {
+      previewButton.disabled = false;
+      previewButton.textContent = 'Review operation';
+    }
+  }
+};
+
+const confirmNewWorktree = async () => {
+  const state = worktreeDialogState;
+
+  if (!state?.preview || confirmWorktreeButton.disabled) {
+    return;
+  }
+
+  confirmWorktreeButton.disabled = true;
+  previewButton.disabled = true;
+  confirmWorktreeButton.textContent = 'Creating...';
+  state.isCreating = true;
+  for (const button of cancelWorktreeButtons) {
+    button.disabled = true;
+  }
+  state.view.isRestarting = true;
+  setWorktreeDialogError();
+
+  try {
+    const result = await window.agenza.git.createNewBranch(
+      state.view.id,
+      state.preview.operationId,
+    );
+
+    if (worktreeDialogState !== state) {
+      return;
+    }
+
+    if (!result.ok) {
+      resetWorktreePreview();
+      throw result.error;
+    }
+
+    const view = state.view;
+    view.workspace = result.operation.workspace;
+    view.projectFolder = result.operation.workspace.projectPath;
+    view.projectButton.textContent = 'Change folder';
+    view.restartButton.textContent = 'Restart';
+
+    if (result.session?.isRunning) {
+      view.isConnected = true;
+      view.terminal.options.disableStdin = false;
+      setSessionState(view, 'connected', 'Connected', view.projectFolder);
+      view.fitAddon.fit();
+      window.agenza.terminal.resize(view.id, view.terminal.cols, view.terminal.rows);
+      setActivePane(view.pane);
+      view.terminal.focus();
+    } else if (result.terminalError) {
+      view.isConnected = false;
+      view.terminal.options.disableStdin = true;
+      showSessionFailure(view, {
+        description: 'Worktree created - Codex start needs attention',
+        error: result.terminalError,
+        heading: 'The Git workspace was created, but Codex did not start.',
+        recovery: 'The branch and worktree are saved. Use Restart to try Codex again.',
+      });
+    }
+
+    closeWorktreeDialog();
+  } catch (error) {
+    if (worktreeDialogState === state) {
+      setWorktreeDialogError(error, 'Unable to create this Git workspace.');
+    }
+  } finally {
+    state.view.isRestarting = false;
+
+    if (worktreeDialogState === state) {
+      state.isCreating = false;
+      confirmWorktreeButton.textContent = 'Create branch and worktree';
+      previewButton.disabled = false;
+      for (const button of cancelWorktreeButtons) {
+        button.disabled = false;
+      }
+    }
+  }
 };
 
 const copyTerminalSelection = async (view) => {
@@ -217,6 +458,11 @@ const chooseProjectFolder = async (view) => {
 
     const isRestart = view.isConnected;
     view.projectFolder = result.path;
+    view.workspace = {
+      kind: 'folder',
+      projectPath: result.path,
+      repository: null,
+    };
     await launchSession(view, {
       restart: isRestart,
       failureMessage: 'Unable to use project folder',
@@ -341,6 +587,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   const title = pane.querySelector('[data-terminal-title]');
   const titleId = `terminal-title-${snapshot.id}`;
   const projectButton = pane.querySelector('[data-project-button]');
+  const worktreeButton = pane.querySelector('[data-worktree-button]');
   const copyButton = pane.querySelector('[data-copy-button]');
   const pasteButton = pane.querySelector('[data-paste-button]');
   const clearButton = pane.querySelector('[data-clear-button]');
@@ -359,6 +606,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   pasteButton.setAttribute('aria-label', `Paste text into ${label}`);
   clearButton.setAttribute('aria-label', `Clear ${label}`);
   restartButton.setAttribute('aria-label', `Restart ${label}`);
+  worktreeButton.setAttribute('aria-label', `Create a branch and worktree for ${label}`);
   removeButton.setAttribute('aria-label', `Remove ${label}`);
   terminalGrid.append(pane);
 
@@ -423,6 +671,8 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
     restartButton,
     stateElement: pane.querySelector('[data-terminal-state]'),
     terminal,
+    workspace: restoredWorkspace,
+    worktreeButton,
   };
 
   terminalViews.set(view.id, view);
@@ -431,6 +681,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
     projectButton.textContent = 'Change folder';
     restartButton.textContent = 'Start';
     restartButton.disabled = false;
+    worktreeButton.disabled = false;
     setSessionState(view, 'waiting', 'Ready', restoredWorkspace.projectPath);
   } else if (restoredStatus.status === 'missing') {
     setSessionState(view, 'error', 'Unavailable', restoredWorkspace.projectPath);
@@ -459,6 +710,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   });
 
   projectButton.addEventListener('click', () => chooseProjectFolder(view));
+  worktreeButton.addEventListener('click', () => openNewWorktreeDialog(view));
   copyButton.addEventListener('click', () => {
     runClipboardAction(() => copyTerminalSelection(view));
   });
@@ -563,6 +815,57 @@ const handleTerminalFocusShortcut = (event) => {
 document.addEventListener('keydown', handleTerminalFocusShortcut);
 addTerminalButton.addEventListener('click', () => addTerminal());
 emptyAddTerminalButton.addEventListener('click', () => addTerminal());
+worktreeBase.addEventListener('change', resetWorktreePreview);
+worktreeBranch.addEventListener('input', () => {
+  if (worktreeDialogState?.pathIsAutomatic && worktreeDialogState.repository) {
+    worktreePath.value = deriveWorktreePath(
+      worktreeDialogState.repository.root,
+      worktreeBranch.value,
+    );
+  }
+
+  resetWorktreePreview();
+});
+worktreePath.addEventListener('input', () => {
+  if (worktreeDialogState) {
+    worktreeDialogState.pathIsAutomatic = false;
+  }
+
+  resetWorktreePreview();
+});
+previewButton.addEventListener('click', () => previewNewWorktree());
+confirmWorktreeButton.addEventListener('click', () => confirmNewWorktree());
+for (const button of cancelWorktreeButtons) {
+  button.addEventListener('click', closeWorktreeDialog);
+}
+worktreeForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  previewNewWorktree();
+});
+worktreeDialog.addEventListener('cancel', (event) => {
+  if (worktreeDialogState?.isCreating) {
+    event.preventDefault();
+  }
+});
+worktreeDialog.addEventListener('close', () => {
+  const view = worktreeDialogState?.view;
+  worktreeDialogState = null;
+  worktreeForm.reset();
+  worktreeFields.hidden = true;
+  worktreePreview.hidden = true;
+  setWorktreeDialogError();
+  confirmWorktreeButton.disabled = true;
+  confirmWorktreeButton.textContent = 'Create branch and worktree';
+  previewButton.disabled = true;
+  previewButton.textContent = 'Review operation';
+  for (const button of cancelWorktreeButtons) {
+    button.disabled = false;
+  }
+
+  if (view && terminalViews.has(view.id)) {
+    setControlsBusy(view, false);
+  }
+});
 
 const initializeWorkspace = async () => {
   try {

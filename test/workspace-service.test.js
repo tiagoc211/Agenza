@@ -223,3 +223,37 @@ test('lists persisted Git worktree assignments without exposing the selected ter
 
   terminalManager.dispose();
 });
+
+test('persists an Agenza-owned Git worktree only for the selected terminal', async () => {
+  const { savedStates, service, terminalManager } = createHarness();
+  const workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: {
+          creationId: 'worktree-33333333-3333-4333-8333-333333333333',
+          kind: 'agenza',
+        },
+        path: 'C:\\Projects\\AgentOne',
+      },
+    },
+  };
+
+  await service.initialize();
+  const secondBefore = service.getCatalog().sessions.find(({ id }) => id === SECOND_ID);
+  const assigned = await service.assignGitWorktree(FIRST_ID, workspace);
+  const secondAfter = service.getCatalog().sessions.find(({ id }) => id === SECOND_ID);
+
+  assert.deepEqual(assigned.workspace, workspace);
+  assert.deepEqual(assigned.workspaceStatus, {
+    path: 'C:\\Projects\\AgentOne',
+    status: 'available',
+  });
+  assert.deepEqual(savedStates.at(-1).terminals[0].workspace, workspace);
+  assert.deepEqual(secondAfter, secondBefore);
+
+  terminalManager.dispose();
+});
