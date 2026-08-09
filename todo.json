@@ -152,7 +152,7 @@
       "id": "T013",
       "order": 13,
       "title": "Add automated tests",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T010", "T012"],
       "acceptance_criteria": [
         "Tests cover process startup, input and output routing, resize events, restart behavior, and cleanup.",

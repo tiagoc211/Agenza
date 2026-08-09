@@ -36,11 +36,18 @@ Available validation and build commands are:
 
 ```powershell
 conda run -n agenza npm test
+conda run -n agenza npm run test:smoke
+conda run -n agenza npm run test:all
 conda run -n agenza npm run lint
 conda run -n agenza npm run format:check
 conda run -n agenza npm run build
 conda run -n agenza npm run make
 ```
+
+`npm test` runs the fast unit and integration suite. `npm run test:smoke` runs the already-built
+Windows package and verifies two concurrent, isolated PTYs, restart, keyboard focus, output clearing,
+window cleanup, and orphan detection. `npm run test:all` runs the unit suite, creates a fresh package,
+and then runs that smoke test in sequence.
 
 JavaScript dependencies are recorded in `package.json` and `package-lock.json`. `requirements.txt` is reserved for any future Python tooling.
 

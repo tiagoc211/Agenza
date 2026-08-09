@@ -16,6 +16,8 @@
     "build": "electron-forge package",
     "make": "electron-forge make",
     "test": "node test/run-tests.js",
+    "test:all": "node test/run-all-tests.js",
+    "test:smoke": "node test/run-smoke-test.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
