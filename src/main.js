@@ -1,6 +1,7 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain } = require('electron');
 const startedByInstaller = require('electron-squirrel-startup');
 
+const { registerClipboardIpc } = require('./clipboard/clipboard-ipc');
 const { createResourceDisposer } = require('./lifecycle/resource-disposer');
 const { createAppLogger, createNoopLogger } = require('./logging/app-logger');
 const { registerProjectFolderIpc } = require('./project/project-folder');
@@ -11,6 +12,7 @@ const { isProcessRunning, killProcessTree } = require('./terminal/process-tree')
 const { createWindowOptions } = require('./window-options');
 
 const isStartupCheck = process.argv.includes('--startup-check');
+const isMissingCodexCheck = process.argv.includes('--missing-codex-check');
 const STARTUP_CHECK_CHILD_TIMEOUT_MS = 10000;
 let appLogger = createNoopLogger();
 const startupCheckLog = (...values) => {
@@ -64,6 +66,7 @@ const createMainWindow = () => {
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   appLogger.info('window.created');
   const terminalManager = new TerminalManager();
+  const disposeClipboardIpc = registerClipboardIpc({ clipboard, ipcMain, window });
   const projectFolderIpc = registerProjectFolderIpc({
     dialog,
     folderIds: DEFAULT_SESSION_IDS,
@@ -88,12 +91,19 @@ const createMainWindow = () => {
             throw new Error(`Select a project folder for "${id}" before starting Codex.`);
           }
 
+          if (isMissingCodexCheck) {
+            throw new Error(
+              'Codex CLI was not found on PATH. Install Codex CLI, make "codex" available in a normal terminal, and restart Agenza.',
+            );
+          }
+
           return prepareCodexSessionOptions({ cwd: projectFolder });
         },
   });
   const disposeWindowResources = createResourceDisposer([
     { dispose: disposeTerminalIpc, label: 'terminal IPC' },
     { dispose: projectFolderIpc.dispose, label: 'project folder IPC' },
+    { dispose: disposeClipboardIpc, label: 'clipboard IPC' },
     { dispose: () => terminalManager.dispose(), label: 'terminal process trees' },
   ]);
 

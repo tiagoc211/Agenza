@@ -49,10 +49,20 @@ for (const definition of paneDefinitions) {
   const mount = document.querySelector(`#${definition.id}`);
   const pane = mount?.closest('.terminal-pane');
   const projectButton = pane?.querySelector('[data-project-button]');
+  const copyButton = pane?.querySelector('[data-copy-button]');
+  const pasteButton = pane?.querySelector('[data-paste-button]');
   const clearButton = pane?.querySelector('[data-clear-button]');
   const restartButton = pane?.querySelector('[data-restart-button]');
 
-  if (!mount || !pane || !projectButton || !clearButton || !restartButton) {
+  if (
+    !mount ||
+    !pane ||
+    !projectButton ||
+    !copyButton ||
+    !pasteButton ||
+    !clearButton ||
+    !restartButton
+  ) {
     continue;
   }
 
@@ -79,7 +89,7 @@ for (const definition of paneDefinitions) {
   pane.addEventListener('pointerdown', (event) => {
     setActivePane(pane);
 
-    if (!event.target.closest?.('button')) {
+    if (!event.target.closest?.('button') && !event.target.closest?.('.xterm')) {
       terminal.focus();
     }
   });
@@ -87,11 +97,13 @@ for (const definition of paneDefinitions) {
 
   const view = {
     clearButton,
+    copyButton,
     id: definition.id,
     fitAddon,
     isBusy: false,
     isRestarting: false,
     pane,
+    pasteButton,
     projectButton,
     projectFolder: null,
     restartButton,
@@ -108,6 +120,9 @@ for (const definition of paneDefinitions) {
     if (view.isConnected) {
       window.agenza.terminal.resize(view.id, cols, rows);
     }
+  });
+  terminal.onSelectionChange(() => {
+    view.copyButton.disabled = !terminal.hasSelection();
   });
 
   terminalViews.set(definition.id, view);
@@ -149,7 +164,39 @@ const showSessionFailure = (view, { description, error, heading, recovery }) => 
 const setControlsBusy = (view, isBusy) => {
   view.isBusy = isBusy;
   view.projectButton.disabled = isBusy;
+  view.pasteButton.disabled = isBusy || !view.isConnected;
   view.restartButton.disabled = isBusy || !view.projectFolder;
+};
+
+const copyTerminalSelection = async (view) => {
+  const selectedText = view.terminal.getSelection();
+
+  if (!selectedText) {
+    return;
+  }
+
+  await window.agenza.clipboard.writeText(selectedText);
+};
+
+const pasteIntoTerminal = async (view) => {
+  if (!view.isConnected) {
+    return;
+  }
+
+  const text = await window.agenza.clipboard.readText();
+
+  if (text) {
+    view.terminal.paste(text);
+  }
+
+  setActivePane(view.pane);
+  view.terminal.focus();
+};
+
+const runClipboardAction = (action) => {
+  action().catch(() => {
+    // Clipboard errors stay local to the requested action and never affect either PTY.
+  });
 };
 
 const disposeDataSubscription = window.agenza.terminal.onData(({ id, data }) => {
@@ -233,7 +280,7 @@ const launchSession = async (view, { restart, failureMessage }) => {
       description: 'Codex could not start - check setup and retry',
       error,
       heading: `${failureMessage}.`,
-      recovery: 'Check the agenza Conda environment and Codex installation, then use Restart.',
+      recovery: 'Check that Codex works in a normal terminal, then restart Agenza and retry.',
     });
   } finally {
     view.isRestarting = false;
@@ -279,6 +326,12 @@ const chooseProjectFolder = async (view) => {
 
 for (const view of terminalViews.values()) {
   view.projectButton.addEventListener('click', () => chooseProjectFolder(view));
+  view.copyButton.addEventListener('click', () => {
+    runClipboardAction(() => copyTerminalSelection(view));
+  });
+  view.pasteButton.addEventListener('click', () => {
+    runClipboardAction(() => pasteIntoTerminal(view));
+  });
   view.clearButton.addEventListener('click', () => {
     if (view.isConnected) {
       window.agenza.terminal.write(view.id, '\x0c');
@@ -298,6 +351,36 @@ for (const view of terminalViews.values()) {
       restart: true,
       failureMessage: 'Unable to restart Codex',
     });
+  });
+
+  view.terminal.attachCustomKeyEventHandler((event) => {
+    if (event.type !== 'keydown') {
+      return true;
+    }
+
+    const key = event.key.toLowerCase();
+    const commandKey = event.ctrlKey || event.metaKey;
+    const copyShortcut =
+      (commandKey && key === 'c' && (event.shiftKey || view.terminal.hasSelection())) ||
+      (event.ctrlKey && key === 'insert');
+    const pasteShortcut =
+      (commandKey && key === 'v') || (event.shiftKey && !commandKey && key === 'insert');
+
+    if (copyShortcut) {
+      event.preventDefault();
+      event.stopPropagation();
+      runClipboardAction(() => copyTerminalSelection(view));
+      return false;
+    }
+
+    if (pasteShortcut) {
+      event.preventDefault();
+      event.stopPropagation();
+      runClipboardAction(() => pasteIntoTerminal(view));
+      return false;
+    }
+
+    return true;
   });
 }
 

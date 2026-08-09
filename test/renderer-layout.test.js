@@ -62,10 +62,25 @@ test('supports accessible terminal focus switching without taking terminal short
   assert.match(styles, /\.pane-action-button:focus-visible/);
 });
 
+test('supports mouse selection and terminal-safe clipboard shortcuts', () => {
+  assert.equal((html.match(/data-copy-button/g) ?? []).length, 2);
+  assert.equal((html.match(/data-paste-button/g) ?? []).length, 2);
+  assert.match(renderer, /terminal\.onSelectionChange/);
+  assert.match(renderer, /view\.terminal\.getSelection\(\)/);
+  assert.match(renderer, /window\.agenza\.clipboard\.writeText\(selectedText\)/);
+  assert.match(renderer, /window\.agenza\.clipboard\.readText\(\)/);
+  assert.match(renderer, /view\.terminal\.paste\(text\)/);
+  assert.match(renderer, /attachCustomKeyEventHandler/);
+  assert.match(renderer, /event\.shiftKey \|\| view\.terminal\.hasSelection\(\)/);
+  assert.equal((renderer.match(/event\.preventDefault\(\)/g) ?? []).length, 3);
+  assert.equal((renderer.match(/event\.stopPropagation\(\)/g) ?? []).length, 2);
+  assert.match(renderer, /return true;/);
+});
+
 test('shows concise, terminal-local recovery instructions for failures', () => {
   assert.match(renderer, /const formatUserFacingError/);
   assert.match(renderer, /\.slice\(0, 500\)/);
-  assert.match(renderer, /Check the agenza Conda environment and Codex installation/);
+  assert.match(renderer, /Check that Codex works in a normal terminal/);
   assert.match(renderer, /Choose a readable and writable project folder/);
   assert.match(renderer, /showSessionFailure\(view/);
 });

@@ -2,6 +2,12 @@
 
 Open a terminal in the Agenza project folder.
 
+Confirm that Codex is available:
+
+```powershell
+codex --version
+```
+
 Install the packages the first time:
 
 ```powershell

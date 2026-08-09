@@ -4,6 +4,7 @@ const test = require('node:test');
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const allTestsRunner = readFileSync('test/run-all-tests.js', 'utf8');
+const main = readFileSync('src/main.js', 'utf8');
 const smokeRunner = readFileSync('test/run-smoke-test.js', 'utf8');
 
 test('provides separate unit, smoke, and complete automated test commands', () => {
@@ -20,4 +21,9 @@ test('runs the packaged two-terminal startup check with a bounded timeout', () =
   assert.match(smokeRunner, /--startup-check/);
   assert.match(smokeRunner, /SMOKE_TIMEOUT_MS = 60000/);
   assert.match(smokeRunner, /killProcessTree\(child\.pid\)/);
+});
+
+test('provides a repeatable manual check for missing Codex', () => {
+  assert.match(main, /--missing-codex-check/);
+  assert.match(main, /Codex CLI was not found on PATH/);
 });

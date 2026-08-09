@@ -83,9 +83,9 @@
       "status": "done",
       "depends_on": ["T006"],
       "acceptance_criteria": [
-        "Each pane starts the Codex CLI through the agenza Conda environment.",
+        "Each pane starts the Codex CLI from the user's normal system environment.",
         "Both Codex sessions can run at the same time and accept input independently.",
-        "A missing Conda environment or Codex installation produces a useful error message."
+        "A missing Codex installation or PATH entry produces a useful error message."
       ]
     },
     {
@@ -164,7 +164,7 @@
       "id": "T014",
       "order": 14,
       "title": "Perform manual release testing",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T008", "T009", "T011", "T012", "T013"],
       "acceptance_criteria": [
         "Both Codex sessions complete a real interactive workflow independently.",
@@ -181,7 +181,7 @@
       "depends_on": ["T014"],
       "acceptance_criteria": [
         "A clean machine can install or run the packaged application.",
-        "The app detects and explains missing Conda or Codex prerequisites.",
+        "The app detects and explains a missing Codex prerequisite.",
         "The packaged build opens two working Codex terminals."
       ]
     },
@@ -193,7 +193,7 @@
       "depends_on": ["T015"],
       "acceptance_criteria": [
         "The README includes setup, development, build, install, and usage instructions.",
-        "Required versions of Conda, the agenza environment, and Codex are documented.",
+        "Development requirements and the user-facing Codex prerequisite are documented separately.",
         "Known limitations and troubleshooting steps are documented."
       ]
     },

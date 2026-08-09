@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const { CLIPBOARD_CHANNELS } = require('./clipboard/ipc-channels');
 const { PROJECT_CHANNELS } = require('./project/ipc-channels');
 const { TERMINAL_CHANNELS } = require('./terminal/ipc-channels');
 
@@ -26,9 +27,15 @@ const projectApi = Object.freeze({
   selectFolder: (id) => ipcRenderer.invoke(PROJECT_CHANNELS.selectFolder, { id }),
 });
 
+const clipboardApi = Object.freeze({
+  readText: () => ipcRenderer.invoke(CLIPBOARD_CHANNELS.readText),
+  writeText: (text) => ipcRenderer.invoke(CLIPBOARD_CHANNELS.writeText, { text }),
+});
+
 contextBridge.exposeInMainWorld(
   'agenza',
   Object.freeze({
+    clipboard: clipboardApi,
     platform: process.platform,
     project: projectApi,
     terminal: terminalApi,

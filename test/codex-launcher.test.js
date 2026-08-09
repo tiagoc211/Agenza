@@ -1,61 +1,35 @@
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const test = require('node:test');
 
 const {
   createCodexSessionOptions,
-  loadCondaEnvironment,
-  resolveCondaExecutable,
+  prepareCodexSessionOptions,
   verifyCodexPrerequisites,
 } = require('../src/terminal/codex-launcher');
 
-test('resolves Conda and creates an interactive Codex launch command', () => {
-  const expectedConda = path.join('C:\\Users\\Test', 'anaconda3', 'Scripts', 'conda.exe');
-  const condaExecutable = resolveCondaExecutable({
-    environment: {},
-    exists: (candidate) => candidate === expectedConda,
-    homeDirectory: 'C:\\Users\\Test',
-    platform: 'win32',
-  });
+test('creates an interactive Windows Codex command from the system environment', () => {
+  const environment = { ComSpec: 'C:\\Windows\\System32\\cmd.exe', PATH: 'system-path' };
   const options = createCodexSessionOptions({
     cwd: 'C:\\project',
-    environment: { ComSpec: 'C:\\Windows\\System32\\cmd.exe', PATH: 'test-path' },
+    environment,
     platform: 'win32',
   });
 
-  assert.equal(condaExecutable, expectedConda);
   assert.deepEqual(options, {
     shell: 'C:\\Windows\\System32\\cmd.exe',
     args: ['/d', '/s', '/c', 'codex'],
     cwd: 'C:\\project',
-    env: { ComSpec: 'C:\\Windows\\System32\\cmd.exe', PATH: 'test-path' },
+    env: environment,
     useConpty: true,
   });
 });
 
-test('loads the agenza environment with one short-lived Conda command', async () => {
-  let invocation;
-  const environment = await loadCondaEnvironment({
-    condaExecutable: 'conda.exe',
-    cwd: 'C:\\project',
-    environment: { PATH: 'test-path' },
-    execFileImplementation: (file, args, options, callback) => {
-      invocation = { file, args, options };
-      callback(null, 'PATH=activated-path\r\nCONDA_DEFAULT_ENV=agenza\r\n', '');
-    },
-  });
-
-  assert.deepEqual(invocation.args, ['run', '-n', 'agenza', 'cmd.exe', '/d', '/c', 'set']);
-  assert.equal(invocation.file, 'conda.exe');
-  assert.equal(invocation.options.windowsHide, true);
-  assert.deepEqual(environment, { CONDA_DEFAULT_ENV: 'agenza', PATH: 'activated-path' });
-});
-
-test('verifies Codex using the activated environment before terminal startup', async () => {
+test('verifies Codex directly from PATH before terminal startup', async () => {
   let invocation;
   const result = await verifyCodexPrerequisites({
     cwd: 'C:\\project',
-    environment: { ComSpec: 'cmd.exe', PATH: 'activated-path' },
+    environment: { ComSpec: 'cmd.exe', PATH: 'system-path' },
+    platform: 'win32',
     execFileImplementation: (file, args, options, callback) => {
       invocation = { file, args, options };
       callback(null, 'codex-cli 1.2.3\n', '');
@@ -64,27 +38,54 @@ test('verifies Codex using the activated environment before terminal startup', a
 
   assert.deepEqual(invocation.args, ['/d', '/s', '/c', 'codex --version']);
   assert.equal(invocation.file, 'cmd.exe');
-  assert.equal(invocation.options.env.PATH, 'activated-path');
+  assert.equal(invocation.options.env.PATH, 'system-path');
+  assert.equal(invocation.options.windowsHide, true);
   assert.equal(result.version, 'codex-cli 1.2.3');
 });
 
-test('returns useful errors for missing Conda, environment, and Codex', async () => {
-  const loadFailure = (error, stderr = '') =>
-    loadCondaEnvironment({
-      execFileImplementation: (_file, _args, _options, callback) => callback(error, '', stderr),
-    });
-  const verifyFailure = (error, stderr = '') =>
-    verifyCodexPrerequisites({
-      execFileImplementation: (_file, _args, _options, callback) => callback(error, '', stderr),
-    });
+test('uses the normal shell lookup on non-Windows platforms', async () => {
+  let invocation;
+  await verifyCodexPrerequisites({
+    environment: { PATH: '/usr/bin', SHELL: '/bin/zsh' },
+    platform: 'linux',
+    execFileImplementation: (file, args, options, callback) => {
+      invocation = { file, args, options };
+      callback(null, 'codex-cli 1.2.3\n', '');
+    },
+  });
 
-  await assert.rejects(loadFailure(Object.assign(new Error('spawn failed'), { code: 'ENOENT' })), {
-    message: /Conda was not found/,
+  assert.equal(invocation.file, '/bin/zsh');
+  assert.deepEqual(invocation.args, ['-lc', 'codex --version']);
+});
+
+test('prepares a session without loading a separate environment', async () => {
+  const environment = { ComSpec: 'cmd.exe', PATH: 'system-path' };
+  const invocations = [];
+  const options = await prepareCodexSessionOptions({
+    cwd: 'C:\\project',
+    environment,
+    platform: 'win32',
+    execFileImplementation: (file, args, execOptions, callback) => {
+      invocations.push({ file, args, execOptions });
+      callback(null, 'codex-cli 1.2.3\n', '');
+    },
   });
-  await assert.rejects(loadFailure(new Error('failed'), 'EnvironmentLocationNotFound: agenza'), {
-    message: /environment "agenza" was not found/,
-  });
-  await assert.rejects(verifyFailure(new Error('failed'), "'codex' is not recognized"), {
-    message: /Codex CLI could not be started/,
-  });
+
+  assert.equal(invocations.length, 1);
+  assert.equal(invocations[0].file, 'cmd.exe');
+  assert.equal(options.cwd, 'C:\\project');
+  assert.equal(options.env, environment);
+  assert.deepEqual(options.args, ['/d', '/s', '/c', 'codex']);
+});
+
+test('returns a useful error when Codex is unavailable on PATH', async () => {
+  await assert.rejects(
+    verifyCodexPrerequisites({
+      execFileImplementation: (_file, _args, _options, callback) =>
+        callback(new Error('command failed'), '', "'codex' is not recognized"),
+    }),
+    {
+      message: /Codex CLI was not found on PATH.*normal terminal.*restart Agenza/,
+    },
+  );
 });

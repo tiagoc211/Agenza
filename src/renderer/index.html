@@ -59,6 +59,24 @@
               <button
                 class="pane-action-button"
                 type="button"
+                aria-label="Copy selected text from Codex terminal one"
+                data-copy-button
+                disabled
+              >
+                Copy
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Paste text into Codex terminal one"
+                data-paste-button
+                disabled
+              >
+                Paste
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
                 aria-label="Clear Codex terminal one"
                 data-clear-button
               >
@@ -114,6 +132,24 @@
               <button
                 class="pane-action-button"
                 type="button"
+                aria-label="Copy selected text from Codex terminal two"
+                data-copy-button
+                disabled
+              >
+                Copy
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Paste text into Codex terminal two"
+                data-paste-button
+                disabled
+              >
+                Paste
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
                 aria-label="Clear Codex terminal two"
                 data-clear-button
               >
@@ -147,7 +183,9 @@
 
       <footer class="status-bar">
         <span>Local workspace</span>
-        <span class="keyboard-hint"><kbd>F6</kbd> switch terminal</span>
+        <span class="keyboard-hint">
+          <kbd>Ctrl+C</kbd> copy selection · <kbd>Ctrl+V</kbd> paste · <kbd>F6</kbd> switch
+        </span>
         <span id="environment"></span>
       </footer>
     </div>

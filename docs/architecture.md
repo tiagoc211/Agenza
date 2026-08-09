@@ -30,7 +30,7 @@ Renderer: xterm pane 1  <-- secure IPC -->  Main: PTY session 1  --> Codex
 Renderer: xterm pane 2  <-- secure IPC -->  Main: PTY session 2  --> Codex
 ```
 
-The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Agenza asks Conda for the activated `agenza` environment once, verifies `codex --version`, then starts both Codex PTYs directly with that environment. This avoids overlapping long-running `conda run` wrappers on Windows while keeping both sessions inside the requested environment. Missing Conda, the environment, or Codex produces a concise startup error in both panes.
+The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Before starting a pane, Agenza verifies that `codex --version` works in the user's normal system environment and then starts its Codex PTY from that same environment. The application does not activate or require Conda at runtime. A missing Codex installation or `PATH` entry produces a concise startup error in the affected pane.
 
 The preload bridge exposes only terminal start, input, resize, output, and exit operations. The main process validates the sending frame, terminal ID, input type, and dimensions before routing any request. Renderer subscriptions are registered before the main process starts either PTY so initial shell output is not lost.
 
@@ -90,14 +90,23 @@ Electron lets the project use familiar web technologies while providing the nati
 
 Plain JavaScript keeps the first release approachable and avoids introducing a UI framework before the interface requires one. The main tradeoffs are Electron's larger application size and memory use, plus the native build and packaging requirements of `node-pty`. These are acceptable for the Windows-only personal release.
 
-## Local prerequisites
+## User prerequisites
+
+Running Agenza requires:
+
+- Windows 10 version 1809 or newer, or Windows 11, for ConPTY support.
+- An installed and authenticated Codex CLI whose `codex` command is available on the normal system `PATH`.
+
+Conda is not an Agenza runtime requirement.
+
+## Development prerequisites
 
 Development requires:
 
 - Windows 10 version 1809 or newer, or Windows 11, for ConPTY support.
 - The Conda environment named `agenza`.
 - Node.js and npm available inside that environment.
-- The Codex CLI installed and authenticated.
+- The Codex CLI installed and authenticated on the system for interactive app testing.
 - Git.
 - Visual Studio Build Tools with the C++ workload if `node-pty` cannot use a compatible prebuilt binary.
 
@@ -107,7 +116,7 @@ The environment currently provides:
 - npm `11.16.0`.
 - Codex CLI `0.147.0`.
 
-All project commands must follow the repository's `AGENTS.md` instructions and run through the `agenza` Conda environment.
+All agent project commands must follow the repository's `AGENTS.md` instructions and run through the `agenza` Conda environment. This development rule does not affect the environment used by the packaged application.
 
 ## Deferred decisions
 

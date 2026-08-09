@@ -14,6 +14,11 @@ The first release will use Electron with plain JavaScript, HTML, and CSS. See th
 - Run the Codex CLI in both terminals.
 - Use both terminals independently.
 
+## Running Agenza
+
+Users need Windows and an installed, authenticated Codex CLI whose `codex` command works in a
+normal terminal. Agenza uses that system command directly and does not require Conda.
+
 ## Development
 
 Run every project command inside the `agenza` Conda environment. If Conda is not initialized in PowerShell, use its full executable path as described in `AGENTS.md`.
@@ -25,12 +30,13 @@ conda run -n agenza npm run dev
 
 Each terminal pane has its own folder button. Choose a readable and writable project folder to start
 that pane's Codex session; the two panes may use different folders. Choosing another folder later
-restarts only that pane in the new directory. Agenza checks that Conda can run Codex from the
-`agenza` environment before each session starts. Each pane also has its own **Clear** and **Restart**
-controls. Clear removes visible terminal output without stopping Codex, while Restart replaces only
-that pane's session. If Codex exits unexpectedly, the affected pane shows the exit and keeps its
-Restart action available. Press **F6** to focus the other terminal or **Shift+F6** to move in the
-opposite direction. Agenza leaves standard terminal shortcuts, including copy and paste, untouched.
+restarts only that pane in the new directory. Agenza runs the `codex` command from the user's normal
+system environment; Conda is not required to run the app. Each pane also has its own **Copy**,
+**Paste**, **Clear**, and **Restart** controls. Clear removes visible terminal output without stopping
+Codex, while Restart replaces only that pane's session. If Codex exits unexpectedly, the affected
+pane shows the exit and keeps its Restart action available. Press **F6** to focus the other terminal
+or **Shift+F6** to move in the opposite direction. With text selected, **Ctrl+C** copies it; without a
+selection, **Ctrl+C** continues to interrupt Codex. **Ctrl+V** pastes once into the active terminal.
 
 Available validation and build commands are:
 

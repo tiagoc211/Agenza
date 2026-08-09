@@ -2,6 +2,8 @@
 
 All agents working in this repository must run project commands inside the Conda environment named `agenza`.
 
+This is a development workflow rule for repository agents only. Conda must never be introduced as a runtime requirement for Agenza or its users; the application launches Codex from the user's normal system environment.
+
 Use this command format:
 
 ```powershell
