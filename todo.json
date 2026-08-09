@@ -25,7 +25,7 @@
       "id": "T002",
       "order": 2,
       "title": "Choose the desktop application stack",
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T001"
       ],
