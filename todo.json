@@ -74,7 +74,7 @@
       "id": "T206",
       "order": 6,
       "title": "Add read-only Git repository and worktree discovery",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T201", "T202"],
       "acceptance_criteria": [
         "Agenza can identify a selected folder's repository root, current branch, and worktree state using bounded Git commands.",

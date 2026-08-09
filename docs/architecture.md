@@ -81,6 +81,17 @@ or inaccessible restored paths are shown locally as unavailable and can be repla
 preventing other definitions from loading. Cancellation and validation errors leave the other
 terminals untouched.
 
+Read-only Git discovery also runs only in the main process. The preload bridge accepts a stable
+terminal ID, never an arbitrary path or command, and discovers the repository from that terminal's
+validated current folder. Git is launched directly without a shell, with a five-second timeout, a
+one-megabyte output limit, hidden Windows process windows, and fixed internal arguments. Discovery
+uses `rev-parse`, `worktree list --porcelain -z`, and `for-each-ref` to return the canonical main
+repository root, selected worktree path, current branch or detached state, local branches, and all
+registered worktrees including locked or prunable metadata. These commands do not mutate repository
+state. Missing Git, non-repository folders, timeouts, excessive output, and unexpected formats are
+converted to concise structured errors carrying the requesting terminal ID, so one failure cannot
+affect another terminal or PTY.
+
 Session controls are scoped by stable terminal IDs. For a running session, Clear sends the
 standard Ctrl+L terminal control to the selected PTY so Codex clears the screen and redraws its input
 at the correct cursor position. A stopped or not-yet-started pane is reset locally. Restarting asks

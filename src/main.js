@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { registerClipboardIpc } = require('./clipboard/clipboard-ipc');
+const { registerGitIpc } = require('./git/git-ipc');
 const { createResourceDisposer } = require('./lifecycle/resource-disposer');
 const { createAppLogger, createNoopLogger } = require('./logging/app-logger');
 const { registerProjectFolderIpc } = require('./project/project-folder');
@@ -79,6 +80,12 @@ const createMainWindow = async () => {
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   appLogger.info('window.created');
   const disposeClipboardIpc = registerClipboardIpc({ clipboard, ipcMain, window });
+  const disposeGitIpc = registerGitIpc({
+    ipcMain,
+    logger: appLogger,
+    window,
+    workspaceService,
+  });
   const projectFolderIpc = registerProjectFolderIpc({
     defaultFolder: isStartupCheck ? process.cwd() : null,
     dialog,
@@ -116,6 +123,7 @@ const createMainWindow = async () => {
   const disposeWindowResources = createResourceDisposer([
     { dispose: disposeTerminalIpc, label: 'terminal IPC' },
     { dispose: projectFolderIpc.dispose, label: 'project folder IPC' },
+    { dispose: disposeGitIpc, label: 'Git discovery IPC' },
     { dispose: disposeClipboardIpc, label: 'clipboard IPC' },
     { dispose: () => terminalManager.dispose(), label: 'terminal process trees' },
     ...(isStartupCheck
