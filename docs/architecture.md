@@ -92,6 +92,20 @@ state. Missing Git, non-repository folders, timeouts, excessive output, and unex
 converted to concise structured errors carrying the requesting terminal ID, so one failure cannot
 affect another terminal or PTY.
 
+`GitWorkspacePlanner` turns fresh discovery facts and renderer intent into an immutable,
+runtime-only operation preview. It supports three explicit intents: create a new branch and
+worktree, create a worktree for an eligible existing branch, or attach an existing registered
+worktree. Git validates branch names with `check-ref-format --branch`; discovery and filesystem
+checks reject missing or conflicting branches, branches already checked out elsewhere, registered
+or terminal-assigned paths, existing target directories, nested worktrees, inaccessible parents,
+and locked, detached, prunable, bare, or unborn repository states as applicable. Planning never
+creates a branch, directory, or worktree. A successful preview contains its operation ID, terminal
+ID, repository root, base branch and revision, target branch and revision, final worktree path, and
+a fingerprint of the discovery facts. The T208/T209 confirmation flows must rediscover and match
+those facts before any mutation. Previews remain only in a bounded main-process registry for up to
+five minutes; a new preview for the same terminal invalidates the old one, and previews are never
+persisted.
+
 Session controls are scoped by stable terminal IDs. For a running session, Clear sends the
 standard Ctrl+L terminal control to the selected PTY so Codex clears the screen and redraws its input
 at the correct cursor position. A stopped or not-yet-started pane is reset locally. Restarting asks

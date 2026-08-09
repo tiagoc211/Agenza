@@ -34,6 +34,7 @@ const projectApi = Object.freeze({
 
 const gitApi = Object.freeze({
   discover: (id) => ipcRenderer.invoke(GIT_CHANNELS.discover, { id }),
+  planWorkspace: (id, request) => ipcRenderer.invoke(GIT_CHANNELS.planWorkspace, { id, request }),
 });
 
 const clipboardApi = Object.freeze({

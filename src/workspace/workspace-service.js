@@ -204,6 +204,19 @@ class WorkspaceService {
     );
   }
 
+  getAssignedGitWorktrees(excludeTerminalId = null) {
+    this._requireInitialized();
+    return this._state.terminals
+      .filter(
+        (definition) =>
+          definition.id !== excludeTerminalId && definition.workspace.kind === 'git-worktree',
+      )
+      .map((definition) => ({
+        path: definition.workspace.repository.worktree.path,
+        terminalId: definition.id,
+      }));
+  }
+
   flush() {
     return this._mutationQueue;
   }

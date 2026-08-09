@@ -19,7 +19,11 @@ class FakeIpcMain {
   }
 }
 
-const createHarness = ({ currentFolder = 'C:\\repo', discoveryError = null } = {}) => {
+const createHarness = ({
+  currentFolder = 'C:\\repo',
+  discoveryError = null,
+  planError = null,
+} = {}) => {
   const ipcMain = new FakeIpcMain();
   const logs = [];
   const mainFrame = {};
@@ -29,6 +33,14 @@ const createHarness = ({ currentFolder = 'C:\\repo', discoveryError = null } = {
     currentBranch: 'main',
     root: 'C:\\repo',
     worktrees: [],
+  };
+  const planRequests = [];
+  const preview = {
+    baseBranch: 'main',
+    operationId: 'operation-one',
+    repositoryRoot: 'C:\\repo',
+    targetBranch: 'agent-one',
+    worktreePath: 'C:\\repo-agent-one',
   };
   const dispose = registerGitIpc({
     discover: async () => {
@@ -43,8 +55,25 @@ const createHarness = ({ currentFolder = 'C:\\repo', discoveryError = null } = {
       info: (event, details) => logs.push({ details, event, level: 'info' }),
       warn: (event, details) => logs.push({ details, event, level: 'warn' }),
     },
+    planner: {
+      plan: async (request) => {
+        planRequests.push(request);
+
+        if (planError) {
+          throw planError;
+        }
+
+        return preview;
+      },
+    },
     window: { webContents },
     workspaceService: {
+      getAssignedGitWorktrees: (id) => [
+        {
+          path: 'C:\\assigned',
+          terminalId: id === 'terminal-one' ? 'terminal-two' : 'terminal-one',
+        },
+      ],
       getCurrentFolder: () => currentFolder,
       has: (id) => id === 'terminal-one' || id === 'terminal-two',
     },
@@ -55,6 +84,8 @@ const createHarness = ({ currentFolder = 'C:\\repo', discoveryError = null } = {
     dispose,
     ipcMain,
     logs,
+    planRequests,
+    preview,
     repository,
     trustedEvent: { sender: webContents, senderFrame: mainFrame },
   };
@@ -91,6 +122,37 @@ test('discovers Git only for the selected folder belonging to the requesting ter
 
   harness.dispose();
   assert.equal(harness.ipcMain.handlers.size, 0);
+});
+
+test('returns a terminal-scoped immutable workspace preview before confirmation', async () => {
+  const harness = createHarness();
+  const planWorkspace = harness.ipcMain.handlers.get(GIT_CHANNELS.planWorkspace);
+  const request = {
+    baseBranch: 'main',
+    targetBranch: 'agent-one',
+    type: 'create-new-branch-worktree',
+    worktreePath: 'C:\\repo-agent-one',
+  };
+
+  assert.deepEqual(await planWorkspace(harness.trustedEvent, { id: 'terminal-one', request }), {
+    id: 'terminal-one',
+    ok: true,
+    preview: harness.preview,
+  });
+  assert.deepEqual(harness.planRequests, [
+    {
+      assignedWorktrees: [{ path: 'C:\\assigned', terminalId: 'terminal-two' }],
+      projectPath: 'C:\\repo',
+      request,
+      terminalId: 'terminal-one',
+    },
+  ]);
+  await assert.rejects(
+    planWorkspace({ sender: {}, senderFrame: {} }, { id: 'terminal-one', request }),
+    /Untrusted/,
+  );
+
+  harness.dispose();
 });
 
 test('returns concise terminal-local errors for unavailable folders and Git failures', async () => {

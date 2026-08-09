@@ -86,7 +86,7 @@
       "id": "T207",
       "order": 7,
       "title": "Plan and validate branch and worktree assignments",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T206"],
       "acceptance_criteria": [
         "New branch names and worktree paths are validated with Git before any mutation occurs.",

@@ -1,5 +1,6 @@
 const { discoverGitRepository } = require('./git-discovery');
 const { toGitErrorPayload } = require('./git-command');
+const { GitWorkspacePlanner, toGitWorkspacePlanErrorPayload } = require('./git-workspace-planner');
 const { GIT_CHANNELS } = require('./ipc-channels');
 
 const isTrustedEvent = (event, window) =>
@@ -17,6 +18,7 @@ const registerGitIpc = ({
   discover = discoverGitRepository,
   ipcMain,
   logger,
+  planner,
   window,
   workspaceService,
 } = {}) => {
@@ -26,6 +28,20 @@ const registerGitIpc = ({
     );
   }
 
+  const workspacePlanner = planner ?? new GitWorkspacePlanner({ discover });
+
+  if (!workspacePlanner || typeof workspacePlanner.plan !== 'function') {
+    throw new TypeError('Git IPC workspace planner must provide a plan function.');
+  }
+
+  const getTerminalProjectPath = (id) => {
+    if (typeof id !== 'string' || !workspaceService.has(id)) {
+      throw new Error('Invalid terminal Git discovery id.');
+    }
+
+    return workspaceService.getCurrentFolder(id);
+  };
+
   const handleDiscover = async (event, payload) => {
     if (!isTrustedEvent(event, window)) {
       throw new Error('Untrusted Git discovery request.');
@@ -33,11 +49,7 @@ const registerGitIpc = ({
 
     const { id } = payload ?? {};
 
-    if (typeof id !== 'string' || !workspaceService.has(id)) {
-      throw new Error('Invalid terminal Git discovery id.');
-    }
-
-    const projectPath = workspaceService.getCurrentFolder(id);
+    const projectPath = getTerminalProjectPath(id);
 
     if (!projectPath) {
       return {
@@ -66,9 +78,57 @@ const registerGitIpc = ({
     }
   };
 
-  ipcMain.handle(GIT_CHANNELS.discover, handleDiscover);
+  const handlePlanWorkspace = async (event, payload) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error('Untrusted Git workspace preview request.');
+    }
 
-  return () => ipcMain.removeHandler(GIT_CHANNELS.discover);
+    const { id, request } = payload ?? {};
+    const projectPath = getTerminalProjectPath(id);
+
+    if (!projectPath) {
+      return {
+        error: {
+          code: 'PROJECT_FOLDER_UNAVAILABLE',
+          message: 'Select an accessible Git project folder before planning a worktree.',
+        },
+        id,
+        ok: false,
+      };
+    }
+
+    writeLog(logger, 'info', 'git.workspace_preview_requested', { terminalId: id });
+
+    try {
+      const preview = await workspacePlanner.plan({
+        assignedWorktrees: workspaceService.getAssignedGitWorktrees?.(id) ?? [],
+        projectPath,
+        request,
+        terminalId: id,
+      });
+      writeLog(logger, 'info', 'git.workspace_preview_succeeded', {
+        operationId: preview.operationId,
+        terminalId: id,
+      });
+      return { id, ok: true, preview };
+    } catch (error) {
+      const errorPayload = toGitWorkspacePlanErrorPayload(error);
+      writeLog(logger, 'warn', 'git.workspace_preview_failed', {
+        error: { code: errorPayload.code },
+        terminalId: id,
+      });
+      return { error: errorPayload, id, ok: false };
+    }
+  };
+
+  ipcMain.handle(GIT_CHANNELS.discover, handleDiscover);
+  ipcMain.handle(GIT_CHANNELS.planWorkspace, handlePlanWorkspace);
+
+  return () => {
+    workspacePlanner.clearPreviews?.();
+    ipcMain.removeHandler(GIT_CHANNELS.discover);
+    ipcMain.removeHandler(GIT_CHANNELS.planWorkspace);
+  };
 };
 
 module.exports = {

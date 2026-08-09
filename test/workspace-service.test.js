@@ -197,3 +197,29 @@ test('restores a deliberately empty saved layout without creating fallback sessi
   assert.equal(catalog.activeTerminalId, null);
   terminalManager.dispose();
 });
+
+test('lists persisted Git worktree assignments without exposing the selected terminal itself', async () => {
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\Available',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId: null, kind: 'external' },
+        path: 'C:\\Projects\\Available',
+      },
+    },
+  };
+  const { service, terminalManager } = createHarness(state);
+
+  await service.initialize();
+
+  assert.deepEqual(service.getAssignedGitWorktrees(), [
+    { path: 'C:\\Projects\\Available', terminalId: FIRST_ID },
+  ]);
+  assert.deepEqual(service.getAssignedGitWorktrees(FIRST_ID), []);
+
+  terminalManager.dispose();
+});
