@@ -17,6 +17,18 @@
   box-sizing: border-box;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
 html,
 body {
   width: 100%;
@@ -85,7 +97,7 @@ body {
 .brand p,
 .pane-header p {
   margin-top: 0.12rem;
-  color: #7d899c;
+  color: #9aa7ba;
   font-size: 0.72rem;
 }
 
@@ -134,10 +146,11 @@ body {
     box-shadow 140ms ease;
 }
 
-.terminal-pane.is-active {
-  border-color: #3e91b8;
+.terminal-pane.is-active,
+.terminal-pane:focus-within {
+  border-color: #68d5ff;
   box-shadow:
-    0 0 0 1px rgb(104 213 255 / 16%),
+    0 0 0 2px rgb(104 213 255 / 24%),
     0 16px 42px rgb(0 0 0 / 24%);
 }
 
@@ -153,7 +166,8 @@ body {
   background: #111620;
 }
 
-.terminal-pane.is-active .pane-header {
+.terminal-pane.is-active .pane-header,
+.terminal-pane:focus-within .pane-header {
   background: #121b26;
 }
 
@@ -217,6 +231,10 @@ body {
   outline: none;
 }
 
+.pane-action-button:focus-visible {
+  box-shadow: 0 0 0 2px rgb(104 213 255 / 28%);
+}
+
 .pane-action-button:disabled {
   color: #718093;
   cursor: not-allowed;
@@ -270,11 +288,27 @@ body {
   min-height: 28px;
   padding: 0 1rem;
   border-top: 1px solid #202735;
-  color: #687588;
+  color: #8997aa;
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 0.66rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.keyboard-hint kbd {
+  padding: 0.08rem 0.28rem;
+  border: 1px solid #46546a;
+  border-bottom-color: #2d3748;
+  border-radius: 3px;
+  background: #151b25;
+  color: #b9c7d9;
+  font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-pane {
+    transition: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -285,6 +319,10 @@ body {
   .terminal-grid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .keyboard-hint {
+    display: none;
   }
 }
 

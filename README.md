@@ -29,7 +29,8 @@ restarts only that pane in the new directory. Agenza checks that Conda can run C
 `agenza` environment before each session starts. Each pane also has its own **Clear** and **Restart**
 controls. Clear removes visible terminal output without stopping Codex, while Restart replaces only
 that pane's session. If Codex exits unexpectedly, the affected pane shows the exit and keeps its
-Restart action available.
+Restart action available. Press **F6** to focus the other terminal or **Shift+F6** to move in the
+opposite direction. Agenza leaves standard terminal shortcuts, including copy and paste, untouched.
 
 Available validation and build commands are:
 

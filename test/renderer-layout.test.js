@@ -49,3 +49,15 @@ test('provides independent clear and restart controls for each terminal', () => 
   assert.match(renderer, /Use Restart above to launch this session again/);
   assert.match(renderer, /setSessionState\(view, 'exited', 'Exited'/);
 });
+
+test('supports accessible terminal focus switching without taking terminal shortcuts', () => {
+  assert.match(html, /aria-keyshortcuts="F6 Shift\+F6"/);
+  assert.equal((html.match(/aria-live="polite"/g) ?? []).length, 2);
+  assert.match(renderer, /screenReaderMode: true/);
+  assert.match(renderer, /event\.key !== 'F6'/);
+  assert.match(renderer, /event\.altKey \|\| event\.ctrlKey \|\| event\.metaKey/);
+  assert.match(renderer, /event\.shiftKey \? -1 : 1/);
+  assert.match(renderer, /nextView\.terminal\.focus\(\)/);
+  assert.match(styles, /\.terminal-pane:focus-within/);
+  assert.match(styles, /\.pane-action-button:focus-visible/);
+});

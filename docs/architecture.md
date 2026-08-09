@@ -47,6 +47,12 @@ at the correct cursor position. A stopped or not-yet-started pane is reset local
 the main process to replace only the selected PTY. An unexpected exit disables input in that pane,
 displays the exit status, and leaves its restart control enabled; the other pane continues running.
 
+The renderer handles only unmodified F6 and Shift+F6 to cycle terminal focus. Combinations using
+Ctrl, Alt, or Meta continue to the active xterm instance, preserving shell and Codex shortcuts. Each
+xterm runs in screen-reader mode, session state changes use polite live regions, native buttons have
+specific accessible names, and the pane containing keyboard focus receives the same strong visual
+outline as the active pane.
+
 On Windows, stopping a session uses the system `taskkill` executable with tree and force flags for
 the PTY's root PID. This synchronously terminates Codex and any descendant shell processes before a
 restart can create the replacement session. The same cleanup runs for both terminal managers on the

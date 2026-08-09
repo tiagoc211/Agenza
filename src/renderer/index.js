@@ -39,7 +39,9 @@ const terminalViews = new Map();
 
 const setActivePane = (activePane) => {
   for (const pane of panes) {
-    pane.classList.toggle('is-active', pane === activePane);
+    const isActive = pane === activePane;
+    pane.classList.toggle('is-active', isActive);
+    pane.dataset.activePane = String(isActive);
   }
 };
 
@@ -62,6 +64,7 @@ for (const definition of paneDefinitions) {
     fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
     fontSize: 14,
     lineHeight: 1.25,
+    screenReaderMode: true,
     scrollback: 5000,
     theme: terminalTheme,
   });
@@ -73,11 +76,14 @@ for (const definition of paneDefinitions) {
   terminal.writeln('');
   terminal.writeln('\x1b[90mChoose a project folder to start Codex.\x1b[0m');
 
-  pane.addEventListener('pointerdown', () => {
+  pane.addEventListener('pointerdown', (event) => {
     setActivePane(pane);
-    terminal.focus();
+
+    if (!event.target.closest?.('button')) {
+      terminal.focus();
+    }
   });
-  mount.addEventListener('focusin', () => setActivePane(pane));
+  pane.addEventListener('focusin', () => setActivePane(pane));
 
   const view = {
     clearButton,
@@ -267,7 +273,32 @@ for (const view of terminalViews.values()) {
   });
 }
 
+const handleTerminalFocusShortcut = (event) => {
+  if (event.key !== 'F6' || event.altKey || event.ctrlKey || event.metaKey) {
+    return;
+  }
+
+  const views = [...terminalViews.values()];
+
+  if (views.length < 2) {
+    return;
+  }
+
+  event.preventDefault();
+  const activeIndex = views.findIndex(({ pane }) => pane.classList.contains('is-active'));
+  const direction = event.shiftKey ? -1 : 1;
+  const startingIndex = activeIndex === -1 ? (event.shiftKey ? 0 : views.length - 1) : activeIndex;
+  const nextIndex = (startingIndex + direction + views.length) % views.length;
+  const nextView = views[nextIndex];
+
+  setActivePane(nextView.pane);
+  nextView.terminal.focus();
+};
+
+document.addEventListener('keydown', handleTerminalFocusShortcut);
+
 window.addEventListener('beforeunload', () => {
+  document.removeEventListener('keydown', handleTerminalFocusShortcut);
   resizeObserver.disconnect();
   disposeDataSubscription();
   disposeExitSubscription();

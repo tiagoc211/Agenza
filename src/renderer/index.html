@@ -25,7 +25,15 @@
         </div>
       </header>
 
-      <main class="terminal-grid" aria-label="Codex terminal workspace">
+      <main
+        class="terminal-grid"
+        aria-label="Codex terminal workspace"
+        aria-describedby="terminal-keyboard-help"
+        aria-keyshortcuts="F6 Shift+F6"
+      >
+        <span class="visually-hidden" id="terminal-keyboard-help">
+          Press F6 to focus the next terminal or Shift plus F6 to focus the previous terminal.
+        </span>
         <section
           class="terminal-pane is-active"
           data-pane-id="terminal-one"
@@ -48,11 +56,32 @@
               >
                 Choose folder
               </button>
-              <button class="pane-action-button" type="button" data-clear-button>Clear</button>
-              <button class="pane-action-button" type="button" data-restart-button disabled>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Clear Codex terminal one"
+                data-clear-button
+              >
+                Clear
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Restart Codex terminal one"
+                data-restart-button
+                disabled
+              >
                 Restart
               </button>
-              <span class="pane-state" data-terminal-state>Waiting</span>
+              <span
+                class="pane-state"
+                role="status"
+                aria-atomic="true"
+                aria-live="polite"
+                data-terminal-state
+              >
+                Waiting
+              </span>
             </div>
           </header>
           <div class="terminal-frame">
@@ -82,11 +111,32 @@
               >
                 Choose folder
               </button>
-              <button class="pane-action-button" type="button" data-clear-button>Clear</button>
-              <button class="pane-action-button" type="button" data-restart-button disabled>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Clear Codex terminal two"
+                data-clear-button
+              >
+                Clear
+              </button>
+              <button
+                class="pane-action-button"
+                type="button"
+                aria-label="Restart Codex terminal two"
+                data-restart-button
+                disabled
+              >
                 Restart
               </button>
-              <span class="pane-state" data-terminal-state>Waiting</span>
+              <span
+                class="pane-state"
+                role="status"
+                aria-atomic="true"
+                aria-live="polite"
+                data-terminal-state
+              >
+                Waiting
+              </span>
             </div>
           </header>
           <div class="terminal-frame">
@@ -97,6 +147,7 @@
 
       <footer class="status-bar">
         <span>Local workspace</span>
+        <span class="keyboard-hint"><kbd>F6</kbd> switch terminal</span>
         <span id="environment"></span>
       </footer>
     </div>

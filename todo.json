@@ -128,7 +128,7 @@
       "id": "T011",
       "order": 11,
       "title": "Add essential keyboard and accessibility behavior",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T006", "T009"],
       "acceptance_criteria": [
         "The user can switch focus between terminals with the keyboard.",

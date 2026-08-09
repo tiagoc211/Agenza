@@ -156,6 +156,39 @@ const createMainWindow = () => {
             secondTerminalText.includes(secondMarker) &&
             !secondTerminalText.includes(firstMarker);
 
+          const keyboardFirstPane = document.querySelector(
+            '[data-pane-id="terminal-one"]',
+          );
+          const keyboardSecondPane = document.querySelector(
+            '[data-pane-id="terminal-two"]',
+          );
+          keyboardFirstPane?.querySelector('.xterm-helper-textarea')?.focus();
+          document.dispatchEvent(
+            new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'F6' }),
+          );
+          const focusMovedForward =
+            keyboardSecondPane?.classList.contains('is-active') &&
+            keyboardSecondPane.contains(document.activeElement);
+          document.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              bubbles: true,
+              cancelable: true,
+              key: 'F6',
+              shiftKey: true,
+            }),
+          );
+          const focusMovedBackward =
+            keyboardFirstPane?.classList.contains('is-active') &&
+            keyboardFirstPane.contains(document.activeElement);
+          const terminalShortcutEvent = new KeyboardEvent('keydown', {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+            key: 'c',
+          });
+          document.dispatchEvent(terminalShortcutEvent);
+          const terminalShortcutWasPreserved = !terminalShortcutEvent.defaultPrevented;
+
           document
             .querySelector('[data-pane-id="terminal-two"] [data-clear-button]')
             ?.click();
@@ -210,12 +243,15 @@ const createMainWindow = () => {
               : 0,
             clearRemovedVisibleOutput,
             firstOutputIsIsolated,
+            focusMovedBackward,
+            focusMovedForward,
             restartOutputReceived: getTerminalText('terminal-one').includes(restartMarker),
             restartWasAvailable,
             secondOutputIsIsolated,
             secondTerminalStayedConnected:
               document.querySelector('[data-pane-id="terminal-two"]')?.dataset.sessionState ===
               'connected',
+            terminalShortcutWasPreserved,
             unexpectedExitWasShown,
           };
         })()`);
@@ -227,10 +263,13 @@ const createMainWindow = () => {
           layout.gridColumnCount !== 2 ||
           !layout.clearRemovedVisibleOutput ||
           !layout.firstOutputIsIsolated ||
+          !layout.focusMovedBackward ||
+          !layout.focusMovedForward ||
           !layout.restartOutputReceived ||
           !layout.restartWasAvailable ||
           !layout.secondOutputIsIsolated ||
           !layout.secondTerminalStayedConnected ||
+          !layout.terminalShortcutWasPreserved ||
           !layout.unexpectedExitWasShown
         ) {
           throw new Error(`Unexpected terminal layout: ${JSON.stringify(layout)}`);
