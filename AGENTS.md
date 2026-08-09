@@ -28,6 +28,20 @@ Do not run multiple `conda run` commands concurrently. On Windows, concurrent in
 - Preserve existing user changes and avoid unrelated edits.
 - Do not create commits, rewrite Git history, or perform other Git history changes unless the user explicitly requests them.
 
+## Default prompt for a new task
+
+When the user tells a new agent to follow the default new-task prompt, the agent must:
+
+1. Read `AGENTS.md`, `README.md`, `todo.json`, and `docs/architecture.md` completely.
+2. Inspect the current branch and working tree without discarding or overwriting existing changes.
+3. Sort the tasks in `todo.json` by `order` and select the first task whose status is not `done`.
+4. Confirm that all dependencies for the selected task are `done`. Do not silently skip a blocked task or a task with incomplete dependencies; report the problem to the user.
+5. If the selected task is `todo`, change it to `in_progress` before implementation. If it is already `in_progress`, review the existing work and continue it only when no other agent is actively working in the same worktree.
+6. Tell the user which task was selected, then complete only that task and its acceptance criteria. Make reasonable in-scope decisions without asking unnecessary questions.
+7. Update relevant documentation and run the appropriate tests, linting, formatting, build, or other validation required by the task.
+8. Mark the task `done` only after every acceptance criterion passes. If the task cannot be completed, leave an accurate status and clearly report the blocker.
+9. Finish with a concise summary of files changed, checks performed, and the next unfinished task. Do not commit unless the user explicitly asks for a commit.
+
 ## Multi-agent coordination
 
 - Agents working concurrently must use separate Git worktrees and separate branches. Do not run concurrent agents in the same working tree.
