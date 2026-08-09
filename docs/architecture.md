@@ -64,4 +64,3 @@ The following choices are intentionally deferred until they are needed:
 - Support for CLIs other than Codex.
 - Communication between terminal sessions.
 - Automatic application updates and code signing.
-

@@ -14,6 +14,27 @@ The first release will use Electron with plain JavaScript, HTML, and CSS. See th
 - Run the Codex CLI in both terminals.
 - Use both terminals independently.
 
+## Development
+
+Run every project command inside the `agenza` Conda environment. If Conda is not initialized in PowerShell, use its full executable path as described in `AGENTS.md`.
+
+```powershell
+conda run -n agenza npm install
+conda run -n agenza npm run dev
+```
+
+Available validation and build commands are:
+
+```powershell
+conda run -n agenza npm test
+conda run -n agenza npm run lint
+conda run -n agenza npm run format:check
+conda run -n agenza npm run build
+conda run -n agenza npm run make
+```
+
+JavaScript dependencies are recorded in `package.json` and `package-lock.json`. `requirements.txt` is reserved for any future Python tooling.
+
 ## Release 0.1.0 scope
 
 The first release targets Windows. Agenza will be a local-only, single-user desktop app with no Agenza account, remote backend, or cloud synchronization. The Codex CLI may still use its own online services as normal.
