@@ -71,12 +71,14 @@ values and control characters are sanitized, and logging failures do not stop th
 startup and restart errors are caught per ID, logged without terminal content, and returned only to
 the affected pane with a concise recovery instruction.
 
-Automated validation has three entry points. `npm test` runs the Node test suite with faked PTY and
+Automated validation has four entry points. `npm test` runs the Node test suite with faked PTY and
 Electron boundaries. `npm run test:smoke` launches the packaged executable with `--startup-check`
 and a 60-second timeout. `npm run test:all` runs the unit suite, packages the application, and then
 runs the smoke test sequentially. The smoke check uses two real ConPTY sessions concurrently,
 verifies isolated markers and restart behavior, exercises renderer controls and keyboard focus, and
-confirms that persistent descendant processes do not survive window closure.
+confirms that persistent descendant processes do not survive window closure. After `npm run make`,
+`npm run test:release` validates the Squirrel installer and package metadata plus the packaged
+application archive, executable, and native ConPTY runtime.
 
 `node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
 scripts, and helper scripts relative to its package directory. A build plugin copies its runtime

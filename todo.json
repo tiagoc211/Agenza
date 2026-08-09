@@ -177,7 +177,7 @@
       "id": "T015",
       "order": 15,
       "title": "Create a distributable application build",
-      "status": "todo",
+      "status": "in_progress",
       "depends_on": ["T014"],
       "acceptance_criteria": [
         "A clean machine can install or run the packaged application.",

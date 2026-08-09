@@ -11,6 +11,7 @@ test('provides separate unit, smoke, and complete automated test commands', () =
   assert.equal(packageJson.scripts.test, 'node test/run-tests.js');
   assert.equal(packageJson.scripts['test:smoke'], 'node test/run-smoke-test.js');
   assert.equal(packageJson.scripts['test:all'], 'node test/run-all-tests.js');
+  assert.equal(packageJson.scripts['test:release'], 'node test/validate-release-artifacts.js');
   assert.match(allTestsRunner, /run-tests\.js/);
   assert.match(allTestsRunner, /'run', 'build'/);
   assert.match(allTestsRunner, /run-smoke-test\.js/);
