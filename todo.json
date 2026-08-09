@@ -68,7 +68,7 @@
       "id": "T006",
       "order": 6,
       "title": "Connect both terminal panes to their PTY processes",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": ["T004", "T005"],
       "acceptance_criteria": [
         "Typing in either pane sends input only to its own process.",
@@ -80,7 +80,7 @@
       "id": "T007",
       "order": 7,
       "title": "Launch Codex in both terminals",
-      "status": "todo",
+      "status": "in_progress",
       "depends_on": ["T006"],
       "acceptance_criteria": [
         "Each pane starts the Codex CLI through the agenza Conda environment.",
