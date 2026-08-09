@@ -20,7 +20,7 @@ const assertDimension = (value, name) => {
 const isTrustedEvent = (event, window) =>
   event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
 
-const registerTerminalIpc = ({ ipcMain, window, manager }) => {
+const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefined }) => {
   if (!ipcMain || !window || !manager) {
     throw new TypeError('Terminal IPC requires ipcMain, a window, and a terminal manager.');
   }
@@ -42,7 +42,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager }) => {
     ),
   ]);
 
-  const handleStart = (event) => {
+  const handleStart = async (event) => {
     if (!isTrustedEvent(event, window)) {
       throw new Error('Untrusted terminal start request.');
     }
@@ -60,7 +60,8 @@ const registerTerminalIpc = ({ ipcMain, window, manager }) => {
     if (process.argv.includes('--startup-check')) {
       console.log('[startup-check] starting terminal sessions');
     }
-    const startedSessions = manager.startAll();
+    const optionsById = (await prepare()) ?? {};
+    const startedSessions = manager.startAll(optionsById);
     if (process.argv.includes('--startup-check')) {
       console.log('[startup-check] terminal sessions started');
     }

@@ -68,7 +68,7 @@ for (const definition of paneDefinitions) {
   terminal.open(mount);
   terminal.writeln(`\x1b[1;36mAgenza terminal ${definition.label}\x1b[0m`);
   terminal.writeln('');
-  terminal.writeln('\x1b[90mStarting PowerShell...\x1b[0m');
+  terminal.writeln('\x1b[90mChecking Conda and Codex...\x1b[0m');
 
   pane.addEventListener('pointerdown', () => {
     setActivePane(pane);
@@ -118,7 +118,7 @@ const disposeExitSubscription = window.agenza.terminal.onExit(({ id, exitCode })
   view.isConnected = false;
   view.terminal.options.disableStdin = true;
   view.terminal.writeln(`\r\n\x1b[90mProcess exited with code ${exitCode}.\x1b[0m`);
-  setSessionState(view, 'exited', 'Exited', 'PowerShell stopped');
+  setSessionState(view, 'exited', 'Exited', 'Codex stopped');
 });
 
 let resizeFrame;
@@ -153,7 +153,7 @@ const startTerminalSessions = async () => {
 
       view.isConnected = snapshot.isRunning;
       view.terminal.options.disableStdin = !snapshot.isRunning;
-      setSessionState(view, 'connected', 'Connected', 'PowerShell session');
+      setSessionState(view, 'connected', 'Connected', 'Codex session');
       view.fitAddon.fit();
       window.agenza.terminal.resize(view.id, view.terminal.cols, view.terminal.rows);
     }

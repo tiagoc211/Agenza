@@ -29,4 +29,6 @@ test('connects each xterm view to its matching PTY session', () => {
   assert.match(renderer, /window\.agenza\.terminal\.write\(view\.id, data\)/);
   assert.match(renderer, /terminalViews\.get\(id\)\?\.terminal\.write\(data\)/);
   assert.match(renderer, /window\.agenza\.terminal\.resize\(view\.id/);
+  assert.match(renderer, /Checking Conda and Codex/);
+  assert.match(renderer, /Codex session/);
 });

@@ -47,6 +47,7 @@ const createHarness = () => {
   const writes = [];
   const resizes = [];
   let startCount = 0;
+  let prepareCount = 0;
   let snapshots = [
     { id: 'terminal-one', isRunning: false },
     { id: 'terminal-two', isRunning: false },
@@ -72,7 +73,14 @@ const createHarness = () => {
     write: (id, data) => writes.push({ id, data }),
   };
 
-  const dispose = registerTerminalIpc({ ipcMain, manager, window });
+  const dispose = registerTerminalIpc({
+    ipcMain,
+    manager,
+    prepare: async () => {
+      prepareCount += 1;
+    },
+    window,
+  });
 
   return {
     dataListeners,
@@ -80,6 +88,7 @@ const createHarness = () => {
     exitListeners,
     ipcMain,
     manager,
+    prepareCount: () => prepareCount,
     resizes,
     sentMessages,
     startCount: () => startCount,
@@ -88,18 +97,19 @@ const createHarness = () => {
   };
 };
 
-test('starts two sessions and routes input and resize by terminal id', () => {
+test('prepares and starts two sessions, then routes input and resize by terminal id', async () => {
   const harness = createHarness();
   const start = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.start);
   const input = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.input);
   const resize = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.resize);
 
-  const snapshots = start(harness.trustedEvent);
+  const snapshots = await start(harness.trustedEvent);
   input(harness.trustedEvent, { id: 'terminal-one', data: 'first' });
   input(harness.trustedEvent, { id: 'terminal-two', data: 'second' });
   resize(harness.trustedEvent, { id: 'terminal-two', columns: 120, rows: 40 });
 
   assert.equal(harness.startCount(), 1);
+  assert.equal(harness.prepareCount(), 1);
   assert.deepEqual(
     snapshots.map(({ id, isRunning }) => ({ id, isRunning })),
     [

@@ -1,7 +1,8 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const startedByInstaller = require('electron-squirrel-startup');
 
-const { TerminalManager } = require('./terminal/terminal-manager');
+const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
+const { DEFAULT_SESSION_IDS, TerminalManager } = require('./terminal/terminal-manager');
 const { registerTerminalIpc } = require('./terminal/terminal-ipc');
 const { createWindowOptions } = require('./window-options');
 
@@ -47,7 +48,17 @@ const createMainWindow = () => {
   startupCheckLog('creating window');
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   const terminalManager = new TerminalManager();
-  const disposeTerminalIpc = registerTerminalIpc({ ipcMain, window, manager: terminalManager });
+  const disposeTerminalIpc = registerTerminalIpc({
+    ipcMain,
+    window,
+    manager: terminalManager,
+    prepare: isStartupCheck
+      ? undefined
+      : async () => {
+          const sessionOptions = await prepareCodexSessionOptions();
+          return Object.fromEntries(DEFAULT_SESSION_IDS.map((id) => [id, sessionOptions]));
+        },
+  });
 
   window.setMenuBarVisibility(false);
   window.webContents.once('did-finish-load', async () => {

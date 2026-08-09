@@ -30,7 +30,7 @@ Renderer: xterm pane 1  <-- secure IPC -->  Main: PTY session 1  --> Codex
 Renderer: xterm pane 2  <-- secure IPC -->  Main: PTY session 2  --> Codex
 ```
 
-The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Until Codex launching is added in `T007`, the default interactive process is PowerShell.
+The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Agenza asks Conda for the activated `agenza` environment once, verifies `codex --version`, then starts both Codex PTYs directly with that environment. This avoids overlapping long-running `conda run` wrappers on Windows while keeping both sessions inside the requested environment. Missing Conda, the environment, or Codex produces a concise startup error in both panes.
 
 The preload bridge exposes only terminal start, input, resize, output, and exit operations. The main process validates the sending frame, terminal ID, input type, and dimensions before routing any request. Renderer subscriptions are registered before the main process starts either PTY so initial shell output is not lost.
 

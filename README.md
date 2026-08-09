@@ -23,6 +23,9 @@ conda run -n agenza npm install
 conda run -n agenza npm run dev
 ```
 
+On startup, Agenza checks that Conda can run the Codex CLI from the `agenza` environment, then
+opens one independent Codex session in each terminal pane.
+
 Available validation and build commands are:
 
 ```powershell
