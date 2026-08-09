@@ -15,7 +15,7 @@
     "dev": "electron-forge start",
     "build": "electron-forge package",
     "make": "electron-forge make",
-    "test": "node --test --test-isolation=none",
+    "test": "node test/run-tests.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

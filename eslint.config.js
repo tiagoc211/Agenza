@@ -1,5 +1,6 @@
 const commonGlobals = {
   __dirname: 'readonly',
+  clearTimeout: 'readonly',
   console: 'readonly',
   document: 'readonly',
   MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: 'readonly',
@@ -8,6 +9,7 @@ const commonGlobals = {
   process: 'readonly',
   ResizeObserver: 'readonly',
   require: 'readonly',
+  setTimeout: 'readonly',
   window: 'readonly',
 };
 

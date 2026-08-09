@@ -56,7 +56,7 @@
       "id": "T005",
       "order": 5,
       "title": "Implement the terminal process layer",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T003"],
       "acceptance_criteria": [
         "The app can start an interactive PTY process for each pane.",

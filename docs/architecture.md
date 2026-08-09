@@ -30,6 +30,8 @@ Renderer: xterm pane 1  <-- secure IPC -->  Main: PTY session 1  --> Codex
 Renderer: xterm pane 2  <-- secure IPC -->  Main: PTY session 2  --> Codex
 ```
 
+The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Until Codex launching is added in `T007`, the default interactive process is PowerShell. Renderer-to-main IPC is added separately in `T006`.
+
 ## Why this stack
 
 Electron lets the project use familiar web technologies while providing the native process and window APIs needed by a desktop application. xterm.js and node-pty are designed to work together: xterm.js handles terminal presentation, while node-pty provides the interactive pseudoterminal process.
