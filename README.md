@@ -157,6 +157,7 @@ Release history is available in [CHANGELOG.md](CHANGELOG.md), with the `0.1.0` p
 ## Development roadmap
 
 Current development targets `0.2.0`: dynamic terminal panes and safe Git branch/worktree isolation
-for each agent. Read the [0.2.0 scope and workspace safety rules](docs/scope-0.2.0.md), then see
+for each agent. Read the [0.2.0 scope and workspace safety rules](docs/scope-0.2.0.md) and the
+[dynamic terminal and workspace model](docs/workspace-model-0.2.0.md), then see
 [todo.json](todo.json) for the ordered plan. The completed first-release plan is archived in
 [todo-v0.1.0.json](todo-v0.1.0.json).

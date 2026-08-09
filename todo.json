@@ -26,7 +26,7 @@
       "id": "T202",
       "order": 2,
       "title": "Design the dynamic terminal and Git workspace model",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T201"],
       "acceptance_criteria": [
         "The model defines stable session IDs, labels, process state, project path, repository root, branch, worktree path, and Agenza ownership metadata.",
