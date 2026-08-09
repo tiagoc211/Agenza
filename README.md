@@ -1,3 +1,17 @@
+
+<p align="center">
+  <img src="images/agenzalogov2.png" width="140" alt="Agenza Logo">
+</p>
+
+<p align="center">
+  <strong>A local workspace for running multiple AI coding agents.</strong>
+</p>
+
+<p align="center">
+  Run independent Codex CLI sessions side by side, each with its own project workspace.
+</p>
+
+
 # Agenza
 
 Agenza is a local Windows desktop workspace for running two independent Codex CLI sessions. Each
