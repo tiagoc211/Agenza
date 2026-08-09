@@ -51,9 +51,14 @@ class FakePtyProcess {
 
 test('routes PTY input, output, resize, clear, and exit events', () => {
   const processHandle = new FakePtyProcess();
+  const killedPids = [];
   let spawnCall;
   const session = new TerminalSession({
     id: 'terminal-one',
+    processTreeKiller: (pid) => {
+      killedPids.push(pid);
+      return false;
+    },
     ptyModule: {
       spawn: (...parameters) => {
         spawnCall = parameters;
@@ -94,6 +99,7 @@ test('routes PTY input, output, resize, clear, and exit events', () => {
   assert.deepEqual(session.dimensions, { columns: 120, rows: 40 });
   assert.equal(session.isRunning, true);
   assert.equal(session.kill(), true);
+  assert.deepEqual(killedPids, [4321]);
   assert.equal(processHandle.killed, true);
 
   processHandle.emitExit({ exitCode: 0 });
@@ -106,6 +112,7 @@ test('routes PTY input, output, resize, clear, and exit events', () => {
 test('rejects unsafe state and invalid terminal dimensions', () => {
   const session = new TerminalSession({
     id: 'terminal-one',
+    processTreeKiller: () => false,
     ptyModule: { spawn: () => new FakePtyProcess() },
   });
 
@@ -113,4 +120,26 @@ test('rejects unsafe state and invalid terminal dimensions', () => {
   assert.throws(() => session.resize(0, 24), /columns/);
   assert.throws(() => session.start({ shell: '' }), /shell executable/);
   assert.throws(() => session.start({ shell: 'shell.exe', columns: 1001 }), /columns/);
+});
+
+test('uses a successful tree kill without issuing a second PTY kill', () => {
+  const processHandle = new FakePtyProcess();
+  const killedPids = [];
+  const session = new TerminalSession({
+    id: 'terminal-one',
+    processTreeKiller: (pid) => {
+      killedPids.push(pid);
+      return true;
+    },
+    ptyModule: { spawn: () => processHandle },
+  });
+
+  session.start({ shell: 'shell.exe' });
+  session.kill();
+
+  assert.deepEqual(killedPids, [4321]);
+  assert.equal(processHandle.killed, false);
+
+  processHandle.emitExit({ exitCode: 1 });
+  assert.equal(session.isRunning, false);
 });

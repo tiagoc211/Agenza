@@ -41,10 +41,22 @@ Codex session with the folder as `cwd`; a later selection stops and restarts onl
 pane header displays its own full project path. Cancellation and validation errors leave the other
 terminal untouched.
 
-Session controls are scoped by the same fixed terminal IDs. Clearing is a renderer-only xterm
-operation and does not stop Codex. Restarting asks the main process to replace only the selected
-PTY. An unexpected exit disables input in that pane, displays the exit status, and leaves its
-restart control enabled; the other pane continues running.
+Session controls are scoped by the same fixed terminal IDs. For a running session, Clear sends the
+standard Ctrl+L terminal control to the selected PTY so Codex clears the screen and redraws its input
+at the correct cursor position. A stopped or not-yet-started pane is reset locally. Restarting asks
+the main process to replace only the selected PTY. An unexpected exit disables input in that pane,
+displays the exit status, and leaves its restart control enabled; the other pane continues running.
+
+On Windows, stopping a session uses the system `taskkill` executable with tree and force flags for
+the PTY's root PID. This synchronously terminates Codex and any descendant shell processes before a
+restart can create the replacement session. The same cleanup runs for both terminal managers on the
+window's `close` event, before Electron exits. The regular node-pty kill remains a fallback when the
+root process has already exited, and resource disposal attempts every session even if another
+cleanup reports an error.
+
+The packaged startup check creates a long-running descendant process in each PTY immediately before
+closing its window. After the synchronous close cleanup, it checks both descendant PIDs and fails if
+either still exists. This exercises the same window-close path used by the normal application.
 
 `node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
 scripts, and helper scripts relative to its package directory. A build plugin copies its runtime

@@ -1,14 +1,16 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const startedByInstaller = require('electron-squirrel-startup');
 
+const { createResourceDisposer } = require('./lifecycle/resource-disposer');
 const { registerProjectFolderIpc } = require('./project/project-folder');
 const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
 const { DEFAULT_SESSION_IDS, TerminalManager } = require('./terminal/terminal-manager');
 const { registerTerminalIpc } = require('./terminal/terminal-ipc');
+const { isProcessRunning, killProcessTree } = require('./terminal/process-tree');
 const { createWindowOptions } = require('./window-options');
 
 const isStartupCheck = process.argv.includes('--startup-check');
-const STARTUP_CHECK_EXIT_TIMEOUT_MS = 5000;
+const STARTUP_CHECK_CHILD_TIMEOUT_MS = 10000;
 const startupCheckLog = (...values) => {
   if (isStartupCheck) {
     console.log('[startup-check]', ...values);
@@ -17,29 +19,39 @@ const startupCheckLog = (...values) => {
 
 startupCheckLog('argv', process.argv);
 
-const stopTerminalSessionsGracefully = (terminalManager) =>
-  Promise.all(
-    terminalManager
-      .getSnapshots()
-      .filter((snapshot) => snapshot.isRunning)
-      .map(
-        ({ id }) =>
-          new Promise((resolve) => {
-            let unsubscribe = () => {};
-            const timeout = setTimeout(() => {
-              unsubscribe();
-              resolve();
-            }, STARTUP_CHECK_EXIT_TIMEOUT_MS);
+const startLifecycleChild = (terminalManager, id, marker) =>
+  new Promise((resolve, reject) => {
+    let output = '';
+    let unsubscribe = () => {};
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error(`Terminal "${id}" did not report its lifecycle child pid.`));
+    }, STARTUP_CHECK_CHILD_TIMEOUT_MS);
 
-            unsubscribe = terminalManager.onExit(id, () => {
-              clearTimeout(timeout);
-              unsubscribe();
-              resolve();
-            });
-            terminalManager.write(id, 'exit\r');
-          }),
-      ),
-  );
+    unsubscribe = terminalManager.onData(id, (data) => {
+      output = `${output}${data}`.slice(-8192);
+      const markerIndex = output.lastIndexOf(marker);
+
+      if (markerIndex === -1) {
+        return;
+      }
+
+      const pid = Number.parseInt(output.slice(markerIndex + marker.length), 10);
+
+      if (!Number.isInteger(pid)) {
+        return;
+      }
+
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve(pid);
+    });
+
+    terminalManager.write(
+      id,
+      `$agenzaChild = Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoLogo -NoProfile -Command Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru; Write-Output ('${marker}' + $agenzaChild.Id)\r`,
+    );
+  });
 
 if (startedByInstaller) {
   app.quit();
@@ -74,6 +86,23 @@ const createMainWindow = () => {
 
           return prepareCodexSessionOptions({ cwd: projectFolder });
         },
+  });
+  const disposeWindowResources = createResourceDisposer([
+    { dispose: disposeTerminalIpc, label: 'terminal IPC' },
+    { dispose: projectFolderIpc.dispose, label: 'project folder IPC' },
+    { dispose: () => terminalManager.dispose(), label: 'terminal process trees' },
+  ]);
+
+  window.once('close', () => {
+    const disposalErrors = disposeWindowResources();
+
+    if (disposalErrors.length > 0) {
+      process.exitCode = 1;
+      console.error(
+        'Agenza could not clean up every window resource:',
+        disposalErrors.map(({ label, error }) => `${label}: ${error.message}`).join('; '),
+      );
+    }
   });
 
   window.setMenuBarVisibility(false);
@@ -207,20 +236,38 @@ const createMainWindow = () => {
           throw new Error(`Unexpected terminal layout: ${JSON.stringify(layout)}`);
         }
 
-        console.log('Agenza startup check passed.');
-        await stopTerminalSessionsGracefully(terminalManager);
-        process.exit(0);
+        const lifecycleChildPids = await Promise.all([
+          startLifecycleChild(terminalManager, 'terminal-one', 'AGENZA_T010_CHILD_ONE='),
+          startLifecycleChild(terminalManager, 'terminal-two', 'AGENZA_T010_CHILD_TWO='),
+        ]);
+        startupCheckLog('lifecycle child pids', lifecycleChildPids);
+        window.close();
+
+        const orphanedPids = lifecycleChildPids.filter((pid) => isProcessRunning(pid));
+
+        if (orphanedPids.length > 0) {
+          console.error(`Agenza startup check left orphaned processes: ${orphanedPids.join(', ')}`);
+
+          for (const pid of orphanedPids) {
+            try {
+              killProcessTree(pid);
+            } catch {
+              // The failed check has already been reported; make a best-effort final cleanup.
+            }
+          }
+          app.exit(1);
+        } else {
+          console.log('Agenza startup check passed.');
+          app.exit(0);
+        }
       } catch (error) {
         console.error('Agenza startup check failed:', error);
-        await stopTerminalSessionsGracefully(terminalManager);
-        process.exit(1);
+        if (!window.isDestroyed()) {
+          window.close();
+        }
+        app.exit(1);
       }
     }
-  });
-  window.once('closed', () => {
-    projectFolderIpc.dispose();
-    disposeTerminalIpc();
-    terminalManager.dispose();
   });
   window.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 

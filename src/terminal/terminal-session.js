@@ -1,5 +1,7 @@
 const nodePty = require('node-pty');
 
+const { killProcessTree } = require('./process-tree');
+
 const DEFAULT_COLUMNS = 80;
 const DEFAULT_ROWS = 24;
 const MAX_TERMINAL_DIMENSION = 1000;
@@ -18,7 +20,7 @@ const normalizeEnvironment = (environment) =>
   );
 
 class TerminalSession {
-  constructor({ id, ptyModule = nodePty } = {}) {
+  constructor({ id, processTreeKiller = killProcessTree, ptyModule = nodePty } = {}) {
     if (typeof id !== 'string' || id.length === 0) {
       throw new TypeError('A terminal session requires a non-empty string id.');
     }
@@ -27,8 +29,13 @@ class TerminalSession {
       throw new TypeError('A terminal session requires a PTY module with a spawn function.');
     }
 
+    if (typeof processTreeKiller !== 'function') {
+      throw new TypeError('A terminal session requires a process tree killer.');
+    }
+
     this.id = id;
     this._ptyModule = ptyModule;
+    this._processTreeKiller = processTreeKiller;
     this._process = null;
     this._columns = DEFAULT_COLUMNS;
     this._rows = DEFAULT_ROWS;
@@ -136,7 +143,25 @@ class TerminalSession {
       return false;
     }
 
-    this._process.kill();
+    const terminalProcess = this._process;
+    let treeWasKilled = false;
+
+    try {
+      treeWasKilled = this._processTreeKiller(terminalProcess.pid);
+    } catch (error) {
+      try {
+        terminalProcess.kill();
+      } catch {
+        // Preserve the process-tree error, which contains the actionable failure.
+      }
+
+      throw error;
+    }
+
+    if (!treeWasKilled) {
+      terminalProcess.kill();
+    }
+
     return true;
   }
 
@@ -159,14 +184,22 @@ class TerminalSession {
   }
 
   dispose() {
-    if (this._process) {
-      this._process.kill();
-      this._process = null;
+    let killError;
+
+    try {
+      this.kill();
+    } catch (error) {
+      killError = error;
     }
 
+    this._process = null;
     this._disposeProcessListeners();
     this._dataListeners.clear();
     this._exitListeners.clear();
+
+    if (killError) {
+      throw killError;
+    }
   }
 
   _requireProcess() {

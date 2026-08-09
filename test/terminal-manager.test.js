@@ -11,6 +11,7 @@ class FakeSession {
     this.columns = 80;
     this.rows = 24;
     this.writes = [];
+    this.disposeCount = 0;
     this.dataListeners = new Set();
     this.exitListeners = new Set();
   }
@@ -68,6 +69,7 @@ class FakeSession {
   }
 
   dispose() {
+    this.disposeCount += 1;
     this.isRunning = false;
   }
 }
@@ -121,4 +123,23 @@ test('rejects unknown terminal ids', () => {
   });
 
   assert.throws(() => manager.write('terminal-three', 'data'), /Unknown terminal session/);
+});
+
+test('disposes both terminal sessions', () => {
+  const sessions = new Map();
+  const manager = new TerminalManager({
+    sessionFactory: (id) => {
+      const session = new FakeSession(id, 1000 + sessions.size);
+      sessions.set(id, session);
+      return session;
+    },
+  });
+
+  manager.startAll();
+  manager.dispose();
+
+  assert.equal(sessions.get('terminal-one').disposeCount, 1);
+  assert.equal(sessions.get('terminal-two').disposeCount, 1);
+  assert.equal(manager.getSnapshot('terminal-one').isRunning, false);
+  assert.equal(manager.getSnapshot('terminal-two').isRunning, false);
 });

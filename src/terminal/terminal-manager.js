@@ -96,8 +96,18 @@ class TerminalManager {
   }
 
   killAll() {
+    const errors = [];
+
     for (const session of this._sessions.values()) {
-      session.kill();
+      try {
+        session.kill();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new AggregateError(errors, 'Unable to terminate every terminal process tree.');
     }
   }
 
@@ -118,8 +128,18 @@ class TerminalManager {
   }
 
   dispose() {
+    const errors = [];
+
     for (const session of this._sessions.values()) {
-      session.dispose();
+      try {
+        session.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new AggregateError(errors, 'Unable to dispose every terminal session.');
     }
   }
 

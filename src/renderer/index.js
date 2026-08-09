@@ -246,7 +246,12 @@ const chooseProjectFolder = async (view) => {
 for (const view of terminalViews.values()) {
   view.projectButton.addEventListener('click', () => chooseProjectFolder(view));
   view.clearButton.addEventListener('click', () => {
-    view.terminal.clear();
+    if (view.isConnected) {
+      window.agenza.terminal.write(view.id, '\x0c');
+    } else {
+      view.terminal.reset();
+    }
+
     setActivePane(view.pane);
     view.terminal.focus();
   });

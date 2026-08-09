@@ -116,7 +116,7 @@
       "id": "T010",
       "order": 10,
       "title": "Handle application and process lifecycle safely",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T007", "T009"],
       "acceptance_criteria": [
         "Closing the app terminates both child process trees cleanly.",
