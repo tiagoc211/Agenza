@@ -1,8 +1,11 @@
 module.exports = {
   packagerConfig: {
-    asar: true,
+    // node-pty launches worker and helper scripts from its own directory at runtime.
+    asar: {
+      unpack: '**/.webpack/main/node_modules/node-pty/**',
+    },
   },
-  // node-pty is pinned but not imported until T005. Enable its Electron rebuild there.
+  // node-pty provides a Windows prebuild; avoid requiring local C++ build tools here.
   rebuildConfig: {
     onlyModules: [],
   },

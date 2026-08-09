@@ -22,3 +22,11 @@ test('keeps panes responsive and exposes an active state', () => {
   assert.match(renderer, /new ResizeObserver\(fitTerminals\)/);
   assert.match(renderer, /classList\.toggle\('is-active'/);
 });
+
+test('connects each xterm view to its matching PTY session', () => {
+  assert.match(renderer, /terminal\.onData/);
+  assert.match(renderer, /terminal\.onResize/);
+  assert.match(renderer, /window\.agenza\.terminal\.write\(view\.id, data\)/);
+  assert.match(renderer, /terminalViews\.get\(id\)\?\.terminal\.write\(data\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.resize\(view\.id/);
+});

@@ -30,7 +30,15 @@ Renderer: xterm pane 1  <-- secure IPC -->  Main: PTY session 1  --> Codex
 Renderer: xterm pane 2  <-- secure IPC -->  Main: PTY session 2  --> Codex
 ```
 
-The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Until Codex launching is added in `T007`, the default interactive process is PowerShell. Renderer-to-main IPC is added separately in `T006`.
+The terminal process layer uses one `TerminalSession` per PTY and a `TerminalManager` with the fixed IDs `terminal-one` and `terminal-two`. The manager routes input, output, resizing, and exit events by ID so one session cannot accidentally operate on the other. Until Codex launching is added in `T007`, the default interactive process is PowerShell.
+
+The preload bridge exposes only terminal start, input, resize, output, and exit operations. The main process validates the sending frame, terminal ID, input type, and dimensions before routing any request. Renderer subscriptions are registered before the main process starts either PTY so initial shell output is not lost.
+
+`node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
+scripts, and helper scripts relative to its package directory. A build plugin copies its runtime
+JavaScript and the current platform's prebuilt binaries into the Webpack output. Electron Forge
+unpacks that complete runtime directory from the application archive so workers and native modules
+can load from real filesystem paths.
 
 ## Why this stack
 

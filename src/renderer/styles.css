@@ -178,6 +178,17 @@ body {
   font-size: 0.66rem;
 }
 
+.terminal-pane[data-session-state='connected'] .pane-state {
+  border-color: #25543e;
+  color: #73d69c;
+}
+
+.terminal-pane[data-session-state='exited'] .pane-state,
+.terminal-pane[data-session-state='error'] .pane-state {
+  border-color: #603344;
+  color: #ff8ba0;
+}
+
 .terminal-frame,
 .terminal-mount {
   min-width: 0;
