@@ -1,91 +1,152 @@
 # Agenza
 
-Agenza is a personal desktop app for working on projects with AI coding tools.
+Agenza is a local Windows desktop workspace for running two independent Codex CLI sessions. Each
+terminal can use a different project folder and can be controlled without affecting the other one.
 
-The first version will be intentionally simple: it will let us open and use two terminals, each running the Codex CLI.
+Release `0.1.0` uses Electron, plain JavaScript, xterm.js, and node-pty. See
+[docs/architecture.md](docs/architecture.md) for the technical design.
 
-Later, Agenza may support more CLI tools and allow them to work together. For now, the goal is to build a small, useful foundation and improve it step by step.
+## User requirements
 
-The first release will use Electron with plain JavaScript, HTML, and CSS. See the [technical decision](docs/architecture.md) for the complete stack, architecture, and development prerequisites.
+- Windows 10 version 1809 or newer, or Windows 11.
+- An installed and authenticated Codex CLI.
+- The `codex` command available in a normal terminal. Verify it with `codex --version`.
 
-## First milestone
+Agenza runs Codex from the user's normal system environment. Users do not need Conda, Node.js, or
+npm to run the installed application.
 
-- Open two terminals in one app.
-- Run the Codex CLI in both terminals.
-- Use both terminals independently.
+## Install
 
-## Running Agenza
+Download `Agenza-0.1.0 Setup.exe` from the Agenza `0.1.0` GitHub Release and run it. Open Agenza
+after setup finishes.
 
-Users need Windows and an installed, authenticated Codex CLI whose `codex` command works in a
-normal terminal. Agenza uses that system command directly and does not require Conda.
+The `0.1.0` installer is not digitally signed, so Windows may show a SmartScreen warning. Only run
+an installer downloaded from the project's own GitHub Release. Code signing is deferred to a future
+release.
 
-## Development
+## Use Agenza
 
-Run every project command inside the `agenza` Conda environment. If Conda is not initialized in PowerShell, use its full executable path as described in `AGENTS.md`.
+1. Open Agenza.
+2. Select a project folder independently in each terminal pane.
+3. Wait until each pane shows **Connected**, then use Codex normally.
+4. Close the Agenza window when finished; both Codex process trees are terminated.
+
+Each pane provides these controls:
+
+- **Change folder** restarts only that pane in the newly selected directory.
+- **Copy** copies the current terminal selection.
+- **Paste** pastes clipboard text once into that terminal.
+- **Clear** clears the visible screen without stopping Codex.
+- **Restart** replaces only that pane's Codex process.
+- **F6** and **Shift+F6** move keyboard focus between panes.
+- **Ctrl+C** copies when text is selected; without a selection, it interrupts Codex.
+- **Ctrl+V** pastes into the active terminal.
+
+Project folders are selected again whenever Agenza starts; they are not persisted in `0.1.0`.
+
+## Development requirements
+
+Repository agents must run project commands through the Conda environment named `agenza`, as
+defined in [AGENTS.md](AGENTS.md). This is only a development workflow rule and is not an
+application runtime dependency.
+
+Required development tools:
+
+- Windows with ConPTY support.
+- Conda and an environment named `agenza`.
+- Node.js `22` or newer and npm inside that environment.
+- Codex CLI installed globally for interactive application testing.
+- Git.
+- Visual Studio Build Tools with the C++ workload only if node-pty cannot use its prebuilt binary.
+
+The `0.1.0` release was tested with Conda `25.11.1`, Node.js `24.18.0`, npm `11.16.0`, and Codex CLI
+`0.147.0`. Codex `0.147.0` is a tested version, not a pinned runtime requirement.
+
+Install dependencies and start the development app:
 
 ```powershell
 conda run -n agenza npm install
 conda run -n agenza npm run dev
 ```
 
-Each terminal pane has its own folder button. Choose a readable and writable project folder to start
-that pane's Codex session; the two panes may use different folders. Choosing another folder later
-restarts only that pane in the new directory. Agenza runs the `codex` command from the user's normal
-system environment; Conda is not required to run the app. Each pane also has its own **Copy**,
-**Paste**, **Clear**, and **Restart** controls. Clear removes visible terminal output without stopping
-Codex, while Restart replaces only that pane's session. If Codex exits unexpectedly, the affected
-pane shows the exit and keeps its Restart action available. Press **F6** to focus the other terminal
-or **Shift+F6** to move in the opposite direction. With text selected, **Ctrl+C** copies it; without a
-selection, **Ctrl+C** continues to interrupt Codex. **Ctrl+V** pastes once into the active terminal.
+For the shortest non-Conda instructions, see [HOWTORUN.md](HOWTORUN.md).
 
-Available validation and build commands are:
+## Tests and build commands
 
 ```powershell
 conda run -n agenza npm test
 conda run -n agenza npm run test:smoke
 conda run -n agenza npm run test:all
-conda run -n agenza npm run test:release
 conda run -n agenza npm run lint
 conda run -n agenza npm run format:check
 conda run -n agenza npm run build
 conda run -n agenza npm run make
+conda run -n agenza npm run test:release
 ```
 
-`npm test` runs the fast unit and integration suite. `npm run test:smoke` runs the already-built
-Windows package and verifies two concurrent, isolated PTYs, restart, keyboard focus, output clearing,
-window cleanup, and orphan detection. `npm run test:all` runs the unit suite, creates a fresh package,
-and then runs that smoke test in sequence. `npm run make` creates the Windows installer under
-`out/make/squirrel.windows/x64`; `npm run test:release` verifies the installer, Squirrel package,
-release manifest, packaged executable, application archive, and native ConPTY runtime.
+- `npm test` runs the fast unit and integration tests.
+- `npm run test:smoke` exercises two packaged ConPTY sessions, isolation, controls, restart, focus,
+  shutdown, and orphan detection.
+- `npm run test:all` runs the unit suite, creates a fresh package, and runs the smoke test.
+- `npm run build` creates an unpacked application under `out/Agenza-win32-x64`.
+- `npm run make` creates the Windows Squirrel installer and package under
+  `out/make/squirrel.windows/x64`.
+- `npm run test:release` checks that the installer, Squirrel metadata, application archive,
+  executable, and native ConPTY runtime are present and complete.
 
-JavaScript dependencies are recorded in `package.json` and `package-lock.json`. `requirements.txt` is reserved for any future Python tooling.
+The generated `out/` directory is intentionally ignored by Git. Release installers are attached to
+a GitHub Release instead of being committed to the repository.
 
 ## Diagnostics
 
-Agenza stores structured diagnostics in `agenza.log` inside Electron's local logs directory (normally
-`%APPDATA%\Agenza\logs` on Windows). The log records application and terminal lifecycle events,
-terminal IDs, process IDs, exit codes, and sanitized error summaries. It never records terminal
-input, terminal output, commands, environment variables, or authentication secrets. Startup and
-session errors also appear in the affected window with a short recovery action.
+Agenza stores newline-delimited JSON diagnostics in `%APPDATA%\Agenza\logs\agenza.log`. Logs include
+application and process lifecycle metadata, but never terminal input, terminal output, commands,
+environment variables, or authentication secrets.
 
-## Release 0.1.0 scope
+An error in one pane is shown locally and does not stop the other pane.
 
-The first release targets Windows. Agenza will be a local-only, single-user desktop app with no Agenza account, remote backend, or cloud synchronization. The Codex CLI may still use its own online services as normal.
+## Troubleshooting
 
-For release `0.1.0`, users will be able to:
+### Codex CLI was not found on PATH
 
-- Select a local project folder.
-- Open two embedded terminal panes for that project.
-- Run one independent Codex CLI session in each pane.
-- Type, scroll, copy, paste, resize, clear, and restart each terminal.
-- Close Agenza without leaving Codex or shell processes running.
+Open a normal terminal and run `codex --version`. Install or repair Codex if the command fails. If it
+works in the terminal, fully close and reopen Agenza so the desktop app receives the updated `PATH`.
 
-The first release is complete when these workflows work in a packaged Windows build, failures provide useful error messages, and the release checks pass.
+### A project folder cannot be used
 
-## Not included in release 0.1.0
+Choose an existing absolute directory that the current Windows user can read and write. An error or
+canceled selection in one pane does not change the other pane.
 
-- Linking agents or allowing sessions to communicate with each other.
-- CLI tools other than Codex.
-- Multiple users, user accounts, or shared workspaces.
-- An Agenza cloud service, remote storage, or cloud synchronization.
-- Mobile, web, macOS, or Linux versions.
+### Codex exited unexpectedly
+
+Use **Restart** in the affected pane. The other session should remain active. Check
+`%APPDATA%\Agenza\logs\agenza.log` if the process repeatedly exits.
+
+### The app is blank or unresponsive
+
+Close Agenza and open it again. If the problem continues, rebuild or reinstall the app and inspect
+the diagnostic log.
+
+### A build reports that conpty.node is locked
+
+Close every running Agenza window and any `npm run dev` process, then run the build again. A running
+Electron development instance keeps the native node-pty module open on Windows.
+
+### Windows warns about the installer
+
+Release `0.1.0` is not code-signed. Confirm that the file came from the project's own GitHub Release
+before choosing to run it.
+
+## Known limitations in 0.1.0
+
+- Windows only.
+- Exactly two fixed Codex terminal panes.
+- Codex is the only supported CLI.
+- Project-folder choices are not saved between app launches.
+- Sessions cannot communicate or coordinate with each other.
+- No accounts, remote backend, Agenza cloud sync, or shared workspaces.
+- No automatic updates or code signing.
+- Codex must be installed and authenticated separately and may use its own online services.
+
+The manual release checklist is recorded in
+[docs/manual-release-test.md](docs/manual-release-test.md).
