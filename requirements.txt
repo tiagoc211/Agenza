@@ -1,0 +1,2 @@
+# Agenza does not have any Python package dependencies yet.
+# Add pinned dependencies here as the application stack is implemented.
