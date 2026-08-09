@@ -64,6 +64,13 @@ The packaged startup check creates a long-running descendant process in each PTY
 closing its window. After the synchronous close cleanup, it checks both descendant PIDs and fails if
 either still exists. This exercises the same window-close path used by the normal application.
 
+The main process writes newline-delimited JSON diagnostics to `agenza.log` in Electron's local logs
+directory. Logging is limited to application, window, IPC, and terminal lifecycle metadata. The
+input and output routes never call the logger, sensitive field names are always redacted, token-like
+values and control characters are sanitized, and logging failures do not stop the app. Terminal
+startup and restart errors are caught per ID, logged without terminal content, and returned only to
+the affected pane with a concise recovery instruction.
+
 `node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
 scripts, and helper scripts relative to its package directory. A build plugin copies its runtime
 JavaScript and the current platform's prebuilt binaries into the Webpack output. Electron Forge

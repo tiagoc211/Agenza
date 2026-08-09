@@ -21,7 +21,15 @@ const assertDimension = (value, name) => {
 const isTrustedEvent = (event, window) =>
   event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
 
-const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefined }) => {
+const writeLog = (logger, level, event, details) => {
+  try {
+    return logger?.[level]?.(event, details) ?? false;
+  } catch {
+    return false;
+  }
+};
+
+const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () => undefined }) => {
   if (!ipcMain || !window || !manager) {
     throw new TypeError('Terminal IPC requires ipcMain, a window, and a terminal manager.');
   }
@@ -34,13 +42,18 @@ const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefin
 
   const outputSubscriptions = DEFAULT_SESSION_IDS.flatMap((id) => [
     manager.onData(id, (data) => sendToRenderer(TERMINAL_CHANNELS.data, { id, data })),
-    manager.onExit(id, (event) =>
+    manager.onExit(id, (event) => {
+      writeLog(logger, 'warn', 'terminal.exited', {
+        exitCode: event.exitCode,
+        signal: event.signal,
+        terminalId: id,
+      });
       sendToRenderer(TERMINAL_CHANNELS.exit, {
         id,
         exitCode: event.exitCode,
         signal: event.signal,
-      }),
-    ),
+      });
+    }),
   ]);
 
   const stopSession = (id) =>
@@ -73,35 +86,63 @@ const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefin
 
     if (id !== undefined) {
       assertSessionId(id);
-      const snapshot = manager.getSnapshot(id);
+    }
 
-      if (snapshot.isRunning) {
-        return snapshot;
+    const terminalId = id ?? 'all';
+    writeLog(logger, 'info', 'terminal.start_requested', { terminalId });
+
+    try {
+      if (id !== undefined) {
+        const snapshot = manager.getSnapshot(id);
+
+        if (snapshot.isRunning) {
+          writeLog(logger, 'info', 'terminal.start_skipped', {
+            reason: 'already running',
+            terminalId,
+          });
+          return snapshot;
+        }
+
+        const options = (await prepare(id)) ?? {};
+        const startedSession = manager.start(id, options);
+        writeLog(logger, 'info', 'terminal.start_succeeded', {
+          pid: startedSession.pid,
+          terminalId,
+        });
+        return startedSession;
       }
 
-      const options = (await prepare(id)) ?? {};
-      return manager.start(id, options);
-    }
+      const snapshots = manager.getSnapshots();
 
-    const snapshots = manager.getSnapshots();
+      if (snapshots.every((snapshot) => snapshot.isRunning)) {
+        writeLog(logger, 'info', 'terminal.start_skipped', {
+          reason: 'all sessions already running',
+          terminalId,
+        });
+        return snapshots;
+      }
 
-    if (snapshots.every((snapshot) => snapshot.isRunning)) {
-      return snapshots;
-    }
+      if (snapshots.some((snapshot) => snapshot.isRunning)) {
+        throw new Error('Terminal sessions are in an inconsistent startup state.');
+      }
 
-    if (snapshots.some((snapshot) => snapshot.isRunning)) {
-      throw new Error('Terminal sessions are in an inconsistent startup state.');
+      if (process.argv.includes('--startup-check')) {
+        console.log('[startup-check] starting terminal sessions');
+      }
+      const optionsById = (await prepare()) ?? {};
+      const startedSessions = manager.startAll(optionsById);
+      if (process.argv.includes('--startup-check')) {
+        console.log('[startup-check] terminal sessions started');
+      }
+      writeLog(logger, 'info', 'terminal.start_succeeded', {
+        sessions: startedSessions.map(({ id: startedId, pid }) => ({ id: startedId, pid })),
+        terminalId,
+      });
+      return startedSessions;
+    } catch (error) {
+      writeLog(logger, 'error', 'terminal.start_failed', { error, terminalId });
+      throw error;
     }
-
-    if (process.argv.includes('--startup-check')) {
-      console.log('[startup-check] starting terminal sessions');
-    }
-    const optionsById = (await prepare()) ?? {};
-    const startedSessions = manager.startAll(optionsById);
-    if (process.argv.includes('--startup-check')) {
-      console.log('[startup-check] terminal sessions started');
-    }
-    return startedSessions;
   };
 
   const handleRestart = async (event, payload) => {
@@ -111,9 +152,21 @@ const registerTerminalIpc = ({ ipcMain, window, manager, prepare = () => undefin
 
     const { id } = payload ?? {};
     assertSessionId(id);
-    const options = (await prepare(id)) ?? {};
-    await stopSession(id);
-    return manager.start(id, options);
+    writeLog(logger, 'info', 'terminal.restart_requested', { terminalId: id });
+
+    try {
+      const options = (await prepare(id)) ?? {};
+      await stopSession(id);
+      const restartedSession = manager.start(id, options);
+      writeLog(logger, 'info', 'terminal.restart_succeeded', {
+        pid: restartedSession.pid,
+        terminalId: id,
+      });
+      return restartedSession;
+    } catch (error) {
+      writeLog(logger, 'error', 'terminal.restart_failed', { error, terminalId: id });
+      throw error;
+    }
   };
 
   const handleInput = (event, payload) => {
@@ -165,4 +218,5 @@ module.exports = {
   STOP_TIMEOUT_MS,
   isTrustedEvent,
   registerTerminalIpc,
+  writeLog,
 };

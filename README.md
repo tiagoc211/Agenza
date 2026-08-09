@@ -44,6 +44,14 @@ conda run -n agenza npm run make
 
 JavaScript dependencies are recorded in `package.json` and `package-lock.json`. `requirements.txt` is reserved for any future Python tooling.
 
+## Diagnostics
+
+Agenza stores structured diagnostics in `agenza.log` inside Electron's local logs directory (normally
+`%APPDATA%\Agenza\logs` on Windows). The log records application and terminal lifecycle events,
+terminal IDs, process IDs, exit codes, and sanitized error summaries. It never records terminal
+input, terminal output, commands, environment variables, or authentication secrets. Startup and
+session errors also appear in the affected window with a short recovery action.
+
 ## Release 0.1.0 scope
 
 The first release targets Windows. Agenza will be a local-only, single-user desktop app with no Agenza account, remote backend, or cloud synchronization. The Codex CLI may still use its own online services as normal.

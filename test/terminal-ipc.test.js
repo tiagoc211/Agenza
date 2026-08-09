@@ -31,6 +31,7 @@ class FakeIpcMain {
 
 const createHarness = () => {
   const ipcMain = new FakeIpcMain();
+  const logEntries = [];
   const sentMessages = [];
   const mainFrame = {};
   const webContents = {
@@ -48,6 +49,7 @@ const createHarness = () => {
   const resizes = [];
   let startCount = 0;
   let prepareCount = 0;
+  let prepareError = null;
   let snapshots = [
     { id: 'terminal-one', isRunning: false },
     { id: 'terminal-two', isRunning: false },
@@ -90,9 +92,18 @@ const createHarness = () => {
 
   const dispose = registerTerminalIpc({
     ipcMain,
+    logger: {
+      error: (event, details) => logEntries.push({ details, event, level: 'error' }),
+      info: (event, details) => logEntries.push({ details, event, level: 'info' }),
+      warn: (event, details) => logEntries.push({ details, event, level: 'warn' }),
+    },
     manager,
     prepare: async () => {
       prepareCount += 1;
+
+      if (prepareError) {
+        throw prepareError;
+      }
     },
     window,
   });
@@ -102,10 +113,14 @@ const createHarness = () => {
     dispose,
     exitListeners,
     ipcMain,
+    logEntries,
     manager,
     prepareCount: () => prepareCount,
     resizes,
     sentMessages,
+    setPrepareError: (error) => {
+      prepareError = error;
+    },
     startCount: () => startCount,
     trustedEvent: { sender: webContents, senderFrame: mainFrame },
     writes,
@@ -179,6 +194,35 @@ test('starts and restarts one terminal without changing the other', async () => 
   assert.equal(restarted.isRunning, true);
   assert.deepEqual(harness.manager.getSnapshot('terminal-two'), secondBeforeRestart);
   assert.equal(harness.startCount(), 2);
+
+  harness.dispose();
+});
+
+test('keeps a startup failure isolated to its terminal and records a safe diagnostic event', async () => {
+  const harness = createHarness();
+  const start = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.start);
+  const startupError = new Error('Codex is unavailable');
+
+  harness.setPrepareError(startupError);
+  await assert.rejects(start(harness.trustedEvent, { id: 'terminal-one' }), startupError);
+
+  assert.equal(harness.manager.getSnapshot('terminal-one').isRunning, false);
+  assert.equal(harness.manager.getSnapshot('terminal-two').isRunning, false);
+  assert.deepEqual(
+    harness.logEntries.find(({ event }) => event === 'terminal.start_failed'),
+    {
+      details: { error: startupError, terminalId: 'terminal-one' },
+      event: 'terminal.start_failed',
+      level: 'error',
+    },
+  );
+
+  harness.setPrepareError(null);
+  const secondSession = await start(harness.trustedEvent, { id: 'terminal-two' });
+
+  assert.equal(secondSession.isRunning, true);
+  assert.equal(harness.manager.getSnapshot('terminal-one').isRunning, false);
+  assert.equal(harness.manager.getSnapshot('terminal-two').isRunning, true);
 
   harness.dispose();
 });

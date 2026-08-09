@@ -61,3 +61,11 @@ test('supports accessible terminal focus switching without taking terminal short
   assert.match(styles, /\.terminal-pane:focus-within/);
   assert.match(styles, /\.pane-action-button:focus-visible/);
 });
+
+test('shows concise, terminal-local recovery instructions for failures', () => {
+  assert.match(renderer, /const formatUserFacingError/);
+  assert.match(renderer, /\.slice\(0, 500\)/);
+  assert.match(renderer, /Check the agenza Conda environment and Codex installation/);
+  assert.match(renderer, /Choose a readable and writable project folder/);
+  assert.match(renderer, /showSessionFailure\(view/);
+});

@@ -140,7 +140,7 @@
       "id": "T012",
       "order": 12,
       "title": "Add application logging and user-facing error handling",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T007", "T010"],
       "acceptance_criteria": [
         "Startup and process failures provide concise recovery instructions.",

@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const startedByInstaller = require('electron-squirrel-startup');
 
 const { createResourceDisposer } = require('./lifecycle/resource-disposer');
+const { createAppLogger, createNoopLogger } = require('./logging/app-logger');
 const { registerProjectFolderIpc } = require('./project/project-folder');
 const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
 const { DEFAULT_SESSION_IDS, TerminalManager } = require('./terminal/terminal-manager');
@@ -11,6 +12,7 @@ const { createWindowOptions } = require('./window-options');
 
 const isStartupCheck = process.argv.includes('--startup-check');
 const STARTUP_CHECK_CHILD_TIMEOUT_MS = 10000;
+let appLogger = createNoopLogger();
 const startupCheckLog = (...values) => {
   if (isStartupCheck) {
     console.log('[startup-check]', ...values);
@@ -60,6 +62,7 @@ if (startedByInstaller) {
 const createMainWindow = () => {
   startupCheckLog('creating window');
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
+  appLogger.info('window.created');
   const terminalManager = new TerminalManager();
   const projectFolderIpc = registerProjectFolderIpc({
     dialog,
@@ -73,6 +76,7 @@ const createMainWindow = () => {
   });
   const disposeTerminalIpc = registerTerminalIpc({
     ipcMain,
+    logger: appLogger,
     window,
     manager: terminalManager,
     prepare: isStartupCheck
@@ -98,16 +102,39 @@ const createMainWindow = () => {
 
     if (disposalErrors.length > 0) {
       process.exitCode = 1;
-      console.error(
-        'Agenza could not clean up every window resource:',
-        disposalErrors.map(({ label, error }) => `${label}: ${error.message}`).join('; '),
-      );
+      appLogger.error('window.cleanup_failed', {
+        failures: disposalErrors.map(({ label, error }) => ({ error, label })),
+      });
+
+      if (isStartupCheck) {
+        console.error(
+          'Agenza could not clean up every window resource:',
+          disposalErrors.map(({ label, error }) => `${label}: ${error.message}`).join('; '),
+        );
+      }
+    } else {
+      appLogger.info('window.closed');
     }
   });
 
   window.setMenuBarVisibility(false);
+  window.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, _validatedUrl, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) {
+        return;
+      }
+
+      appLogger.error('window.load_failed', { errorCode, errorDescription });
+      dialog.showErrorBox(
+        'Agenza could not load',
+        'Close and restart Agenza. If the problem continues, rebuild or reinstall the app and check agenza.log.',
+      );
+    },
+  );
   window.webContents.once('did-finish-load', async () => {
     startupCheckLog('renderer loaded');
+    appLogger.info('window.renderer_loaded');
     if (isStartupCheck) {
       try {
         const layout = await window.webContents.executeJavaScript(`(async () => {
@@ -313,14 +340,43 @@ const createMainWindow = () => {
   return window;
 };
 
-app.whenReady().then(() => {
-  createMainWindow();
+const handleStartupFailure = (error) => {
+  appLogger.error('app.start_failed', { error });
+  dialog.showErrorBox(
+    'Agenza could not start',
+    'Restart Agenza. If the problem continues, verify the installation and check agenza.log for diagnostics.',
+  );
+  app.exit(1);
+};
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+app
+  .whenReady()
+  .then(() => {
+    try {
+      app.setAppLogsPath();
+    } catch {
+      // Electron may already have a logs path configured by the host environment.
     }
-  });
+
+    appLogger = createAppLogger({ directory: app.getPath('logs') });
+    startupCheckLog('diagnostic log', appLogger.filePath);
+    appLogger.info('app.ready', { platform: process.platform, version: app.getVersion() });
+    createMainWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        try {
+          createMainWindow();
+        } catch (error) {
+          handleStartupFailure(error);
+        }
+      }
+    });
+  })
+  .catch(handleStartupFailure);
+
+app.on('before-quit', () => {
+  appLogger.info('app.quitting');
 });
 
 app.on('window-all-closed', () => {

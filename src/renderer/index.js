@@ -125,6 +125,27 @@ const setSessionState = (view, state, label, description) => {
   );
 };
 
+const formatUserFacingError = (error, fallback = 'An unexpected error occurred.') => {
+  const message = typeof error?.message === 'string' ? error.message : fallback;
+  const printableMessage = [...message]
+    .map((character) => {
+      const codePoint = character.codePointAt(0);
+      return codePoint >= 32 && (codePoint < 127 || codePoint > 159) ? character : ' ';
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return (printableMessage || fallback).slice(0, 500);
+};
+
+const showSessionFailure = (view, { description, error, heading, recovery }) => {
+  view.terminal.writeln(`\r\n\x1b[31m${heading}\x1b[0m`);
+  view.terminal.writeln(`\x1b[31m${formatUserFacingError(error)}\x1b[0m`);
+  view.terminal.writeln(`\x1b[90m${recovery}\x1b[0m`);
+  setSessionState(view, 'error', 'Error', description);
+};
+
 const setControlsBusy = (view, isBusy) => {
   view.isBusy = isBusy;
   view.projectButton.disabled = isBusy;
@@ -208,9 +229,12 @@ const launchSession = async (view, { restart, failureMessage }) => {
   } catch (error) {
     view.isConnected = false;
     view.terminal.options.disableStdin = true;
-    view.terminal.writeln(`\r\n\x1b[31m${failureMessage}: ${error.message}\x1b[0m`);
-    view.terminal.writeln('\x1b[90mUse Restart above to try again.\x1b[0m');
-    setSessionState(view, 'error', 'Error', 'Codex could not start — retry available');
+    showSessionFailure(view, {
+      description: 'Codex could not start - check setup and retry',
+      error,
+      heading: `${failureMessage}.`,
+      recovery: 'Check the agenza Conda environment and Codex installation, then use Restart.',
+    });
   } finally {
     view.isRestarting = false;
     setControlsBusy(view, false);
@@ -241,8 +265,12 @@ const chooseProjectFolder = async (view) => {
   } catch (error) {
     view.isConnected = false;
     view.terminal.options.disableStdin = true;
-    view.terminal.writeln(`\r\n\x1b[31mUnable to use project folder: ${error.message}\x1b[0m`);
-    setSessionState(view, 'error', 'Error', 'Project folder unavailable');
+    showSessionFailure(view, {
+      description: 'Project folder unavailable - choose another folder',
+      error,
+      heading: 'Unable to use project folder.',
+      recovery: 'Choose a readable and writable project folder, then try again.',
+    });
   } finally {
     setControlsBusy(view, false);
     view.projectButton.textContent = view.projectFolder ? 'Change folder' : 'Choose folder';
