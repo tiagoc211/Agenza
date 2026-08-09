@@ -26,7 +26,10 @@ conda run -n agenza npm run dev
 Each terminal pane has its own folder button. Choose a readable and writable project folder to start
 that pane's Codex session; the two panes may use different folders. Choosing another folder later
 restarts only that pane in the new directory. Agenza checks that Conda can run Codex from the
-`agenza` environment before each session starts.
+`agenza` environment before each session starts. Each pane also has its own **Clear** and **Restart**
+controls. Clear removes visible terminal output without stopping Codex, while Restart replaces only
+that pane's session. If Codex exits unexpectedly, the affected pane shows the exit and keeps its
+Restart action available.
 
 Available validation and build commands are:
 

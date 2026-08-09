@@ -37,5 +37,14 @@ test('selects and displays a project folder before starting sessions', () => {
   assert.match(renderer, /window\.agenza\.project\.selectFolder\(view\.id\)/);
   assert.match(renderer, /window\.agenza\.terminal\.start\(view\.id\)/);
   assert.match(renderer, /window\.agenza\.terminal\.restart\(view\.id\)/);
-  assert.match(renderer, /setSessionState\(view, 'connected', 'Connected', result\.path\)/);
+  assert.match(renderer, /setSessionState\(view, 'connected', 'Connected', view\.projectFolder\)/);
+});
+
+test('provides independent clear and restart controls for each terminal', () => {
+  assert.equal((html.match(/data-clear-button/g) ?? []).length, 2);
+  assert.equal((html.match(/data-restart-button/g) ?? []).length, 2);
+  assert.match(renderer, /view\.terminal\.clear\(\)/);
+  assert.match(renderer, /window\.agenza\.terminal\.restart\(view\.id\)/);
+  assert.match(renderer, /Use Restart above to launch this session again/);
+  assert.match(renderer, /setSessionState\(view, 'exited', 'Exited'/);
 });

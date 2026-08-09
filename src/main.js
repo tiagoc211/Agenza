@@ -120,6 +120,55 @@ const createMainWindow = () => {
 
           const firstTerminalText = getTerminalText('terminal-one');
           const secondTerminalText = getTerminalText('terminal-two');
+          const firstOutputIsIsolated =
+            firstTerminalText.includes(firstMarker) &&
+            !firstTerminalText.includes(secondMarker);
+          const secondOutputIsIsolated =
+            secondTerminalText.includes(secondMarker) &&
+            !secondTerminalText.includes(firstMarker);
+
+          document
+            .querySelector('[data-pane-id="terminal-two"] [data-clear-button]')
+            ?.click();
+          const clearDeadline = Date.now() + 2000;
+          while (
+            getTerminalText('terminal-two').includes(secondMarker) &&
+            Date.now() < clearDeadline
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          const clearRemovedVisibleOutput = !getTerminalText('terminal-two').includes(secondMarker);
+
+          window.agenza.terminal.write('terminal-one', 'exit\\r');
+          const exitDeadline = Date.now() + 10000;
+          const firstPane = document.querySelector('[data-pane-id="terminal-one"]');
+          while (firstPane?.dataset.sessionState !== 'exited' && Date.now() < exitDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+
+          const restartButton = firstPane?.querySelector('[data-restart-button]');
+          const unexpectedExitWasShown = firstPane?.dataset.sessionState === 'exited';
+          const restartWasAvailable = restartButton ? !restartButton.disabled : false;
+          restartButton?.click();
+
+          const restartDeadline = Date.now() + 15000;
+          while (firstPane?.dataset.sessionState !== 'connected' && Date.now() < restartDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+
+          const restartMarker = 'AGENZA_T009_RESTARTED_TERMINAL_ONE';
+          window.agenza.terminal.write(
+            'terminal-one',
+            "Write-Output '" + restartMarker + "'\\r",
+          );
+          const restartOutputDeadline = Date.now() + 10000;
+          while (
+            !getTerminalText('terminal-one').includes(restartMarker) &&
+            Date.now() < restartOutputDeadline
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+
           const grid = document.querySelector('.terminal-grid');
           return {
             terminalCount: document.querySelectorAll('.terminal-mount .xterm').length,
@@ -130,12 +179,15 @@ const createMainWindow = () => {
             gridColumnCount: grid
               ? window.getComputedStyle(grid).gridTemplateColumns.split(' ').length
               : 0,
-            firstOutputIsIsolated:
-              firstTerminalText.includes(firstMarker) &&
-              !firstTerminalText.includes(secondMarker),
-            secondOutputIsIsolated:
-              secondTerminalText.includes(secondMarker) &&
-              !secondTerminalText.includes(firstMarker),
+            clearRemovedVisibleOutput,
+            firstOutputIsIsolated,
+            restartOutputReceived: getTerminalText('terminal-one').includes(restartMarker),
+            restartWasAvailable,
+            secondOutputIsIsolated,
+            secondTerminalStayedConnected:
+              document.querySelector('[data-pane-id="terminal-two"]')?.dataset.sessionState ===
+              'connected',
+            unexpectedExitWasShown,
           };
         })()`);
 
@@ -144,8 +196,13 @@ const createMainWindow = () => {
           layout.activePaneCount !== 1 ||
           layout.connectedPaneCount !== 2 ||
           layout.gridColumnCount !== 2 ||
+          !layout.clearRemovedVisibleOutput ||
           !layout.firstOutputIsIsolated ||
-          !layout.secondOutputIsIsolated
+          !layout.restartOutputReceived ||
+          !layout.restartWasAvailable ||
+          !layout.secondOutputIsIsolated ||
+          !layout.secondTerminalStayedConnected ||
+          !layout.unexpectedExitWasShown
         ) {
           throw new Error(`Unexpected terminal layout: ${JSON.stringify(layout)}`);
         }

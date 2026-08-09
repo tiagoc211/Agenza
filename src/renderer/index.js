@@ -47,8 +47,10 @@ for (const definition of paneDefinitions) {
   const mount = document.querySelector(`#${definition.id}`);
   const pane = mount?.closest('.terminal-pane');
   const projectButton = pane?.querySelector('[data-project-button]');
+  const clearButton = pane?.querySelector('[data-clear-button]');
+  const restartButton = pane?.querySelector('[data-restart-button]');
 
-  if (!mount || !pane || !projectButton) {
+  if (!mount || !pane || !projectButton || !clearButton || !restartButton) {
     continue;
   }
 
@@ -78,12 +80,15 @@ for (const definition of paneDefinitions) {
   mount.addEventListener('focusin', () => setActivePane(pane));
 
   const view = {
+    clearButton,
     id: definition.id,
     fitAddon,
+    isBusy: false,
     isRestarting: false,
     pane,
     projectButton,
     projectFolder: null,
+    restartButton,
     terminal,
     isConnected: false,
   };
@@ -108,6 +113,16 @@ const setSessionState = (view, state, label, description) => {
   const descriptionElement = view.pane.querySelector('[data-terminal-description]');
   descriptionElement.textContent = description;
   descriptionElement.title = description;
+  view.restartButton.classList.toggle(
+    'is-recovery-action',
+    state === 'exited' || state === 'error',
+  );
+};
+
+const setControlsBusy = (view, isBusy) => {
+  view.isBusy = isBusy;
+  view.projectButton.disabled = isBusy;
+  view.restartButton.disabled = isBusy || !view.projectFolder;
 };
 
 const disposeDataSubscription = window.agenza.terminal.onData(({ id, data }) => {
@@ -128,8 +143,10 @@ const disposeExitSubscription = window.agenza.terminal.onExit(({ id, exitCode })
     return;
   }
 
-  view.terminal.writeln(`\r\n\x1b[90mProcess exited with code ${exitCode}.\x1b[0m`);
-  setSessionState(view, 'exited', 'Exited', 'Codex stopped');
+  view.terminal.writeln(`\r\n\x1b[31mCodex exited unexpectedly with code ${exitCode}.\x1b[0m`);
+  view.terminal.writeln('\x1b[90mUse Restart above to launch this session again.\x1b[0m');
+  setSessionState(view, 'exited', 'Exited', 'Codex stopped — restart available');
+  view.restartButton.disabled = !view.projectFolder || view.isBusy;
 });
 
 let resizeFrame;
@@ -151,12 +168,55 @@ if (terminalGrid) {
 
 fitTerminals();
 
+const launchSession = async (view, { restart, failureMessage }) => {
+  setControlsBusy(view, true);
+  view.isRestarting = restart;
+  view.isConnected = false;
+  view.terminal.options.disableStdin = true;
+  view.terminal.reset();
+  view.terminal.writeln(`\x1b[1;36mAgenza ${view.id}\x1b[0m`);
+  view.terminal.writeln(`\x1b[90mProject: ${view.projectFolder}\x1b[0m`);
+  setSessionState(
+    view,
+    restart ? 'restarting' : 'starting',
+    restart ? 'Restarting' : 'Starting',
+    view.projectFolder,
+  );
+
+  try {
+    const snapshot = restart
+      ? await window.agenza.terminal.restart(view.id)
+      : await window.agenza.terminal.start(view.id);
+
+    if (!snapshot.isRunning) {
+      throw new Error('The Codex process did not stay running.');
+    }
+
+    view.isConnected = true;
+    view.terminal.options.disableStdin = false;
+    setSessionState(view, 'connected', 'Connected', view.projectFolder);
+    view.fitAddon.fit();
+    window.agenza.terminal.resize(view.id, view.terminal.cols, view.terminal.rows);
+    setActivePane(view.pane);
+    view.terminal.focus();
+  } catch (error) {
+    view.isConnected = false;
+    view.terminal.options.disableStdin = true;
+    view.terminal.writeln(`\r\n\x1b[31m${failureMessage}: ${error.message}\x1b[0m`);
+    view.terminal.writeln('\x1b[90mUse Restart above to try again.\x1b[0m');
+    setSessionState(view, 'error', 'Error', 'Codex could not start — retry available');
+  } finally {
+    view.isRestarting = false;
+    setControlsBusy(view, false);
+  }
+};
+
 const chooseProjectFolder = async (view) => {
-  if (view.projectButton.disabled) {
+  if (view.isBusy) {
     return;
   }
 
-  view.projectButton.disabled = true;
+  setControlsBusy(view, true);
   view.projectButton.textContent = 'Selecting...';
 
   try {
@@ -168,39 +228,38 @@ const chooseProjectFolder = async (view) => {
 
     const isRestart = view.isConnected;
     view.projectFolder = result.path;
-    view.isRestarting = isRestart;
-    view.isConnected = false;
-    view.terminal.options.disableStdin = true;
-    view.terminal.reset();
-    view.terminal.writeln(`\x1b[1;36mAgenza ${view.id}\x1b[0m`);
-    view.terminal.writeln(`\x1b[90mProject: ${result.path}\x1b[0m`);
-    setSessionState(view, isRestart ? 'restarting' : 'starting', 'Starting', result.path);
-
-    const snapshot = isRestart
-      ? await window.agenza.terminal.restart(view.id)
-      : await window.agenza.terminal.start(view.id);
-
-    view.isRestarting = false;
-    view.isConnected = snapshot.isRunning;
-    view.terminal.options.disableStdin = !snapshot.isRunning;
-    setSessionState(view, 'connected', 'Connected', result.path);
-    view.fitAddon.fit();
-    window.agenza.terminal.resize(view.id, view.terminal.cols, view.terminal.rows);
-    view.terminal.focus();
+    await launchSession(view, {
+      restart: isRestart,
+      failureMessage: 'Unable to use project folder',
+    });
   } catch (error) {
-    view.isRestarting = false;
     view.isConnected = false;
     view.terminal.options.disableStdin = true;
     view.terminal.writeln(`\r\n\x1b[31mUnable to use project folder: ${error.message}\x1b[0m`);
     setSessionState(view, 'error', 'Error', 'Project folder unavailable');
   } finally {
-    view.projectButton.disabled = false;
+    setControlsBusy(view, false);
     view.projectButton.textContent = view.projectFolder ? 'Change folder' : 'Choose folder';
   }
 };
 
 for (const view of terminalViews.values()) {
   view.projectButton.addEventListener('click', () => chooseProjectFolder(view));
+  view.clearButton.addEventListener('click', () => {
+    view.terminal.clear();
+    setActivePane(view.pane);
+    view.terminal.focus();
+  });
+  view.restartButton.addEventListener('click', () => {
+    if (!view.projectFolder || view.isBusy) {
+      return;
+    }
+
+    launchSession(view, {
+      restart: true,
+      failureMessage: 'Unable to restart Codex',
+    });
+  });
 }
 
 window.addEventListener('beforeunload', () => {

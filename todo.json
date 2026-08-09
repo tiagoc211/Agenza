@@ -92,7 +92,7 @@
       "id": "T008",
       "order": 8,
       "title": "Add project-folder selection",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": ["T007"],
       "acceptance_criteria": [
         "The user can select the working directory used by the Codex sessions.",
@@ -104,7 +104,7 @@
       "id": "T009",
       "order": 9,
       "title": "Add terminal session controls",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T007"],
       "acceptance_criteria": [
         "Each terminal can be restarted independently.",

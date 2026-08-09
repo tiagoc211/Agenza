@@ -41,6 +41,11 @@ Codex session with the folder as `cwd`; a later selection stops and restarts onl
 pane header displays its own full project path. Cancellation and validation errors leave the other
 terminal untouched.
 
+Session controls are scoped by the same fixed terminal IDs. Clearing is a renderer-only xterm
+operation and does not stop Codex. Restarting asks the main process to replace only the selected
+PTY. An unexpected exit disables input in that pane, displays the exit status, and leaves its
+restart control enabled; the other pane continues running.
+
 `node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
 scripts, and helper scripts relative to its package directory. A build plugin copies its runtime
 JavaScript and the current platform's prebuilt binaries into the Webpack output. Electron Forge

@@ -147,6 +147,7 @@ body {
   justify-content: space-between;
   min-width: 0;
   min-height: 54px;
+  gap: 0.5rem;
   padding: 0.55rem 0.75rem;
   border-bottom: 1px solid #1c2330;
   background: #111620;
@@ -188,29 +189,44 @@ body {
 .pane-actions {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
-.pane-project-button {
+.pane-action-button {
   padding: 0.25rem 0.5rem;
-  border: 1px solid #31566b;
+  border: 1px solid #354052;
   border-radius: 5px;
-  background: #102532;
-  color: #91e0ff;
+  background: #171d28;
+  color: #b1bccb;
   font-size: 0.66rem;
   cursor: pointer;
 }
 
-.pane-project-button:hover:not(:disabled),
-.pane-project-button:focus-visible {
+.pane-project-button {
+  border: 1px solid #31566b;
+  background: #102532;
+  color: #91e0ff;
+}
+
+.pane-action-button:hover:not(:disabled),
+.pane-action-button:focus-visible {
   border-color: #68d5ff;
   outline: none;
 }
 
-.pane-project-button:disabled {
+.pane-action-button:disabled {
   color: #718093;
-  cursor: wait;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.pane-action-button.is-recovery-action:not(:disabled) {
+  border-color: #8e5364;
+  background: #321923;
+  color: #ff9bad;
 }
 
 .terminal-pane[data-session-state='connected'] .pane-state {
