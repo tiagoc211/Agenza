@@ -33,10 +33,12 @@ const isTrustedEvent = (event, window) =>
   event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
 
 const registerProjectFolderIpc = ({
+  defaultFolder = null,
   dialog,
   folderIds,
   initialFolders = {},
   ipcMain,
+  isValidFolderId,
   skipDialog = false,
   validate = validateProjectFolder,
   window,
@@ -45,12 +47,17 @@ const registerProjectFolderIpc = ({
     throw new TypeError('Project folder IPC requires dialog, ipcMain, and a window.');
   }
 
-  if (!Array.isArray(folderIds) || folderIds.length === 0) {
-    throw new TypeError('Project folder IPC requires at least one terminal id.');
+  if (isValidFolderId !== undefined && typeof isValidFolderId !== 'function') {
+    throw new TypeError('Project folder IPC terminal validation must be a function.');
   }
 
-  const validFolderIds = new Set(folderIds);
-  const currentFolders = new Map(folderIds.map((id) => [id, initialFolders[id] ?? null]));
+  if (!isValidFolderId && (!Array.isArray(folderIds) || folderIds.length === 0)) {
+    throw new TypeError('Project folder IPC requires terminal id validation.');
+  }
+
+  const validFolderIds = new Set(folderIds ?? []);
+  const isValidId = isValidFolderId ?? ((id) => validFolderIds.has(id));
+  const currentFolders = new Map(Object.entries(initialFolders));
 
   const handleSelectFolder = async (event, payload) => {
     if (!isTrustedEvent(event, window)) {
@@ -59,13 +66,14 @@ const registerProjectFolderIpc = ({
 
     const { id } = payload ?? {};
 
-    if (!validFolderIds.has(id)) {
+    if (typeof id !== 'string' || !isValidId(id)) {
       throw new Error('Invalid terminal project id.');
     }
 
-    const currentFolder = currentFolders.get(id);
+    const currentFolder = currentFolders.get(id) ?? defaultFolder;
 
     if (skipDialog && currentFolder) {
+      currentFolders.set(id, currentFolder);
       return { canceled: false, id, path: currentFolder };
     }
 

@@ -19,14 +19,23 @@
             <p>Codex workspace</p>
           </div>
         </div>
-        <div class="workspace-status" aria-label="Workspace status">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span>2 independent terminals</span>
+        <div class="workspace-actions">
+          <div class="workspace-status" aria-label="Workspace status" aria-live="polite">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span data-terminal-count>No terminals</span>
+          </div>
+          <button class="add-terminal-button" type="button" data-add-terminal>
+            <span aria-hidden="true">+</span>
+            Add terminal
+          </button>
         </div>
       </header>
 
       <main
         class="terminal-grid"
+        data-terminal-grid
+        data-terminal-count="0"
+        data-workspace-ready="false"
         aria-label="Codex terminal workspace"
         aria-describedby="terminal-keyboard-help"
         aria-keyshortcuts="F6 Shift+F6"
@@ -34,152 +43,67 @@
         <span class="visually-hidden" id="terminal-keyboard-help">
           Press F6 to focus the next terminal or Shift plus F6 to focus the previous terminal.
         </span>
-        <section
-          class="terminal-pane is-active"
-          data-pane-id="terminal-one"
-          data-session-state="waiting"
-          aria-labelledby="terminal-one-title"
-        >
-          <header class="pane-header">
-            <div class="pane-identity">
-              <span class="pane-number" aria-hidden="true">01</span>
-              <div>
-                <h2 id="terminal-one-title">Codex one</h2>
-                <p data-terminal-description>Choose a project folder</p>
-              </div>
-            </div>
-            <div class="pane-actions">
-              <button
-                class="pane-action-button pane-project-button"
-                type="button"
-                data-project-button
-              >
-                Choose folder
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Copy selected text from Codex terminal one"
-                data-copy-button
-                disabled
-              >
-                Copy
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Paste text into Codex terminal one"
-                data-paste-button
-                disabled
-              >
-                Paste
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Clear Codex terminal one"
-                data-clear-button
-              >
-                Clear
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Restart Codex terminal one"
-                data-restart-button
-                disabled
-              >
-                Restart
-              </button>
-              <span
-                class="pane-state"
-                role="status"
-                aria-atomic="true"
-                aria-live="polite"
-                data-terminal-state
-              >
-                Waiting
-              </span>
-            </div>
-          </header>
-          <div class="terminal-frame">
-            <div class="terminal-mount" id="terminal-one" aria-label="Codex terminal one"></div>
-          </div>
-        </section>
-
-        <section
-          class="terminal-pane"
-          data-pane-id="terminal-two"
-          data-session-state="waiting"
-          aria-labelledby="terminal-two-title"
-        >
-          <header class="pane-header">
-            <div class="pane-identity">
-              <span class="pane-number" aria-hidden="true">02</span>
-              <div>
-                <h2 id="terminal-two-title">Codex two</h2>
-                <p data-terminal-description>Choose a project folder</p>
-              </div>
-            </div>
-            <div class="pane-actions">
-              <button
-                class="pane-action-button pane-project-button"
-                type="button"
-                data-project-button
-              >
-                Choose folder
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Copy selected text from Codex terminal two"
-                data-copy-button
-                disabled
-              >
-                Copy
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Paste text into Codex terminal two"
-                data-paste-button
-                disabled
-              >
-                Paste
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Clear Codex terminal two"
-                data-clear-button
-              >
-                Clear
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Restart Codex terminal two"
-                data-restart-button
-                disabled
-              >
-                Restart
-              </button>
-              <span
-                class="pane-state"
-                role="status"
-                aria-atomic="true"
-                aria-live="polite"
-                data-terminal-state
-              >
-                Waiting
-              </span>
-            </div>
-          </header>
-          <div class="terminal-frame">
-            <div class="terminal-mount" id="terminal-two" aria-label="Codex terminal two"></div>
-          </div>
+        <section class="empty-workspace" data-empty-workspace>
+          <span class="empty-workspace-mark" aria-hidden="true">&gt;_</span>
+          <h2>No terminals open</h2>
+          <p>Add a terminal to choose a project folder and start Codex.</p>
+          <button class="empty-workspace-action" type="button" data-empty-add-terminal>
+            Add terminal
+          </button>
         </section>
       </main>
+
+      <template id="terminal-pane-template">
+        <section class="terminal-pane" data-session-state="waiting">
+          <header class="pane-header">
+            <div class="pane-identity">
+              <span class="pane-number" aria-hidden="true" data-terminal-number></span>
+              <div>
+                <h2 data-terminal-title></h2>
+                <p data-terminal-description>Choose a project folder</p>
+              </div>
+            </div>
+            <div class="pane-actions">
+              <button
+                class="pane-action-button pane-project-button"
+                type="button"
+                data-project-button
+              >
+                Choose folder
+              </button>
+              <button class="pane-action-button" type="button" data-copy-button disabled>
+                Copy
+              </button>
+              <button class="pane-action-button" type="button" data-paste-button disabled>
+                Paste
+              </button>
+              <button class="pane-action-button" type="button" data-clear-button>Clear</button>
+              <button class="pane-action-button" type="button" data-restart-button disabled>
+                Restart
+              </button>
+              <button
+                class="pane-action-button pane-remove-button"
+                type="button"
+                data-remove-button
+              >
+                Remove
+              </button>
+              <span
+                class="pane-state"
+                role="status"
+                aria-atomic="true"
+                aria-live="polite"
+                data-terminal-state
+              >
+                Waiting
+              </span>
+            </div>
+          </header>
+          <div class="terminal-frame">
+            <div class="terminal-mount" data-terminal-mount></div>
+          </div>
+        </section>
+      </template>
 
       <footer class="status-bar">
         <span>Local workspace</span>

@@ -112,6 +112,10 @@ test('generates stable UUID terminal ids and starts with an empty dynamic regist
 
   assert.deepEqual(manager.list(), []);
   assert.match(generatedId, TERMINAL_SESSION_ID_PATTERN);
+  assert.throws(
+    () => new TerminalManager({ initialSessionIds: ['terminal-one'] }),
+    /terminal UUID format/,
+  );
   manager.dispose();
 });
 

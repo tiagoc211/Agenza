@@ -4,7 +4,12 @@ import '@xterm/xterm/css/xterm.css';
 import './styles.css';
 
 const environment = document.querySelector('#environment');
-const panes = [...document.querySelectorAll('.terminal-pane')];
+const terminalGrid = document.querySelector('[data-terminal-grid]');
+const terminalPaneTemplate = document.querySelector('#terminal-pane-template');
+const addTerminalButton = document.querySelector('[data-add-terminal]');
+const emptyAddTerminalButton = document.querySelector('[data-empty-add-terminal]');
+const emptyWorkspace = document.querySelector('[data-empty-workspace]');
+const terminalCount = document.querySelector('[data-terminal-count]:not(.terminal-grid)');
 
 const terminalTheme = {
   background: '#090c12',
@@ -30,110 +35,46 @@ const terminalTheme = {
   brightYellow: '#ffe09c',
 };
 
-const paneDefinitions = [
-  { id: 'terminal-one', label: '01' },
-  { id: 'terminal-two', label: '02' },
-];
-
 const terminalViews = new Map();
+let nextLabelNumber = 1;
+let resizeFrame;
+
+const getOrderedViews = () => [...terminalViews.values()];
 
 const setActivePane = (activePane) => {
-  for (const pane of panes) {
+  for (const { pane } of terminalViews.values()) {
     const isActive = pane === activePane;
     pane.classList.toggle('is-active', isActive);
     pane.dataset.activePane = String(isActive);
   }
 };
 
-for (const definition of paneDefinitions) {
-  const mount = document.querySelector(`#${definition.id}`);
-  const pane = mount?.closest('.terminal-pane');
-  const projectButton = pane?.querySelector('[data-project-button]');
-  const copyButton = pane?.querySelector('[data-copy-button]');
-  const pasteButton = pane?.querySelector('[data-paste-button]');
-  const clearButton = pane?.querySelector('[data-clear-button]');
-  const restartButton = pane?.querySelector('[data-restart-button]');
+const updateWorkspaceLayout = () => {
+  const count = terminalViews.size;
 
-  if (
-    !mount ||
-    !pane ||
-    !projectButton ||
-    !copyButton ||
-    !pasteButton ||
-    !clearButton ||
-    !restartButton
-  ) {
-    continue;
-  }
+  terminalGrid.dataset.terminalCount = String(count);
+  emptyWorkspace.hidden = count !== 0;
+  terminalCount.textContent =
+    count === 0 ? 'No terminals' : `${count} ${count === 1 ? 'terminal' : 'terminals'}`;
+};
 
-  const terminal = new Terminal({
-    allowTransparency: false,
-    convertEol: true,
-    cursorBlink: true,
-    disableStdin: true,
-    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
-    fontSize: 14,
-    lineHeight: 1.25,
-    screenReaderMode: true,
-    scrollback: 5000,
-    theme: terminalTheme,
-  });
-  const fitAddon = new FitAddon();
-
-  terminal.loadAddon(fitAddon);
-  terminal.open(mount);
-  terminal.writeln(`\x1b[1;36mAgenza terminal ${definition.label}\x1b[0m`);
-  terminal.writeln('');
-  terminal.writeln('\x1b[90mChoose a project folder to start Codex.\x1b[0m');
-
-  pane.addEventListener('pointerdown', (event) => {
-    setActivePane(pane);
-
-    if (!event.target.closest?.('button') && !event.target.closest?.('.xterm')) {
-      terminal.focus();
+const fitTerminals = () => {
+  window.cancelAnimationFrame(resizeFrame);
+  resizeFrame = window.requestAnimationFrame(() => {
+    for (const { fitAddon } of terminalViews.values()) {
+      fitAddon.fit();
     }
   });
-  pane.addEventListener('focusin', () => setActivePane(pane));
+};
 
-  const view = {
-    clearButton,
-    copyButton,
-    id: definition.id,
-    fitAddon,
-    isBusy: false,
-    isRestarting: false,
-    pane,
-    pasteButton,
-    projectButton,
-    projectFolder: null,
-    restartButton,
-    terminal,
-    isConnected: false,
-  };
-
-  terminal.onData((data) => {
-    if (view.isConnected) {
-      window.agenza.terminal.write(view.id, data);
-    }
-  });
-  terminal.onResize(({ cols, rows }) => {
-    if (view.isConnected) {
-      window.agenza.terminal.resize(view.id, cols, rows);
-    }
-  });
-  terminal.onSelectionChange(() => {
-    view.copyButton.disabled = !terminal.hasSelection();
-  });
-
-  terminalViews.set(definition.id, view);
-}
+const resizeObserver = new ResizeObserver(fitTerminals);
+resizeObserver.observe(terminalGrid);
 
 const setSessionState = (view, state, label, description) => {
   view.pane.dataset.sessionState = state;
-  view.pane.querySelector('[data-terminal-state]').textContent = label;
-  const descriptionElement = view.pane.querySelector('[data-terminal-description]');
-  descriptionElement.textContent = description;
-  descriptionElement.title = description;
+  view.stateElement.textContent = label;
+  view.descriptionElement.textContent = description;
+  view.descriptionElement.title = description;
   view.restartButton.classList.toggle(
     'is-recovery-action',
     state === 'exited' || state === 'error',
@@ -163,19 +104,19 @@ const showSessionFailure = (view, { description, error, heading, recovery }) => 
 
 const setControlsBusy = (view, isBusy) => {
   view.isBusy = isBusy;
+  view.clearButton.disabled = isBusy;
   view.projectButton.disabled = isBusy;
   view.pasteButton.disabled = isBusy || !view.isConnected;
   view.restartButton.disabled = isBusy || !view.projectFolder;
+  view.removeButton.disabled = isBusy;
 };
 
 const copyTerminalSelection = async (view) => {
   const selectedText = view.terminal.getSelection();
 
-  if (!selectedText) {
-    return;
+  if (selectedText) {
+    await window.agenza.clipboard.writeText(selectedText);
   }
-
-  await window.agenza.clipboard.writeText(selectedText);
 };
 
 const pasteIntoTerminal = async (view) => {
@@ -195,52 +136,9 @@ const pasteIntoTerminal = async (view) => {
 
 const runClipboardAction = (action) => {
   action().catch(() => {
-    // Clipboard errors stay local to the requested action and never affect either PTY.
+    // Clipboard errors stay local to the requested action and never affect another PTY.
   });
 };
-
-const disposeDataSubscription = window.agenza.terminal.onData(({ id, data }) => {
-  terminalViews.get(id)?.terminal.write(data);
-});
-
-const disposeExitSubscription = window.agenza.terminal.onExit(({ id, exitCode }) => {
-  const view = terminalViews.get(id);
-
-  if (!view) {
-    return;
-  }
-
-  view.isConnected = false;
-  view.terminal.options.disableStdin = true;
-
-  if (view.isRestarting) {
-    return;
-  }
-
-  view.terminal.writeln(`\r\n\x1b[31mCodex exited unexpectedly with code ${exitCode}.\x1b[0m`);
-  view.terminal.writeln('\x1b[90mUse Restart above to launch this session again.\x1b[0m');
-  setSessionState(view, 'exited', 'Exited', 'Codex stopped — restart available');
-  view.restartButton.disabled = !view.projectFolder || view.isBusy;
-});
-
-let resizeFrame;
-const fitTerminals = () => {
-  window.cancelAnimationFrame(resizeFrame);
-  resizeFrame = window.requestAnimationFrame(() => {
-    for (const { fitAddon } of terminalViews.values()) {
-      fitAddon.fit();
-    }
-  });
-};
-
-const resizeObserver = new ResizeObserver(fitTerminals);
-const terminalGrid = document.querySelector('.terminal-grid');
-
-if (terminalGrid) {
-  resizeObserver.observe(terminalGrid);
-}
-
-fitTerminals();
 
 const launchSession = async (view, { restart, failureMessage }) => {
   setControlsBusy(view, true);
@@ -248,7 +146,7 @@ const launchSession = async (view, { restart, failureMessage }) => {
   view.isConnected = false;
   view.terminal.options.disableStdin = true;
   view.terminal.reset();
-  view.terminal.writeln(`\x1b[1;36mAgenza ${view.id}\x1b[0m`);
+  view.terminal.writeln(`\x1b[1;36mAgenza · ${view.label}\x1b[0m`);
   view.terminal.writeln(`\x1b[90mProject: ${view.projectFolder}\x1b[0m`);
   setSessionState(
     view,
@@ -324,35 +222,60 @@ const chooseProjectFolder = async (view) => {
   }
 };
 
-for (const view of terminalViews.values()) {
-  view.projectButton.addEventListener('click', () => chooseProjectFolder(view));
-  view.copyButton.addEventListener('click', () => {
-    runClipboardAction(() => copyTerminalSelection(view));
-  });
-  view.pasteButton.addEventListener('click', () => {
-    runClipboardAction(() => pasteIntoTerminal(view));
-  });
-  view.clearButton.addEventListener('click', () => {
-    if (view.isConnected) {
-      window.agenza.terminal.write(view.id, '\x0c');
-    } else {
-      view.terminal.reset();
-    }
+const removeTerminalView = async (view) => {
+  if (view.isBusy) {
+    return;
+  }
 
-    setActivePane(view.pane);
-    view.terminal.focus();
-  });
-  view.restartButton.addEventListener('click', () => {
-    if (!view.projectFolder || view.isBusy) {
-      return;
-    }
+  const confirmed = window.confirm(
+    `Remove ${view.label}? This stops only its Codex process. Project files are not deleted.`,
+  );
 
-    launchSession(view, {
-      restart: true,
-      failureMessage: 'Unable to restart Codex',
+  if (!confirmed) {
+    return;
+  }
+
+  const viewsBeforeRemoval = getOrderedViews();
+  const removedIndex = viewsBeforeRemoval.indexOf(view);
+  const wasActive = view.pane.classList.contains('is-active');
+  view.isRemoving = true;
+  setControlsBusy(view, true);
+  setSessionState(view, 'stopping', 'Stopping', 'Stopping this terminal process');
+
+  try {
+    await window.agenza.terminal.remove(view.id);
+  } catch (error) {
+    view.isRemoving = false;
+    showSessionFailure(view, {
+      description: 'Terminal could not be removed - retry or close Agenza',
+      error,
+      heading: 'Unable to remove terminal.',
+      recovery: 'Retry removal. Closing Agenza will also stop every terminal process.',
     });
-  });
+    setControlsBusy(view, false);
+    return;
+  }
 
+  terminalViews.delete(view.id);
+  view.terminal.dispose();
+  view.pane.remove();
+  updateWorkspaceLayout();
+
+  const remainingViews = getOrderedViews();
+
+  if (wasActive && remainingViews.length > 0) {
+    const nextView = remainingViews[Math.min(removedIndex, remainingViews.length - 1)];
+    setActivePane(nextView.pane);
+    nextView.terminal.focus();
+  } else if (remainingViews.length === 0) {
+    setActivePane(null);
+    addTerminalButton.focus();
+  }
+
+  fitTerminals();
+};
+
+const configureTerminalShortcuts = (view) => {
   view.terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== 'keydown') {
       return true;
@@ -382,14 +305,192 @@ for (const view of terminalViews.values()) {
 
     return true;
   });
-}
+};
+
+const createTerminalView = (snapshot, { activate = true } = {}) => {
+  if (typeof snapshot?.id !== 'string' || terminalViews.has(snapshot.id)) {
+    throw new Error('Agenza received an invalid or duplicate terminal session.');
+  }
+
+  const labelNumber = nextLabelNumber++;
+  const label = `Terminal ${labelNumber}`;
+  const pane = terminalPaneTemplate.content.firstElementChild.cloneNode(true);
+  const mount = pane.querySelector('[data-terminal-mount]');
+  const title = pane.querySelector('[data-terminal-title]');
+  const titleId = `terminal-title-${snapshot.id}`;
+  const projectButton = pane.querySelector('[data-project-button]');
+  const copyButton = pane.querySelector('[data-copy-button]');
+  const pasteButton = pane.querySelector('[data-paste-button]');
+  const clearButton = pane.querySelector('[data-clear-button]');
+  const restartButton = pane.querySelector('[data-restart-button]');
+  const removeButton = pane.querySelector('[data-remove-button]');
+
+  pane.dataset.paneId = snapshot.id;
+  pane.dataset.activePane = 'false';
+  pane.setAttribute('aria-labelledby', titleId);
+  title.id = titleId;
+  title.textContent = label;
+  pane.querySelector('[data-terminal-number]').textContent = String(labelNumber).padStart(2, '0');
+  mount.id = `terminal-mount-${snapshot.id}`;
+  mount.setAttribute('aria-label', `${label} Codex console`);
+  copyButton.setAttribute('aria-label', `Copy selected text from ${label}`);
+  pasteButton.setAttribute('aria-label', `Paste text into ${label}`);
+  clearButton.setAttribute('aria-label', `Clear ${label}`);
+  restartButton.setAttribute('aria-label', `Restart ${label}`);
+  removeButton.setAttribute('aria-label', `Remove ${label}`);
+  terminalGrid.append(pane);
+
+  const terminal = new Terminal({
+    allowTransparency: false,
+    convertEol: true,
+    cursorBlink: true,
+    disableStdin: true,
+    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+    fontSize: 14,
+    lineHeight: 1.25,
+    screenReaderMode: true,
+    scrollback: 5000,
+    theme: terminalTheme,
+  });
+  const fitAddon = new FitAddon();
+
+  terminal.loadAddon(fitAddon);
+  terminal.open(mount);
+  terminal.writeln(`\x1b[1;36mAgenza · ${label}\x1b[0m`);
+  terminal.writeln('');
+  terminal.writeln('\x1b[90mChoose a project folder to start Codex.\x1b[0m');
+
+  const view = {
+    clearButton,
+    copyButton,
+    descriptionElement: pane.querySelector('[data-terminal-description]'),
+    fitAddon,
+    id: snapshot.id,
+    isBusy: false,
+    isConnected: snapshot.isRunning,
+    isRemoving: false,
+    isRestarting: false,
+    label,
+    pane,
+    pasteButton,
+    projectButton,
+    projectFolder: null,
+    removeButton,
+    restartButton,
+    stateElement: pane.querySelector('[data-terminal-state]'),
+    terminal,
+  };
+
+  terminalViews.set(view.id, view);
+
+  pane.addEventListener('pointerdown', (event) => {
+    setActivePane(pane);
+
+    if (!event.target.closest?.('button') && !event.target.closest?.('.xterm')) {
+      terminal.focus();
+    }
+  });
+  pane.addEventListener('focusin', () => setActivePane(pane));
+  terminal.onData((data) => {
+    if (view.isConnected) {
+      window.agenza.terminal.write(view.id, data);
+    }
+  });
+  terminal.onResize(({ cols, rows }) => {
+    if (view.isConnected) {
+      window.agenza.terminal.resize(view.id, cols, rows);
+    }
+  });
+  terminal.onSelectionChange(() => {
+    view.copyButton.disabled = !terminal.hasSelection();
+  });
+
+  projectButton.addEventListener('click', () => chooseProjectFolder(view));
+  copyButton.addEventListener('click', () => {
+    runClipboardAction(() => copyTerminalSelection(view));
+  });
+  pasteButton.addEventListener('click', () => {
+    runClipboardAction(() => pasteIntoTerminal(view));
+  });
+  clearButton.addEventListener('click', () => {
+    if (view.isConnected) {
+      window.agenza.terminal.write(view.id, '\x0c');
+    } else {
+      view.terminal.reset();
+    }
+
+    setActivePane(view.pane);
+    view.terminal.focus();
+  });
+  restartButton.addEventListener('click', () => {
+    if (view.projectFolder && !view.isBusy) {
+      launchSession(view, {
+        restart: true,
+        failureMessage: 'Unable to restart Codex',
+      });
+    }
+  });
+  removeButton.addEventListener('click', () => removeTerminalView(view));
+  configureTerminalShortcuts(view);
+
+  updateWorkspaceLayout();
+  fitTerminals();
+
+  if (activate) {
+    setActivePane(pane);
+    terminal.focus();
+  }
+
+  return view;
+};
+
+const addTerminal = async () => {
+  addTerminalButton.disabled = true;
+  emptyAddTerminalButton.disabled = true;
+
+  try {
+    const snapshot = await window.agenza.terminal.create();
+    createTerminalView(snapshot);
+    addTerminalButton.title = '';
+  } catch (error) {
+    addTerminalButton.title = formatUserFacingError(error, 'Unable to add a terminal.');
+    terminalCount.textContent = 'Unable to add terminal';
+  } finally {
+    addTerminalButton.disabled = false;
+    emptyAddTerminalButton.disabled = false;
+  }
+};
+
+const disposeDataSubscription = window.agenza.terminal.onData(({ id, data }) => {
+  terminalViews.get(id)?.terminal.write(data);
+});
+
+const disposeExitSubscription = window.agenza.terminal.onExit(({ id, exitCode }) => {
+  const view = terminalViews.get(id);
+
+  if (!view || view.isRemoving) {
+    return;
+  }
+
+  view.isConnected = false;
+  view.terminal.options.disableStdin = true;
+
+  if (view.isRestarting) {
+    return;
+  }
+
+  view.terminal.writeln(`\r\n\x1b[31mCodex exited unexpectedly with code ${exitCode}.\x1b[0m`);
+  view.terminal.writeln('\x1b[90mUse Restart above to launch this session again.\x1b[0m');
+  setSessionState(view, 'exited', 'Exited', 'Codex stopped — restart available');
+  view.restartButton.disabled = !view.projectFolder || view.isBusy;
+});
 
 const handleTerminalFocusShortcut = (event) => {
   if (event.key !== 'F6' || event.altKey || event.ctrlKey || event.metaKey) {
     return;
   }
 
-  const views = [...terminalViews.values()];
+  const views = getOrderedViews();
 
   if (views.length < 2) {
     return;
@@ -407,12 +508,45 @@ const handleTerminalFocusShortcut = (event) => {
 };
 
 document.addEventListener('keydown', handleTerminalFocusShortcut);
+addTerminalButton.addEventListener('click', () => addTerminal());
+emptyAddTerminalButton.addEventListener('click', () => addTerminal());
+
+const initializeWorkspace = async () => {
+  try {
+    const snapshots = await window.agenza.terminal.list();
+
+    for (const snapshot of snapshots) {
+      createTerminalView(snapshot, { activate: false });
+    }
+
+    const firstView = getOrderedViews()[0];
+
+    if (firstView) {
+      setActivePane(firstView.pane);
+    }
+  } catch (error) {
+    emptyWorkspace.querySelector('p').textContent = formatUserFacingError(
+      error,
+      'Agenza could not load its terminals. Add a new terminal to retry.',
+    );
+  } finally {
+    terminalGrid.dataset.workspaceReady = 'true';
+    updateWorkspaceLayout();
+    fitTerminals();
+  }
+};
+
+initializeWorkspace();
 
 window.addEventListener('beforeunload', () => {
   document.removeEventListener('keydown', handleTerminalFocusShortcut);
   resizeObserver.disconnect();
   disposeDataSubscription();
   disposeExitSubscription();
+
+  for (const { terminal } of terminalViews.values()) {
+    terminal.dispose();
+  }
 });
 
 if (environment) {

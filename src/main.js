@@ -14,8 +14,7 @@ const { createWindowOptions } = require('./window-options');
 const isStartupCheck = process.argv.includes('--startup-check');
 const isMissingCodexCheck = process.argv.includes('--missing-codex-check');
 const STARTUP_CHECK_CHILD_TIMEOUT_MS = 10000;
-// T204 replaces these temporary renderer slots with terminal definitions from the dynamic registry.
-const LEGACY_RENDERER_SESSION_IDS = Object.freeze(['terminal-one', 'terminal-two']);
+const INITIAL_TERMINAL_COUNT = 2;
 let appLogger = createNoopLogger();
 const startupCheckLog = (...values) => {
   if (isStartupCheck) {
@@ -67,16 +66,18 @@ const createMainWindow = () => {
   startupCheckLog('creating window');
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   appLogger.info('window.created');
-  const terminalManager = new TerminalManager({
-    allowLegacyInitialSessionIds: true,
-    initialSessionIds: LEGACY_RENDERER_SESSION_IDS,
-  });
+  const terminalManager = new TerminalManager();
+  const initialTerminalIds = Array.from(
+    { length: INITIAL_TERMINAL_COUNT },
+    () => terminalManager.create().id,
+  );
   const disposeClipboardIpc = registerClipboardIpc({ clipboard, ipcMain, window });
   const projectFolderIpc = registerProjectFolderIpc({
+    defaultFolder: isStartupCheck ? process.cwd() : null,
     dialog,
-    folderIds: LEGACY_RENDERER_SESSION_IDS,
+    isValidFolderId: (id) => terminalManager.has(id),
     initialFolders: isStartupCheck
-      ? Object.fromEntries(LEGACY_RENDERER_SESSION_IDS.map((id) => [id, process.cwd()]))
+      ? Object.fromEntries(initialTerminalIds.map((id) => [id, process.cwd()]))
       : {},
     ipcMain,
     skipDialog: isStartupCheck,
@@ -153,44 +154,83 @@ const createMainWindow = () => {
     if (isStartupCheck) {
       try {
         const layout = await window.webContents.executeJavaScript(`(async () => {
-          for (const id of ['terminal-one', 'terminal-two']) {
-            document
-              .querySelector('[data-pane-id="' + id + '"] [data-project-button]')
-              ?.click();
+          const waitFor = async (predicate, timeoutMs = 15000) => {
+            const deadline = Date.now() + timeoutMs;
+
+            while (!predicate() && Date.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+
+            return predicate();
+          };
+          const getPanes = () => [...document.querySelectorAll('.terminal-pane')];
+          const getPane = (id) => getPanes().find((pane) => pane.dataset.paneId === id);
+          const getIds = () => getPanes().map((pane) => pane.dataset.paneId);
+          const getTerminalText = (id) =>
+            getPane(id)?.querySelector('.xterm-rows')?.textContent ?? '';
+          const addTerminal = async () => {
+            const previousCount = getPanes().length;
+            document.querySelector('[data-add-terminal]')?.click();
+            return waitFor(() => getPanes().length === previousCount + 1);
+          };
+          const removeTerminal = async (id) => {
+            window.confirm = () => true;
+            getPane(id)?.querySelector('[data-remove-button]')?.click();
+            return waitFor(() => !getPane(id));
+          };
+
+          await waitFor(
+            () => document.querySelector('[data-terminal-grid]')?.dataset.workspaceReady === 'true',
+          );
+          const initialIds = getIds();
+          const initialLayoutHadTwo = initialIds.length === 2;
+
+          await addTerminal();
+          const severalLayoutHadThree = getPanes().length === 3;
+          const addedId = getIds().find((id) => !initialIds.includes(id));
+          await removeTerminal(addedId);
+          const dynamicRemovalRestoredTwo = getPanes().length === 2;
+
+          await removeTerminal(initialIds[0]);
+          const onePaneUsedOneColumn =
+            getPanes().length === 1 &&
+            window
+              .getComputedStyle(document.querySelector('[data-terminal-grid]'))
+              .gridTemplateColumns.split(' ').length === 1;
+          await removeTerminal(initialIds[1]);
+          const emptyStateWasUsable =
+            getPanes().length === 0 &&
+            !document.querySelector('[data-empty-workspace]')?.hidden;
+
+          await addTerminal();
+          await addTerminal();
+          const terminalIds = getIds();
+          const stableLabels = terminalIds.map(
+            (id) => getPane(id)?.querySelector('[data-terminal-title]')?.textContent,
+          );
+
+          for (const id of terminalIds) {
+            getPane(id)?.querySelector('[data-project-button]')?.click();
           }
 
-          const deadline = Date.now() + 15000;
-          while (
-            document.querySelectorAll('[data-session-state="connected"]').length !== 2 &&
-            Date.now() < deadline
-          ) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
+          await waitFor(
+            () => document.querySelectorAll('[data-session-state="connected"]').length === 2,
+          );
 
+          const [firstId, secondId] = terminalIds;
           const firstMarker = 'AGENZA_T006_TERMINAL_ONE';
           const secondMarker = 'AGENZA_T006_TERMINAL_TWO';
-          window.agenza.terminal.write(
-            'terminal-one',
-            "Write-Output '" + firstMarker + "'\\r",
-          );
-          window.agenza.terminal.write(
-            'terminal-two',
-            "Write-Output '" + secondMarker + "'\\r",
+          window.agenza.terminal.write(firstId, "Write-Output '" + firstMarker + "'\\r");
+          window.agenza.terminal.write(secondId, "Write-Output '" + secondMarker + "'\\r");
+          await waitFor(
+            () =>
+              getTerminalText(firstId).includes(firstMarker) &&
+              getTerminalText(secondId).includes(secondMarker),
+            10000,
           );
 
-          const getTerminalText = (id) =>
-            document.querySelector('#' + id + ' .xterm-rows')?.textContent ?? '';
-          const outputDeadline = Date.now() + 10000;
-          while (
-            (!getTerminalText('terminal-one').includes(firstMarker) ||
-              !getTerminalText('terminal-two').includes(secondMarker)) &&
-            Date.now() < outputDeadline
-          ) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
-
-          const firstTerminalText = getTerminalText('terminal-one');
-          const secondTerminalText = getTerminalText('terminal-two');
+          const firstTerminalText = getTerminalText(firstId);
+          const secondTerminalText = getTerminalText(secondId);
           const firstOutputIsIsolated =
             firstTerminalText.includes(firstMarker) &&
             !firstTerminalText.includes(secondMarker);
@@ -198,12 +238,8 @@ const createMainWindow = () => {
             secondTerminalText.includes(secondMarker) &&
             !secondTerminalText.includes(firstMarker);
 
-          const keyboardFirstPane = document.querySelector(
-            '[data-pane-id="terminal-one"]',
-          );
-          const keyboardSecondPane = document.querySelector(
-            '[data-pane-id="terminal-two"]',
-          );
+          const keyboardFirstPane = getPane(firstId);
+          const keyboardSecondPane = getPane(secondId);
           keyboardFirstPane?.querySelector('.xterm-helper-textarea')?.focus();
           document.dispatchEvent(
             new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'F6' }),
@@ -231,86 +267,70 @@ const createMainWindow = () => {
           document.dispatchEvent(terminalShortcutEvent);
           const terminalShortcutWasPreserved = !terminalShortcutEvent.defaultPrevented;
 
-          document
-            .querySelector('[data-pane-id="terminal-two"] [data-clear-button]')
-            ?.click();
-          const clearDeadline = Date.now() + 2000;
-          while (
-            getTerminalText('terminal-two').includes(secondMarker) &&
-            Date.now() < clearDeadline
-          ) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
-          const clearRemovedVisibleOutput = !getTerminalText('terminal-two').includes(secondMarker);
+          keyboardSecondPane?.querySelector('[data-clear-button]')?.click();
+          await waitFor(() => !getTerminalText(secondId).includes(secondMarker), 2000);
+          const clearRemovedVisibleOutput = !getTerminalText(secondId).includes(secondMarker);
 
-          window.agenza.terminal.write('terminal-one', 'exit\\r');
-          const exitDeadline = Date.now() + 10000;
-          const firstPane = document.querySelector('[data-pane-id="terminal-one"]');
-          while (firstPane?.dataset.sessionState !== 'exited' && Date.now() < exitDeadline) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
-
-          const restartButton = firstPane?.querySelector('[data-restart-button]');
-          const unexpectedExitWasShown = firstPane?.dataset.sessionState === 'exited';
+          window.agenza.terminal.write(firstId, 'exit\\r');
+          await waitFor(() => keyboardFirstPane?.dataset.sessionState === 'exited', 10000);
+          const restartButton = keyboardFirstPane?.querySelector('[data-restart-button]');
+          const unexpectedExitWasShown = keyboardFirstPane?.dataset.sessionState === 'exited';
           const restartWasAvailable = restartButton ? !restartButton.disabled : false;
           restartButton?.click();
-
-          const restartDeadline = Date.now() + 15000;
-          while (firstPane?.dataset.sessionState !== 'connected' && Date.now() < restartDeadline) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
+          await waitFor(() => keyboardFirstPane?.dataset.sessionState === 'connected');
 
           const restartMarker = 'AGENZA_T009_RESTARTED_TERMINAL_ONE';
-          window.agenza.terminal.write(
-            'terminal-one',
-            "Write-Output '" + restartMarker + "'\\r",
-          );
-          const restartOutputDeadline = Date.now() + 10000;
-          while (
-            !getTerminalText('terminal-one').includes(restartMarker) &&
-            Date.now() < restartOutputDeadline
-          ) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
+          window.agenza.terminal.write(firstId, "Write-Output '" + restartMarker + "'\\r");
+          await waitFor(() => getTerminalText(firstId).includes(restartMarker), 10000);
 
-          const grid = document.querySelector('.terminal-grid');
           return {
-            terminalCount: document.querySelectorAll('.terminal-mount .xterm').length,
+            terminalIds,
             activePaneCount: document.querySelectorAll('.terminal-pane.is-active').length,
+            clearRemovedVisibleOutput,
             connectedPaneCount: document.querySelectorAll(
               '[data-session-state="connected"]',
             ).length,
-            gridColumnCount: grid
-              ? window.getComputedStyle(grid).gridTemplateColumns.split(' ').length
-              : 0,
-            clearRemovedVisibleOutput,
+            dynamicRemovalRestoredTwo,
+            emptyStateWasUsable,
             firstOutputIsIsolated,
             focusMovedBackward,
             focusMovedForward,
-            restartOutputReceived: getTerminalText('terminal-one').includes(restartMarker),
+            initialLayoutHadTwo,
+            labelsStayedStable: terminalIds.every(
+              (id, index) =>
+                getPane(id)?.querySelector('[data-terminal-title]')?.textContent ===
+                stableLabels[index],
+            ),
+            onePaneUsedOneColumn,
+            restartOutputReceived: getTerminalText(firstId).includes(restartMarker),
             restartWasAvailable,
             secondOutputIsIsolated,
             secondTerminalStayedConnected:
-              document.querySelector('[data-pane-id="terminal-two"]')?.dataset.sessionState ===
-              'connected',
+              keyboardSecondPane?.dataset.sessionState === 'connected',
+            severalLayoutHadThree,
             terminalShortcutWasPreserved,
             unexpectedExitWasShown,
           };
         })()`);
 
         if (
-          layout.terminalCount !== 2 ||
+          layout.terminalIds.length !== 2 ||
           layout.activePaneCount !== 1 ||
           layout.connectedPaneCount !== 2 ||
-          layout.gridColumnCount !== 2 ||
           !layout.clearRemovedVisibleOutput ||
+          !layout.dynamicRemovalRestoredTwo ||
+          !layout.emptyStateWasUsable ||
           !layout.firstOutputIsIsolated ||
           !layout.focusMovedBackward ||
           !layout.focusMovedForward ||
+          !layout.initialLayoutHadTwo ||
+          !layout.labelsStayedStable ||
+          !layout.onePaneUsedOneColumn ||
           !layout.restartOutputReceived ||
           !layout.restartWasAvailable ||
           !layout.secondOutputIsIsolated ||
           !layout.secondTerminalStayedConnected ||
+          !layout.severalLayoutHadThree ||
           !layout.terminalShortcutWasPreserved ||
           !layout.unexpectedExitWasShown
         ) {
@@ -318,8 +338,8 @@ const createMainWindow = () => {
         }
 
         const lifecycleChildPids = await Promise.all([
-          startLifecycleChild(terminalManager, 'terminal-one', 'AGENZA_T010_CHILD_ONE='),
-          startLifecycleChild(terminalManager, 'terminal-two', 'AGENZA_T010_CHILD_TWO='),
+          startLifecycleChild(terminalManager, layout.terminalIds[0], 'AGENZA_T010_CHILD_ONE='),
+          startLifecycleChild(terminalManager, layout.terminalIds[1], 'AGENZA_T010_CHILD_TWO='),
         ]);
         startupCheckLog('lifecycle child pids', lifecycleChildPids);
         window.close();

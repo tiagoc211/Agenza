@@ -50,7 +50,7 @@
       "id": "T204",
       "order": 4,
       "title": "Build the dynamic terminal workspace interface",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T202", "T203"],
       "acceptance_criteria": [
         "The user can add terminals and remove any selected terminal from the interface.",

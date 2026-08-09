@@ -40,7 +40,6 @@ const getDefaultShellOptions = ({
 
 class TerminalManager {
   constructor({
-    allowLegacyInitialSessionIds = false,
     initialSessionIds = [],
     sessionFactory = (id) => new TerminalSession({ id }),
     sessionDefaults = getDefaultShellOptions(),
@@ -55,10 +54,7 @@ class TerminalManager {
       throw new Error('Initial terminal session ids must be unique.');
     }
 
-    if (
-      !allowLegacyInitialSessionIds &&
-      initialSessionIds.some((id) => !TERMINAL_SESSION_ID_PATTERN.test(id))
-    ) {
+    if (initialSessionIds.some((id) => !TERMINAL_SESSION_ID_PATTERN.test(id))) {
       throw new Error('Initial terminal session ids must use the terminal UUID format.');
     }
 

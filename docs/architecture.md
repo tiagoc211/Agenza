@@ -24,9 +24,9 @@ Package versions will be pinned when the application is scaffolded in task `T003
 
 ## Architecture
 
-The `0.1.0` Electron renderer displays two xterm.js instances. Task `T204` replaces that fixed
-layout with dynamic panes. The renderer does not receive direct access to Node.js, Electron, or
-operating-system APIs.
+The Electron renderer builds xterm.js panes from a reusable HTML template. It lists the main-process
+registry during startup and can add or remove panes without fixed DOM or process IDs. The renderer
+does not receive direct access to Node.js, Electron, or operating-system APIs.
 
 A preload script will expose a small, explicit API for terminal input, output, resize, restart, and cleanup. Electron context isolation and renderer sandboxing will remain enabled, and Node.js integration will remain disabled in the renderer.
 
@@ -47,9 +47,10 @@ on one registered session; removal disposes its complete process tree before del
 entry. Aggregate data and exit subscriptions include their source ID, so sessions created after IPC
 registration remain isolated and observable.
 
-Until `T204` replaces the fixed renderer markup, the application bootstrap explicitly registers the
-two legacy renderer slot IDs. This compatibility bridge is outside the dynamic process layer and is
-the only place where those IDs initialize terminal sessions.
+Until layout persistence is implemented in `T205`, each window starts by creating two generated
+terminal sessions. The renderer assigns stable runtime labels in creation order and supports an
+empty workspace, a full-width single pane, two columns, and a scrollable responsive grid for more
+panes. Removed process IDs and labels are not reused during that window's lifetime.
 
 Before starting a pane, Agenza verifies that `codex --version` works in the user's normal system
 environment and then starts its Codex PTY from that same environment. The application does not
@@ -63,10 +64,10 @@ before PTYs start and also cover sessions created later, so initial output is no
 
 Each pane has an independent folder button backed by a narrow project-selection bridge and
 Electron's native directory picker. The main process stores one folder per terminal ID and accepts
-only absolute directories that can be read and written. A valid first selection starts only that
-Codex session with the folder as `cwd`; a later selection stops and restarts only that session. Each
-pane header displays its own full project path. Cancellation and validation errors leave the other
-terminal untouched.
+only IDs that still belong to the dynamic terminal registry and absolute directories that can be
+read and written. A valid first selection starts only that Codex session with the folder as `cwd`; a
+later selection stops and restarts only that session. Each pane header displays its own full project
+path. Cancellation and validation errors leave the other terminals untouched.
 
 Session controls are scoped by stable terminal IDs. For a running session, Clear sends the
 standard Ctrl+L terminal control to the selected PTY so Codex clears the screen and redraws its input
@@ -101,11 +102,12 @@ the affected pane with a concise recovery instruction.
 Automated validation has four entry points. `npm test` runs the Node test suite with faked PTY and
 Electron boundaries. `npm run test:smoke` launches the packaged executable with `--startup-check`
 and a 60-second timeout. `npm run test:all` runs the unit suite, packages the application, and then
-runs the smoke test sequentially. The smoke check uses two real ConPTY sessions concurrently,
-verifies isolated markers and restart behavior, exercises renderer controls and keyboard focus, and
-confirms that persistent descendant processes do not survive window closure. After `npm run make`,
-`npm run test:release` validates the Squirrel installer and package metadata plus the packaged
-application archive, executable, and native ConPTY runtime.
+runs the smoke test sequentially. The smoke check exercises three-, two-, one-, and zero-pane
+layouts before recreating two real ConPTY sessions. It verifies dynamic addition and removal,
+stable labels, isolated markers, restart behavior, renderer controls, keyboard focus, and that
+persistent descendant processes do not survive window closure. After `npm run make`, `npm run
+test:release` validates the Squirrel installer and package metadata plus the packaged application
+archive, executable, and native ConPTY runtime.
 
 `node-pty` remains external to the main Webpack bundle because it resolves native modules, worker
 scripts, and helper scripts relative to its package directory. A build plugin copies its runtime
