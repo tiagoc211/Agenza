@@ -13,7 +13,7 @@
       "id": "T001",
       "order": 1,
       "title": "Define the v1 scope and acceptance criteria",
-      "status": "todo",
+      "status": "done",
       "depends_on": [],
       "acceptance_criteria": [
         "The supported operating system for v1 is documented.",
