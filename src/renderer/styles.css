@@ -504,9 +504,12 @@ body {
   font-weight: 650;
 }
 
-.workspace-dialog-fields label:first-child,
-.workspace-dialog-fields label:last-child {
+.workspace-dialog-field-wide {
   grid-column: 1 / -1;
+}
+
+.workspace-dialog-field[hidden] {
+  display: none;
 }
 
 .workspace-dialog-fields input,

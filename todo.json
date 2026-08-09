@@ -110,7 +110,7 @@
       "id": "T209",
       "order": 9,
       "title": "Attach an existing branch or worktree to a terminal",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T203", "T204", "T207"],
       "acceptance_criteria": [
         "The user can attach a registered worktree to a terminal without recreating it.",

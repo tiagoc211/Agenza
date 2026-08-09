@@ -1,4 +1,3 @@
-
 <p align="center">
   <img src="images/agenzalogov2.png" width="140" alt="Agenza Logo">
 </p>
@@ -10,7 +9,6 @@
 <p align="center">
   Run independent Codex CLI sessions side by side, each with its own project workspace.
 </p>
-
 
 # Agenza
 

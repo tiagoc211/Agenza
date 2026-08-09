@@ -48,6 +48,27 @@ const createPreview = async (planner, repositoryPath, worktreePath, targetBranch
     terminalId: TERMINAL_ID,
   });
 
+const createExistingBranchPreview = async (planner, repositoryPath, worktreePath, targetBranch) =>
+  planner.plan({
+    projectPath: repositoryPath,
+    request: {
+      targetBranch,
+      type: GIT_PLAN_TYPES.createExistingBranch,
+      worktreePath,
+    },
+    terminalId: TERMINAL_ID,
+  });
+
+const createAttachPreview = async (planner, repositoryPath, worktreePath) =>
+  planner.plan({
+    projectPath: repositoryPath,
+    request: {
+      type: GIT_PLAN_TYPES.attachWorktree,
+      worktreePath,
+    },
+    terminalId: TERMINAL_ID,
+  });
+
 test('creates, verifies, owns, and commits one isolated branch worktree', async () => {
   const { repositoryPath, temporaryDirectory } = createRepository();
   const worktreePath = path.join(temporaryDirectory, 'agent-worktree');
@@ -120,6 +141,148 @@ test('refuses a stale confirmation without mutating newly changed Git state', as
       git(repositoryPath, ['branch', '--list', 'external-change']).trim(),
       'external-change',
     );
+  } finally {
+    fs.rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('creates and owns a worktree for an eligible existing branch', async () => {
+  const { repositoryPath, temporaryDirectory } = createRepository();
+  const worktreePath = path.join(temporaryDirectory, 'existing-branch-worktree');
+
+  try {
+    const planner = new GitWorkspacePlanner();
+    const preview = await createExistingBranchPreview(
+      planner,
+      repositoryPath,
+      worktreePath,
+      'preserved-branch',
+    );
+    const executor = new GitWorkspaceExecutor({
+      creationIdFactory: () => CREATION_ID,
+      planner,
+    });
+    const result = await executor.createExistingBranch({
+      commitAssignment: async (workspace) => ({ id: TERMINAL_ID, workspace }),
+      operationId: preview.operationId,
+      projectPath: repositoryPath,
+      terminalId: TERMINAL_ID,
+    });
+
+    assert.equal(result.state, 'succeeded');
+    assert.equal(result.workspace.repository.branch, 'refs/heads/preserved-branch');
+    assert.deepEqual(result.workspace.repository.worktree.ownership, {
+      creationId: CREATION_ID,
+      kind: 'agenza',
+    });
+    assert.equal(git(worktreePath, ['branch', '--show-current']).trim(), 'preserved-branch');
+    assert.equal(
+      git(repositoryPath, ['branch', '--list', 'preserved-branch']).trim(),
+      '+ preserved-branch',
+    );
+  } finally {
+    fs.rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('rolls back an existing-branch worktree without deleting its pre-existing branch', async () => {
+  const { repositoryPath, temporaryDirectory } = createRepository();
+  const worktreePath = path.join(temporaryDirectory, 'existing-branch-rollback');
+
+  try {
+    const planner = new GitWorkspacePlanner();
+    const preview = await createExistingBranchPreview(
+      planner,
+      repositoryPath,
+      worktreePath,
+      'preserved-branch',
+    );
+    const executor = new GitWorkspaceExecutor({ planner });
+
+    await assert.rejects(
+      executor.createExistingBranch({
+        commitAssignment: async () => {
+          throw new Error('simulated persistence failure');
+        },
+        operationId: preview.operationId,
+        projectPath: repositoryPath,
+        terminalId: TERMINAL_ID,
+      }),
+      (error) =>
+        error.code === GIT_EXECUTION_ERROR_CODES.createFailed &&
+        error.rollbackState === 'rolled-back',
+    );
+
+    assert.equal(fs.existsSync(worktreePath), false);
+    assert.equal(
+      git(repositoryPath, ['branch', '--list', 'preserved-branch']).trim(),
+      'preserved-branch',
+    );
+  } finally {
+    fs.rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('attaches an existing registered worktree without mutating or taking ownership of it', async () => {
+  const { repositoryPath, temporaryDirectory } = createRepository();
+  const worktreePath = path.join(temporaryDirectory, 'external-worktree');
+
+  try {
+    git(repositoryPath, ['worktree', 'add', '--quiet', worktreePath, 'preserved-branch']);
+    const planner = new GitWorkspacePlanner();
+    const preview = await createAttachPreview(planner, repositoryPath, worktreePath);
+    const executor = new GitWorkspaceExecutor({
+      planner,
+      run: async () => {
+        throw new Error('attachment must not run a mutating Git command');
+      },
+    });
+    const result = await executor.attachWorktree({
+      commitAssignment: async (workspace) => ({ id: TERMINAL_ID, workspace }),
+      operationId: preview.operationId,
+      projectPath: repositoryPath,
+      terminalId: TERMINAL_ID,
+    });
+
+    assert.equal(result.state, 'succeeded');
+    assert.equal(result.workspace.projectPath, path.resolve(worktreePath));
+    assert.deepEqual(result.workspace.repository.worktree.ownership, {
+      creationId: null,
+      kind: 'external',
+    });
+    assert.equal(fs.existsSync(worktreePath), true);
+    assert.equal(git(worktreePath, ['branch', '--show-current']).trim(), 'preserved-branch');
+  } finally {
+    fs.rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('refuses attachment when another terminal acquired the worktree after preview', async () => {
+  const { repositoryPath, temporaryDirectory } = createRepository();
+  const worktreePath = path.join(temporaryDirectory, 'assigned-external-worktree');
+
+  try {
+    git(repositoryPath, ['worktree', 'add', '--quiet', worktreePath, 'preserved-branch']);
+    const planner = new GitWorkspacePlanner();
+    const preview = await createAttachPreview(planner, repositoryPath, worktreePath);
+    const executor = new GitWorkspaceExecutor({ planner });
+    let assignmentCommitted = false;
+
+    await assert.rejects(
+      executor.attachWorktree({
+        commitAssignment: async () => {
+          assignmentCommitted = true;
+        },
+        getAssignedWorktrees: () => [{ path: worktreePath, terminalId: 'terminal-other' }],
+        operationId: preview.operationId,
+        projectPath: repositoryPath,
+        terminalId: TERMINAL_ID,
+      }),
+      (error) => error.code === GIT_PLAN_ERROR_CODES.pathAssigned,
+    );
+
+    assert.equal(assignmentCommitted, false);
+    assert.equal(fs.existsSync(worktreePath), true);
   } finally {
     fs.rmSync(temporaryDirectory, { force: true, recursive: true });
   }

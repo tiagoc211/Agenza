@@ -6,6 +6,7 @@ const { discoverGitRepository, pathsEqual } = require('./git-discovery');
 const { GIT_PLAN_TYPES } = require('./git-workspace-planner');
 
 const GIT_EXECUTION_ERROR_CODES = Object.freeze({
+  assignmentFailed: 'GIT_WORKSPACE_ASSIGN_FAILED',
   createFailed: 'GIT_WORKSPACE_CREATE_FAILED',
   invalidConfirmation: 'INVALID_WORKSPACE_CONFIRMATION',
   manualRecovery: 'GIT_WORKSPACE_MANUAL_RECOVERY',
@@ -13,10 +14,12 @@ const GIT_EXECUTION_ERROR_CODES = Object.freeze({
 });
 
 const GIT_EXECUTION_ERROR_MESSAGES = Object.freeze({
+  [GIT_EXECUTION_ERROR_CODES.assignmentFailed]:
+    'Agenza could not assign the selected Git workspace. No Git resources were changed.',
   [GIT_EXECUTION_ERROR_CODES.createFailed]:
-    'Agenza could not create the branch and worktree. No pre-existing Git work was changed.',
+    'Agenza could not create and assign the worktree. No pre-existing Git work was changed.',
   [GIT_EXECUTION_ERROR_CODES.invalidConfirmation]:
-    'This confirmation does not match a valid new-branch preview.',
+    'This confirmation does not match a valid Git workspace preview.',
   [GIT_EXECUTION_ERROR_CODES.manualRecovery]:
     'Git created partial workspace data that Agenza could not remove safely. Inspect the previewed branch and worktree path in a normal terminal.',
   [GIT_EXECUTION_ERROR_CODES.verificationFailed]:
@@ -87,58 +90,142 @@ class GitWorkspaceExecutor {
   createNewBranch({
     assignedWorktrees = [],
     commitAssignment,
+    getAssignedWorktrees,
     operationId,
     projectPath,
     terminalId,
   } = {}) {
-    const cachedPreview = this._planner.getPreview(operationId, terminalId);
+    return this._createWorktree({
+      assignedWorktrees,
+      buildArguments: (preview) => [
+        'worktree',
+        'add',
+        '--no-track',
+        '-b',
+        preview.targetBranch,
+        preview.worktreePath,
+        preview.baseRevision,
+      ],
+      commitAssignment,
+      deleteCreatedBranch: true,
+      expectedType: GIT_PLAN_TYPES.createNewBranch,
+      getAssignedWorktrees,
+      operationId,
+      projectPath,
+      terminalId,
+    });
+  }
 
-    if (
-      !cachedPreview ||
-      cachedPreview.type !== GIT_PLAN_TYPES.createNewBranch ||
-      typeof commitAssignment !== 'function'
-    ) {
-      throw new GitWorkspaceExecutionError(GIT_EXECUTION_ERROR_CODES.invalidConfirmation, {
-        operationId: typeof operationId === 'string' ? operationId : null,
-      });
-    }
+  createExistingBranch({
+    assignedWorktrees = [],
+    commitAssignment,
+    getAssignedWorktrees,
+    operationId,
+    projectPath,
+    terminalId,
+  } = {}) {
+    return this._createWorktree({
+      assignedWorktrees,
+      buildArguments: (preview) => ['worktree', 'add', preview.worktreePath, preview.targetBranch],
+      commitAssignment,
+      deleteCreatedBranch: false,
+      expectedType: GIT_PLAN_TYPES.createExistingBranch,
+      getAssignedWorktrees,
+      operationId,
+      projectPath,
+      terminalId,
+    });
+  }
+
+  attachWorktree({
+    assignedWorktrees = [],
+    commitAssignment,
+    getAssignedWorktrees,
+    operationId,
+    projectPath,
+    terminalId,
+  } = {}) {
+    const cachedPreview = this._assertConfirmation(
+      operationId,
+      terminalId,
+      GIT_PLAN_TYPES.attachWorktree,
+      commitAssignment,
+    );
 
     return this._enqueueRepository(cachedPreview.repositoryRoot, async () => {
-      const preview = await this._planner.revalidatePreview(operationId, terminalId, {
+      const preview = await this._revalidatePreview({
         assignedWorktrees,
+        getAssignedWorktrees,
+        operationId,
         projectPath,
+        terminalId,
+      });
+      this._planner.invalidatePreview(operationId);
+      const workspace = this._createWorkspace({
+        branchRef: preview.targetBranchRef,
+        ownership: { creationId: null, kind: 'external' },
+        repositoryRoot: preview.repositoryRoot,
+        worktreePath: preview.worktreePath,
+      });
+
+      try {
+        const workspaceSnapshot = await commitAssignment(workspace);
+        return {
+          operationId,
+          state: 'succeeded',
+          workspace,
+          workspaceSnapshot,
+        };
+      } catch (error) {
+        throw new GitWorkspaceExecutionError(GIT_EXECUTION_ERROR_CODES.assignmentFailed, {
+          cause: error,
+          operationId,
+          rollbackState: 'not-required',
+        });
+      }
+    });
+  }
+
+  _createWorktree({
+    assignedWorktrees,
+    buildArguments,
+    commitAssignment,
+    deleteCreatedBranch,
+    expectedType,
+    getAssignedWorktrees,
+    operationId,
+    projectPath,
+    terminalId,
+  }) {
+    const cachedPreview = this._assertConfirmation(
+      operationId,
+      terminalId,
+      expectedType,
+      commitAssignment,
+    );
+
+    return this._enqueueRepository(cachedPreview.repositoryRoot, async () => {
+      const preview = await this._revalidatePreview({
+        assignedWorktrees,
+        getAssignedWorktrees,
+        operationId,
+        projectPath,
+        terminalId,
       });
       this._planner.invalidatePreview(operationId);
 
       try {
-        await this._run(
-          [
-            'worktree',
-            'add',
-            '--no-track',
-            '-b',
-            preview.targetBranch,
-            preview.worktreePath,
-            preview.baseRevision,
-          ],
-          { cwd: preview.repositoryRoot },
-        );
+        await this._run(buildArguments(preview), { cwd: preview.repositoryRoot });
         const result = await this._verifyCreation(preview);
-        const workspace = {
-          kind: 'git-worktree',
-          projectPath: result.worktreePath,
-          repository: {
-            branch: result.currentBranchRef,
-            root: result.root,
-            worktree: {
-              ownership: {
-                creationId: this._creationIdFactory(),
-                kind: 'agenza',
-              },
-              path: result.worktreePath,
-            },
+        const workspace = this._createWorkspace({
+          branchRef: result.currentBranchRef,
+          ownership: {
+            creationId: this._creationIdFactory(),
+            kind: 'agenza',
           },
-        };
+          repositoryRoot: result.root,
+          worktreePath: result.worktreePath,
+        });
         const workspaceSnapshot = await commitAssignment(workspace);
 
         return {
@@ -148,7 +235,9 @@ class GitWorkspaceExecutor {
           workspaceSnapshot,
         };
       } catch (error) {
-        const rollback = await this._rollbackCreatedResources(preview);
+        const rollback = await this._rollbackCreatedResources(preview, {
+          deleteCreatedBranch,
+        });
         const code =
           rollback.state === 'rolled-back'
             ? GIT_EXECUTION_ERROR_CODES.createFailed
@@ -160,6 +249,52 @@ class GitWorkspaceExecutor {
         });
       }
     });
+  }
+
+  _assertConfirmation(operationId, terminalId, expectedType, commitAssignment) {
+    const cachedPreview = this._planner.getPreview(operationId, terminalId);
+
+    if (
+      !cachedPreview ||
+      cachedPreview.type !== expectedType ||
+      typeof commitAssignment !== 'function'
+    ) {
+      throw new GitWorkspaceExecutionError(GIT_EXECUTION_ERROR_CODES.invalidConfirmation, {
+        operationId: typeof operationId === 'string' ? operationId : null,
+      });
+    }
+
+    return cachedPreview;
+  }
+
+  async _revalidatePreview({
+    assignedWorktrees,
+    getAssignedWorktrees,
+    operationId,
+    projectPath,
+    terminalId,
+  }) {
+    const currentAssignments =
+      typeof getAssignedWorktrees === 'function' ? await getAssignedWorktrees() : assignedWorktrees;
+    return this._planner.revalidatePreview(operationId, terminalId, {
+      assignedWorktrees: currentAssignments,
+      projectPath,
+    });
+  }
+
+  _createWorkspace({ branchRef, ownership, repositoryRoot, worktreePath }) {
+    return {
+      kind: 'git-worktree',
+      projectPath: worktreePath,
+      repository: {
+        branch: branchRef,
+        root: repositoryRoot,
+        worktree: {
+          ownership,
+          path: worktreePath,
+        },
+      },
+    };
   }
 
   async _verifyCreation(preview) {
@@ -190,7 +325,7 @@ class GitWorkspaceExecutor {
     return discovery;
   }
 
-  async _rollbackCreatedResources(preview) {
+  async _rollbackCreatedResources(preview, { deleteCreatedBranch }) {
     try {
       let discovery = await this._discover(preview.repositoryRoot);
       const createdWorktree = discovery.worktrees.find(({ path }) =>
@@ -212,7 +347,9 @@ class GitWorkspaceExecutor {
         discovery = await this._discover(preview.repositoryRoot);
       }
 
-      const createdBranch = discovery.branches.find(({ ref }) => ref === preview.targetBranchRef);
+      const createdBranch = deleteCreatedBranch
+        ? discovery.branches.find(({ ref }) => ref === preview.targetBranchRef)
+        : null;
 
       if (createdBranch) {
         const stillCheckedOut = discovery.worktrees.some(

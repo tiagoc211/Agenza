@@ -49,8 +49,13 @@ const registerGitIpc = ({
     throw new TypeError('Git IPC workspace planner must provide a plan function.');
   }
 
-  if (!workspaceExecutor || typeof workspaceExecutor.createNewBranch !== 'function') {
-    throw new TypeError('Git IPC workspace executor must provide a createNewBranch function.');
+  if (
+    !workspaceExecutor ||
+    typeof workspaceExecutor.attachWorktree !== 'function' ||
+    typeof workspaceExecutor.createExistingBranch !== 'function' ||
+    typeof workspaceExecutor.createNewBranch !== 'function'
+  ) {
+    throw new TypeError('Git IPC workspace executor must provide all assignment functions.');
   }
 
   const getTerminalProjectPath = (id) => {
@@ -140,7 +145,7 @@ const registerGitIpc = ({
     }
   };
 
-  const handleCreateNewBranch = async (event, payload) => {
+  const createConfirmationHandler = (executorMethod, operationName) => async (event, payload) => {
     if (!isTrustedEvent(event, window)) {
       throw new Error('Untrusted Git workspace confirmation request.');
     }
@@ -152,12 +157,16 @@ const registerGitIpc = ({
       throw new Error('Invalid Git workspace operation id.');
     }
 
-    writeLog(logger, 'info', 'git.workspace_create_requested', { operationId, terminalId: id });
+    writeLog(logger, 'info', `git.workspace_${operationName}_requested`, {
+      operationId,
+      terminalId: id,
+    });
 
     try {
-      const operation = await workspaceExecutor.createNewBranch({
+      const operation = await workspaceExecutor[executorMethod]({
         assignedWorktrees: workspaceService.getAssignedGitWorktrees?.(id) ?? [],
         commitAssignment: (workspace) => workspaceService.assignGitWorktree(id, workspace),
+        getAssignedWorktrees: () => workspaceService.getAssignedGitWorktrees?.(id) ?? [],
         operationId,
         projectPath,
         terminalId: id,
@@ -171,7 +180,7 @@ const registerGitIpc = ({
         terminalError = {
           code: 'TERMINAL_START_FAILED',
           message:
-            'The workspace was created, but Codex could not start. Verify Codex in a normal terminal and retry.',
+            'The workspace was assigned, but Codex could not start. Verify Codex in a normal terminal and retry.',
         };
         writeLog(logger, 'error', 'git.workspace_terminal_start_failed', {
           error,
@@ -180,7 +189,7 @@ const registerGitIpc = ({
         });
       }
 
-      writeLog(logger, 'info', 'git.workspace_create_succeeded', {
+      writeLog(logger, 'info', `git.workspace_${operationName}_succeeded`, {
         operationId,
         terminalId: id,
       });
@@ -190,7 +199,7 @@ const registerGitIpc = ({
         error instanceof GitWorkspaceExecutionError
           ? toGitWorkspaceExecutionErrorPayload(error)
           : toGitWorkspacePlanErrorPayload(error);
-      writeLog(logger, 'error', 'git.workspace_create_failed', {
+      writeLog(logger, 'error', `git.workspace_${operationName}_failed`, {
         error: { code: errorPayload.code },
         operationId,
         terminalId: id,
@@ -199,12 +208,23 @@ const registerGitIpc = ({
     }
   };
 
+  const handleAttachWorktree = createConfirmationHandler('attachWorktree', 'attach');
+  const handleCreateExistingBranch = createConfirmationHandler(
+    'createExistingBranch',
+    'create_existing',
+  );
+  const handleCreateNewBranch = createConfirmationHandler('createNewBranch', 'create_new');
+
+  ipcMain.handle(GIT_CHANNELS.attachWorktree, handleAttachWorktree);
+  ipcMain.handle(GIT_CHANNELS.createExistingBranch, handleCreateExistingBranch);
   ipcMain.handle(GIT_CHANNELS.createNewBranch, handleCreateNewBranch);
   ipcMain.handle(GIT_CHANNELS.discover, handleDiscover);
   ipcMain.handle(GIT_CHANNELS.planWorkspace, handlePlanWorkspace);
 
   return () => {
     workspacePlanner.clearPreviews?.();
+    ipcMain.removeHandler(GIT_CHANNELS.attachWorktree);
+    ipcMain.removeHandler(GIT_CHANNELS.createExistingBranch);
     ipcMain.removeHandler(GIT_CHANNELS.createNewBranch);
     ipcMain.removeHandler(GIT_CHANNELS.discover);
     ipcMain.removeHandler(GIT_CHANNELS.planWorkspace);

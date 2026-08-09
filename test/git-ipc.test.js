@@ -63,6 +63,21 @@ const createHarness = ({
       },
     },
   };
+  const executeWorkspace = (method) => async (request) => {
+    executionRequests.push({ method, ...request });
+
+    if (executionError) {
+      throw executionError;
+    }
+
+    const workspaceSnapshot = await request.commitAssignment(workspace);
+    return {
+      operationId: request.operationId,
+      state: 'succeeded',
+      workspace,
+      workspaceSnapshot,
+    };
+  };
   const dispose = registerGitIpc({
     discover: async () => {
       if (discoveryError) {
@@ -72,21 +87,9 @@ const createHarness = ({
       return repository;
     },
     executor: {
-      createNewBranch: async (request) => {
-        executionRequests.push(request);
-
-        if (executionError) {
-          throw executionError;
-        }
-
-        const workspaceSnapshot = await request.commitAssignment(workspace);
-        return {
-          operationId: request.operationId,
-          state: 'succeeded',
-          workspace,
-          workspaceSnapshot,
-        };
-      },
+      attachWorktree: executeWorkspace('attachWorktree'),
+      createExistingBranch: executeWorkspace('createExistingBranch'),
+      createNewBranch: executeWorkspace('createNewBranch'),
     },
     ipcMain,
     logger: {
@@ -228,6 +231,7 @@ test('confirms one preview, persists its workspace, and starts only the owning t
   ]);
   assert.deepEqual(harness.startedIds, ['terminal-one']);
   assert.equal(harness.executionRequests[0].terminalId, 'terminal-one');
+  assert.equal(harness.executionRequests[0].method, 'createNewBranch');
   assert.deepEqual(harness.executionRequests[0].assignedWorktrees, [
     { path: 'C:\\assigned', terminalId: 'terminal-two' },
   ]);
@@ -240,6 +244,33 @@ test('confirms one preview, persists its workspace, and starts only the owning t
   );
 
   harness.dispose();
+});
+
+test('confirms existing branches and worktrees through their distinct narrow operations', async () => {
+  for (const [channel, method] of [
+    [GIT_CHANNELS.createExistingBranch, 'createExistingBranch'],
+    [GIT_CHANNELS.attachWorktree, 'attachWorktree'],
+  ]) {
+    const harness = createHarness();
+    const confirm = harness.ipcMain.handlers.get(channel);
+    const result = await confirm(harness.trustedEvent, {
+      id: 'terminal-two',
+      operationId: 'operation-one',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(harness.executionRequests[0].method, method);
+    assert.equal(harness.executionRequests[0].terminalId, 'terminal-two');
+    assert.deepEqual(await harness.executionRequests[0].getAssignedWorktrees(), [
+      { path: 'C:\\assigned', terminalId: 'terminal-one' },
+    ]);
+    assert.deepEqual(harness.startedIds, ['terminal-two']);
+    assert.deepEqual(harness.assignedWorkspaces, [
+      { id: 'terminal-two', workspace: harness.workspace },
+    ]);
+
+    harness.dispose();
+  }
 });
 
 test('reports rollback failures and keeps a completed workspace when only Codex startup fails', async () => {

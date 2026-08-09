@@ -91,12 +91,38 @@ test('previews and confirms a new branch worktree for only the selected terminal
   assert.match(html, /Other terminals and existing Git work remain unchanged/);
   assert.match(renderer, /window\.agenza\.git\.discover\(view\.id\)/);
   assert.match(renderer, /window\.agenza\.git\.planWorkspace\(state\.view\.id/);
-  assert.match(renderer, /type: 'create-new-branch-worktree'/);
-  assert.match(renderer, /window\.agenza\.git\.createNewBranch\(/);
-  assert.match(renderer, /state\.view\.id,[\s\S]*state\.preview\.operationId/);
+  assert.match(renderer, /createNewBranch: 'create-new-branch-worktree'/);
+  assert.match(
+    renderer,
+    /\[workspaceOperationTypes\.createNewBranch\]: window\.agenza\.git\.createNewBranch/,
+  );
+  assert.match(renderer, /confirmation\(state\.view\.id, state\.preview\.operationId\)/);
   assert.match(renderer, /view\.workspace = result\.operation\.workspace/);
   assert.match(renderer, /setControlsBusy\(view, true\)/);
   assert.match(styles, /\.workspace-dialog::backdrop/);
+});
+
+test('offers existing branches and registered worktrees as separate assignment flows', () => {
+  for (const control of [
+    'data-workspace-operation',
+    'data-existing-branch',
+    'data-existing-worktree',
+    'data-existing-branch-field',
+    'data-existing-worktree-field',
+  ]) {
+    assert.match(html, new RegExp(control));
+  }
+
+  assert.match(html, /value="create-existing-branch-worktree"/);
+  assert.match(html, /value="attach-existing-worktree"/);
+  assert.match(html, /Use an existing local branch/);
+  assert.match(html, /Attach a registered worktree/);
+  assert.match(renderer, /\.filter\(\(\{ worktreePath: checkedOutPath \}\) => !checkedOutPath\)/);
+  assert.match(renderer, /window\.agenza\.git\.createExistingBranch/);
+  assert.match(renderer, /window\.agenza\.git\.attachWorktree/);
+  assert.match(renderer, /No branch, directory, or Git registration will be created or deleted/);
+  assert.match(renderer, /setWorkspaceFieldVisible/);
+  assert.match(styles, /\.workspace-dialog-field\[hidden\]/);
 });
 
 test('restores persisted labels, active state, and available or missing project paths safely', () => {

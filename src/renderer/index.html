@@ -77,7 +77,7 @@
                 data-worktree-button
                 disabled
               >
-                New worktree
+                Git workspace
               </button>
               <button class="pane-action-button" type="button" data-copy-button disabled>
                 Copy
@@ -118,7 +118,7 @@
           <header class="workspace-dialog-header">
             <div>
               <p class="workspace-dialog-eyebrow">Git workspace</p>
-              <h2>Create an isolated branch and worktree</h2>
+              <h2>Assign an isolated Git workspace</h2>
             </div>
             <button
               class="workspace-dialog-close"
@@ -135,15 +135,25 @@
           </p>
 
           <div class="workspace-dialog-fields" data-worktree-fields hidden>
-            <label>
+            <label class="workspace-dialog-field workspace-dialog-field-wide">
               <span>Repository</span>
               <output data-worktree-repository></output>
             </label>
-            <label>
+            <label class="workspace-dialog-field workspace-dialog-field-wide">
+              <span>Assignment</span>
+              <select data-workspace-operation required>
+                <option value="create-new-branch-worktree">Create a new branch</option>
+                <option value="create-existing-branch-worktree">
+                  Use an existing local branch
+                </option>
+                <option value="attach-existing-worktree">Attach a registered worktree</option>
+              </select>
+            </label>
+            <label class="workspace-dialog-field" data-base-branch-field>
               <span>Base branch</span>
               <select data-worktree-base required></select>
             </label>
-            <label>
+            <label class="workspace-dialog-field" data-new-branch-field>
               <span>New branch</span>
               <input
                 type="text"
@@ -155,7 +165,22 @@
                 required
               />
             </label>
-            <label>
+            <label class="workspace-dialog-field" data-existing-branch-field hidden>
+              <span>Existing local branch</span>
+              <select data-existing-branch required disabled></select>
+            </label>
+            <label
+              class="workspace-dialog-field workspace-dialog-field-wide"
+              data-existing-worktree-field
+              hidden
+            >
+              <span>Registered worktree</span>
+              <select data-existing-worktree required disabled></select>
+            </label>
+            <label
+              class="workspace-dialog-field workspace-dialog-field-wide"
+              data-worktree-path-field
+            >
               <span>New worktree path</span>
               <input
                 type="text"
@@ -182,7 +207,7 @@
                 <dd data-preview-base></dd>
               </div>
               <div>
-                <dt>New branch</dt>
+                <dt data-preview-target-label>New branch</dt>
                 <dd data-preview-target></dd>
               </div>
               <div>
@@ -190,7 +215,7 @@
                 <dd data-preview-path></dd>
               </div>
             </dl>
-            <p>
+            <p data-preview-explanation>
               Agenza will create only this local branch and worktree, then assign and start this
               terminal. Other terminals and existing Git work remain unchanged.
             </p>

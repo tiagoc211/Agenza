@@ -15,15 +15,25 @@ const worktreeForm = document.querySelector('[data-worktree-form]');
 const worktreeIntro = document.querySelector('[data-worktree-intro]');
 const worktreeFields = document.querySelector('[data-worktree-fields]');
 const worktreeRepository = document.querySelector('[data-worktree-repository]');
+const workspaceOperation = document.querySelector('[data-workspace-operation]');
+const baseBranchField = document.querySelector('[data-base-branch-field]');
 const worktreeBase = document.querySelector('[data-worktree-base]');
+const newBranchField = document.querySelector('[data-new-branch-field]');
 const worktreeBranch = document.querySelector('[data-worktree-branch]');
+const existingBranchField = document.querySelector('[data-existing-branch-field]');
+const existingBranch = document.querySelector('[data-existing-branch]');
+const existingWorktreeField = document.querySelector('[data-existing-worktree-field]');
+const existingWorktree = document.querySelector('[data-existing-worktree]');
+const worktreePathField = document.querySelector('[data-worktree-path-field]');
 const worktreePath = document.querySelector('[data-worktree-path]');
 const worktreeError = document.querySelector('[data-worktree-error]');
 const worktreePreview = document.querySelector('[data-worktree-preview]');
 const previewRepository = document.querySelector('[data-preview-repository]');
 const previewBase = document.querySelector('[data-preview-base]');
 const previewTarget = document.querySelector('[data-preview-target]');
+const previewTargetLabel = document.querySelector('[data-preview-target-label]');
 const previewPath = document.querySelector('[data-preview-path]');
+const previewExplanation = document.querySelector('[data-preview-explanation]');
 const previewButton = document.querySelector('[data-preview-button]');
 const confirmWorktreeButton = document.querySelector('[data-confirm-worktree]');
 const cancelWorktreeButtons = document.querySelectorAll('[data-cancel-worktree]');
@@ -58,6 +68,12 @@ let resizeFrame;
 let activeTerminalId = null;
 let workspaceRecoveryIssue = null;
 let worktreeDialogState = null;
+
+const workspaceOperationTypes = Object.freeze({
+  attachWorktree: 'attach-existing-worktree',
+  createExistingBranch: 'create-existing-branch-worktree',
+  createNewBranch: 'create-new-branch-worktree',
+});
 
 const getOrderedViews = () => [...terminalViews.values()];
 
@@ -178,7 +194,85 @@ const closeWorktreeDialog = () => {
   }
 };
 
-const openNewWorktreeDialog = async (view) => {
+const replaceSelectOptions = (select, items, emptyLabel) => {
+  if (items.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = emptyLabel;
+    select.replaceChildren(option);
+    return;
+  }
+
+  select.replaceChildren(
+    ...items.map(({ label, value }) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      return option;
+    }),
+  );
+};
+
+const setWorkspaceFieldVisible = (field, control, isVisible) => {
+  field.hidden = !isVisible;
+  control.disabled = !isVisible;
+};
+
+const getConfirmationLabel = (type) => {
+  switch (type) {
+    case workspaceOperationTypes.createExistingBranch:
+      return 'Create worktree';
+    case workspaceOperationTypes.attachWorktree:
+      return 'Attach worktree';
+    default:
+      return 'Create branch and worktree';
+  }
+};
+
+const configureWorkspaceOperation = ({ resetPath = false } = {}) => {
+  const state = worktreeDialogState;
+
+  if (!state?.repository) {
+    return;
+  }
+
+  const type = workspaceOperation.value;
+  const createsNewBranch = type === workspaceOperationTypes.createNewBranch;
+  const usesExistingBranch = type === workspaceOperationTypes.createExistingBranch;
+  const attachesWorktree = type === workspaceOperationTypes.attachWorktree;
+
+  setWorkspaceFieldVisible(baseBranchField, worktreeBase, createsNewBranch);
+  setWorkspaceFieldVisible(newBranchField, worktreeBranch, createsNewBranch);
+  setWorkspaceFieldVisible(existingBranchField, existingBranch, usesExistingBranch);
+  setWorkspaceFieldVisible(existingWorktreeField, existingWorktree, attachesWorktree);
+  setWorkspaceFieldVisible(worktreePathField, worktreePath, !attachesWorktree);
+
+  if (resetPath) {
+    state.pathIsAutomatic = true;
+  }
+
+  if (state.pathIsAutomatic && !attachesWorktree) {
+    const branch = createsNewBranch ? worktreeBranch.value : existingBranch.value;
+    worktreePath.value = deriveWorktreePath(state.repository.root, branch);
+  }
+
+  if (createsNewBranch) {
+    worktreeIntro.textContent =
+      'Create a new local branch and an isolated sibling worktree for this terminal.';
+  } else if (usesExistingBranch) {
+    worktreeIntro.textContent =
+      'Create a new worktree for a local branch that is not checked out elsewhere.';
+  } else {
+    worktreeIntro.textContent =
+      'Assign an existing registered worktree without creating or deleting Git resources.';
+  }
+
+  confirmWorktreeButton.textContent = getConfirmationLabel(type);
+  resetWorktreePreview();
+  setWorktreeDialogError();
+};
+
+const openGitWorkspaceDialog = async (view) => {
   if (view.isBusy || !view.projectFolder || worktreeDialog.open) {
     return;
   }
@@ -216,19 +310,32 @@ const openNewWorktreeDialog = async (view) => {
     const repository = result.repository;
     worktreeDialogState.repository = repository;
     worktreeRepository.textContent = repository.root;
-    worktreeBase.replaceChildren(
-      ...repository.branches.map(({ name }) => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        return option;
-      }),
+    replaceSelectOptions(
+      worktreeBase,
+      repository.branches.map(({ name }) => ({ label: name, value: name })),
+      'No local branches available',
     );
     worktreeBase.value = repository.currentBranch ?? repository.branches[0]?.name ?? '';
+    replaceSelectOptions(
+      existingBranch,
+      repository.branches
+        .filter(({ worktreePath: checkedOutPath }) => !checkedOutPath)
+        .map(({ name }) => ({ label: name, value: name })),
+      'No eligible local branches',
+    );
+    replaceSelectOptions(
+      existingWorktree,
+      repository.worktrees
+        .filter(
+          ({ bare, branch, branchRef, detached, locked, prunable }) =>
+            !bare && branch && branchRef && !detached && !locked && !prunable,
+        )
+        .map(({ branch, path }) => ({ label: `${branch} - ${path}`, value: path })),
+      'No eligible registered worktrees',
+    );
+    workspaceOperation.value = workspaceOperationTypes.createNewBranch;
     worktreeBranch.value = `agenza/${branchToPathSegment(view.label).toLowerCase()}`;
-    worktreePath.value = deriveWorktreePath(repository.root, worktreeBranch.value);
-    worktreeIntro.textContent =
-      'Choose the local base branch, new branch name, and an empty sibling path.';
+    configureWorkspaceOperation({ resetPath: true });
     worktreeFields.hidden = false;
     previewButton.disabled = false;
     worktreeBranch.focus();
@@ -241,7 +348,7 @@ const openNewWorktreeDialog = async (view) => {
   }
 };
 
-const previewNewWorktree = async () => {
+const previewGitWorkspace = async () => {
   const state = worktreeDialogState;
 
   if (!state?.repository || previewButton.disabled || !worktreeForm.reportValidity()) {
@@ -254,12 +361,30 @@ const previewNewWorktree = async () => {
   previewButton.textContent = 'Reviewing...';
 
   try {
-    const result = await window.agenza.git.planWorkspace(state.view.id, {
-      baseBranch: worktreeBase.value,
-      targetBranch: worktreeBranch.value.trim(),
-      type: 'create-new-branch-worktree',
-      worktreePath: worktreePath.value.trim(),
-    });
+    const type = workspaceOperation.value;
+    let request;
+
+    if (type === workspaceOperationTypes.createNewBranch) {
+      request = {
+        baseBranch: worktreeBase.value,
+        targetBranch: worktreeBranch.value.trim(),
+        type,
+        worktreePath: worktreePath.value.trim(),
+      };
+    } else if (type === workspaceOperationTypes.createExistingBranch) {
+      request = {
+        targetBranch: existingBranch.value,
+        type,
+        worktreePath: worktreePath.value.trim(),
+      };
+    } else {
+      request = {
+        type,
+        worktreePath: existingWorktree.value,
+      };
+    }
+
+    const result = await window.agenza.git.planWorkspace(state.view.id, request);
 
     if (worktreeDialogState !== state) {
       return;
@@ -274,7 +399,20 @@ const previewNewWorktree = async () => {
     previewBase.textContent = `${result.preview.baseBranch} (${result.preview.baseRevision.slice(0, 12)})`;
     previewTarget.textContent = result.preview.targetBranch;
     previewPath.textContent = result.preview.worktreePath;
+    previewTargetLabel.textContent =
+      type === workspaceOperationTypes.createNewBranch
+        ? 'New branch'
+        : type === workspaceOperationTypes.createExistingBranch
+          ? 'Existing branch'
+          : 'Attached branch';
+    previewExplanation.textContent =
+      type === workspaceOperationTypes.createNewBranch
+        ? 'Agenza will create this local branch and worktree, assign them to this terminal, and start Codex. Other terminals remain unchanged.'
+        : type === workspaceOperationTypes.createExistingBranch
+          ? 'Agenza will create only this worktree for the existing branch, assign it to this terminal, and start Codex. The branch will not be recreated or deleted.'
+          : 'Agenza will only assign this registered worktree and restart this terminal. No branch, directory, or Git registration will be created or deleted.';
     worktreePreview.hidden = false;
+    confirmWorktreeButton.textContent = getConfirmationLabel(type);
     confirmWorktreeButton.disabled = false;
     confirmWorktreeButton.focus();
   } catch (error) {
@@ -289,7 +427,7 @@ const previewNewWorktree = async () => {
   }
 };
 
-const confirmNewWorktree = async () => {
+const confirmGitWorkspace = async () => {
   const state = worktreeDialogState;
 
   if (!state?.preview || confirmWorktreeButton.disabled) {
@@ -298,7 +436,8 @@ const confirmNewWorktree = async () => {
 
   confirmWorktreeButton.disabled = true;
   previewButton.disabled = true;
-  confirmWorktreeButton.textContent = 'Creating...';
+  confirmWorktreeButton.textContent =
+    state.preview.type === workspaceOperationTypes.attachWorktree ? 'Assigning...' : 'Creating...';
   state.isCreating = true;
   for (const button of cancelWorktreeButtons) {
     button.disabled = true;
@@ -307,10 +446,12 @@ const confirmNewWorktree = async () => {
   setWorktreeDialogError();
 
   try {
-    const result = await window.agenza.git.createNewBranch(
-      state.view.id,
-      state.preview.operationId,
-    );
+    const confirmation = {
+      [workspaceOperationTypes.attachWorktree]: window.agenza.git.attachWorktree,
+      [workspaceOperationTypes.createExistingBranch]: window.agenza.git.createExistingBranch,
+      [workspaceOperationTypes.createNewBranch]: window.agenza.git.createNewBranch,
+    }[state.preview.type];
+    const result = await confirmation(state.view.id, state.preview.operationId);
 
     if (worktreeDialogState !== state) {
       return;
@@ -339,24 +480,24 @@ const confirmNewWorktree = async () => {
       view.isConnected = false;
       view.terminal.options.disableStdin = true;
       showSessionFailure(view, {
-        description: 'Worktree created - Codex start needs attention',
+        description: 'Workspace assigned - Codex start needs attention',
         error: result.terminalError,
-        heading: 'The Git workspace was created, but Codex did not start.',
-        recovery: 'The branch and worktree are saved. Use Restart to try Codex again.',
+        heading: 'The Git workspace was assigned, but Codex did not start.',
+        recovery: 'The workspace assignment is saved. Use Restart to try Codex again.',
       });
     }
 
     closeWorktreeDialog();
   } catch (error) {
     if (worktreeDialogState === state) {
-      setWorktreeDialogError(error, 'Unable to create this Git workspace.');
+      setWorktreeDialogError(error, 'Unable to assign this Git workspace.');
     }
   } finally {
     state.view.isRestarting = false;
 
     if (worktreeDialogState === state) {
       state.isCreating = false;
-      confirmWorktreeButton.textContent = 'Create branch and worktree';
+      confirmWorktreeButton.textContent = getConfirmationLabel(workspaceOperation.value);
       previewButton.disabled = false;
       for (const button of cancelWorktreeButtons) {
         button.disabled = false;
@@ -606,7 +747,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   pasteButton.setAttribute('aria-label', `Paste text into ${label}`);
   clearButton.setAttribute('aria-label', `Clear ${label}`);
   restartButton.setAttribute('aria-label', `Restart ${label}`);
-  worktreeButton.setAttribute('aria-label', `Create a branch and worktree for ${label}`);
+  worktreeButton.setAttribute('aria-label', `Assign a Git workspace to ${label}`);
   removeButton.setAttribute('aria-label', `Remove ${label}`);
   terminalGrid.append(pane);
 
@@ -710,7 +851,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   });
 
   projectButton.addEventListener('click', () => chooseProjectFolder(view));
-  worktreeButton.addEventListener('click', () => openNewWorktreeDialog(view));
+  worktreeButton.addEventListener('click', () => openGitWorkspaceDialog(view));
   copyButton.addEventListener('click', () => {
     runClipboardAction(() => copyTerminalSelection(view));
   });
@@ -815,6 +956,9 @@ const handleTerminalFocusShortcut = (event) => {
 document.addEventListener('keydown', handleTerminalFocusShortcut);
 addTerminalButton.addEventListener('click', () => addTerminal());
 emptyAddTerminalButton.addEventListener('click', () => addTerminal());
+workspaceOperation.addEventListener('change', () => {
+  configureWorkspaceOperation({ resetPath: true });
+});
 worktreeBase.addEventListener('change', resetWorktreePreview);
 worktreeBranch.addEventListener('input', () => {
   if (worktreeDialogState?.pathIsAutomatic && worktreeDialogState.repository) {
@@ -826,6 +970,17 @@ worktreeBranch.addEventListener('input', () => {
 
   resetWorktreePreview();
 });
+existingBranch.addEventListener('change', () => {
+  if (worktreeDialogState?.pathIsAutomatic && worktreeDialogState.repository) {
+    worktreePath.value = deriveWorktreePath(
+      worktreeDialogState.repository.root,
+      existingBranch.value,
+    );
+  }
+
+  resetWorktreePreview();
+});
+existingWorktree.addEventListener('change', resetWorktreePreview);
 worktreePath.addEventListener('input', () => {
   if (worktreeDialogState) {
     worktreeDialogState.pathIsAutomatic = false;
@@ -833,14 +988,14 @@ worktreePath.addEventListener('input', () => {
 
   resetWorktreePreview();
 });
-previewButton.addEventListener('click', () => previewNewWorktree());
-confirmWorktreeButton.addEventListener('click', () => confirmNewWorktree());
+previewButton.addEventListener('click', () => previewGitWorkspace());
+confirmWorktreeButton.addEventListener('click', () => confirmGitWorkspace());
 for (const button of cancelWorktreeButtons) {
   button.addEventListener('click', closeWorktreeDialog);
 }
 worktreeForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  previewNewWorktree();
+  previewGitWorkspace();
 });
 worktreeDialog.addEventListener('cancel', (event) => {
   if (worktreeDialogState?.isCreating) {

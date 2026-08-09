@@ -33,6 +33,10 @@ const projectApi = Object.freeze({
 });
 
 const gitApi = Object.freeze({
+  attachWorktree: (id, operationId) =>
+    ipcRenderer.invoke(GIT_CHANNELS.attachWorktree, { id, operationId }),
+  createExistingBranch: (id, operationId) =>
+    ipcRenderer.invoke(GIT_CHANNELS.createExistingBranch, { id, operationId }),
   createNewBranch: (id, operationId) =>
     ipcRenderer.invoke(GIT_CHANNELS.createNewBranch, { id, operationId }),
   discover: (id) => ipcRenderer.invoke(GIT_CHANNELS.discover, { id }),

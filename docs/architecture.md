@@ -115,6 +115,20 @@ selected terminal, and the main process starts or restarts only that terminal's 
 new worktree as its working directory. The renderer requires a second, exact preview of repository,
 base revision, target branch, and path before it enables creation.
 
+The same confirmation dialog can create a worktree for an eligible existing local branch or attach
+an already registered worktree. Existing-branch creation uses a normal `git worktree add` without
+creating or deleting the branch; verification is identical to new-branch creation, and a failed
+transaction may roll back only the worktree it added. Attachment executes no mutating Git command,
+records `external` ownership, and atomically changes only the selected terminal assignment. Branches
+already checked out elsewhere are omitted from the eligible creation list, while the main-process
+planner remains authoritative for checked-out, locked, prunable, detached, or terminal-assigned
+conflicts.
+
+Every confirmation fetches the current terminal-to-worktree assignments again inside the
+per-repository queue. If another terminal acquired the previewed path, or Git changed after the
+preview, confirmation is refused without mutation and the user must review fresh facts. Successful
+new, existing-branch, and attachment assignments all start or restart only their owning terminal.
+
 If creation, verification, or persistence fails, rollback considers only the branch and worktree
 named by that operation. It rediscovers Git state before each cleanup step, requires the exact
 previewed branch ref and revision, refuses locked or ambiguous resources, removes the worktree and
