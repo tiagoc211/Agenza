@@ -8,49 +8,236 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  background: #10141c;
-  color: #f5f7fa;
+  background: #0b0e14;
+  color: #edf1f7;
+  font-synthesis: none;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   min-width: 320px;
-  min-height: 100vh;
   margin: 0;
+  background: radial-gradient(circle at 12% -20%, rgb(42 68 91 / 35%), transparent 34rem), #0b0e14;
 }
 
-.welcome {
+.app-shell {
   display: grid;
-  min-height: 100vh;
-  place-content: center;
-  padding: 3rem;
-  text-align: center;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100%;
 }
 
-.welcome h1 {
-  margin: 0.35rem 0 0.75rem;
-  font-size: clamp(2rem, 5vw, 4rem);
-  letter-spacing: -0.04em;
+.app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #222936;
+  background: rgb(13 17 24 / 88%);
 }
 
-.welcome p {
+.brand,
+.pane-identity,
+.workspace-status {
+  display: flex;
+  align-items: center;
+}
+
+.brand {
+  gap: 0.7rem;
+}
+
+.brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #35637a;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #163649, #10232f);
+  color: #91e0ff;
+  font-weight: 800;
+}
+
+.brand h1,
+.pane-header h2,
+.brand p,
+.pane-header p {
   margin: 0;
-  color: #aeb8c7;
 }
 
-.eyebrow {
-  color: #7cc4ff !important;
-  font-size: 0.8rem;
+.brand h1 {
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.brand p,
+.pane-header p {
+  margin-top: 0.12rem;
+  color: #7d899c;
+  font-size: 0.72rem;
+}
+
+.workspace-status {
+  gap: 0.5rem;
+  color: #a5afbf;
+  font-size: 0.78rem;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #68d5ff;
+  box-shadow: 0 0 12px rgb(104 213 255 / 70%);
+}
+
+.terminal-grid {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.terminal-pane {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #252d3b;
+  border-radius: 10px;
+  background: #090c12;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 16%);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.terminal-pane.is-active {
+  border-color: #3e91b8;
+  box-shadow:
+    0 0 0 1px rgb(104 213 255 / 16%),
+    0 16px 42px rgb(0 0 0 / 24%);
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 54px;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #1c2330;
+  background: #111620;
+}
+
+.terminal-pane.is-active .pane-header {
+  background: #121b26;
+}
+
+.pane-identity {
+  min-width: 0;
+  gap: 0.6rem;
+}
+
+.pane-number {
+  color: #68d5ff;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+}
+
+.pane-header h2 {
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-state {
+  flex: none;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #2b3545;
+  border-radius: 999px;
+  color: #8290a5;
+  font-size: 0.66rem;
+}
+
+.terminal-frame,
+.terminal-mount {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-frame {
+  overflow: hidden;
+  padding: 0.75rem 0.25rem 0.5rem 0.75rem;
+  background: #090c12;
+}
+
+.terminal-mount .xterm {
+  height: 100%;
+}
+
+.terminal-mount .xterm-viewport {
+  scrollbar-color: #344154 transparent;
+  scrollbar-width: thin;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 1rem;
+  border-top: 1px solid #202735;
+  color: #687588;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
-.environment {
-  margin-top: 1rem !important;
-  font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 0.85rem;
+@media (max-width: 720px) {
+  .workspace-status {
+    display: none;
+  }
+
+  .terminal-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 560px) {
+  .app-bar {
+    min-height: 52px;
+    padding-block: 0.45rem;
+  }
+
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .pane-header {
+    min-height: 46px;
+  }
 }

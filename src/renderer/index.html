@@ -4,17 +4,73 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws:"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws:"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agenza</title>
   </head>
   <body>
-    <main class="welcome" aria-labelledby="app-title">
-      <p class="eyebrow">Agenza 0.1.0</p>
-      <h1 id="app-title">The foundation is ready.</h1>
-      <p>Two independent Codex terminals are the next step.</p>
-      <p class="environment" id="environment"></p>
-    </main>
+    <div class="app-shell">
+      <header class="app-bar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <div>
+            <h1>Agenza</h1>
+            <p>Codex workspace</p>
+          </div>
+        </div>
+        <div class="workspace-status" aria-label="Workspace status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>2 independent terminals</span>
+        </div>
+      </header>
+
+      <main class="terminal-grid" aria-label="Codex terminal workspace">
+        <section
+          class="terminal-pane is-active"
+          data-pane-id="terminal-one"
+          aria-labelledby="terminal-one-title"
+        >
+          <header class="pane-header">
+            <div class="pane-identity">
+              <span class="pane-number" aria-hidden="true">01</span>
+              <div>
+                <h2 id="terminal-one-title">Codex one</h2>
+                <p>Waiting for process</p>
+              </div>
+            </div>
+            <span class="pane-state">Ready</span>
+          </header>
+          <div class="terminal-frame">
+            <div class="terminal-mount" id="terminal-one" aria-label="Codex terminal one"></div>
+          </div>
+        </section>
+
+        <section
+          class="terminal-pane"
+          data-pane-id="terminal-two"
+          aria-labelledby="terminal-two-title"
+        >
+          <header class="pane-header">
+            <div class="pane-identity">
+              <span class="pane-number" aria-hidden="true">02</span>
+              <div>
+                <h2 id="terminal-two-title">Codex two</h2>
+                <p>Waiting for process</p>
+              </div>
+            </div>
+            <span class="pane-state">Ready</span>
+          </header>
+          <div class="terminal-frame">
+            <div class="terminal-mount" id="terminal-two" aria-label="Codex terminal two"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="status-bar">
+        <span>Local workspace</span>
+        <span id="environment"></span>
+      </footer>
+    </div>
   </body>
 </html>

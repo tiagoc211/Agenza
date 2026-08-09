@@ -6,6 +6,7 @@ const commonGlobals = {
   MAIN_WINDOW_WEBPACK_ENTRY: 'readonly',
   module: 'readonly',
   process: 'readonly',
+  ResizeObserver: 'readonly',
   require: 'readonly',
   window: 'readonly',
 };

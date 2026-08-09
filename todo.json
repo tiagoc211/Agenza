@@ -44,7 +44,7 @@
       "id": "T004",
       "order": 4,
       "title": "Create the main two-pane interface",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T003"],
       "acceptance_criteria": [
         "The main window displays two clearly separated terminal panes.",
