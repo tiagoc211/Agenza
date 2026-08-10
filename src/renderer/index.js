@@ -755,14 +755,41 @@ const chooseProjectFolder = async (view) => {
   }
 };
 
+const buildTerminalRemovalMessage = (view) => {
+  const lines = [
+    `Remove ${view.label}?`,
+    '',
+    "This stops only this terminal's Codex process and removes its saved pane.",
+  ];
+
+  if (view.workspace?.kind === 'git-worktree') {
+    lines.push(
+      '',
+      'The Git workspace will be kept:',
+      `Branch: ${displayBranchName(view.workspace.repository.branch)}`,
+      `Worktree: ${view.workspace.repository.worktree.path}`,
+      '',
+      'No branch, worktree directory, project file, or Git registration will be deleted.',
+    );
+  } else if (view.projectFolder) {
+    lines.push(
+      '',
+      `Project folder kept on disk: ${view.projectFolder}`,
+      'No project files will be deleted.',
+    );
+  } else {
+    lines.push('', 'No project files will be deleted.');
+  }
+
+  return lines.join('\n');
+};
+
 const removeTerminalView = async (view) => {
   if (view.isBusy) {
     return;
   }
 
-  const confirmed = window.confirm(
-    `Remove ${view.label}? This stops only its Codex process. Project files are not deleted.`,
-  );
+  const confirmed = window.confirm(buildTerminalRemovalMessage(view));
 
   if (!confirmed) {
     return;

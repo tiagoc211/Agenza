@@ -26,7 +26,16 @@ test('adds and removes dynamic terminal sessions through the narrow bridge', () 
   assert.match(renderer, /window\.agenza\.terminal\.remove\(view\.id\)/);
   assert.match(renderer, /terminalViews\.delete\(view\.id\)/);
   assert.match(renderer, /view\.terminal\.dispose\(\)/);
-  assert.match(renderer, /Project files are not deleted/);
+  assert.match(renderer, /buildTerminalRemovalMessage/);
+  assert.match(
+    renderer,
+    /This stops only this terminal's Codex process and removes its saved pane/,
+  );
+  assert.match(renderer, /The Git workspace will be kept/);
+  assert.match(
+    renderer,
+    /No branch, worktree directory, project file, or Git registration will be deleted/,
+  );
 });
 
 test('keeps zero, one, two, and several terminal layouts usable', () => {

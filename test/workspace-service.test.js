@@ -1,4 +1,8 @@
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 
 const { TerminalManager } = require('../src/terminal/terminal-manager');
@@ -9,6 +13,8 @@ const FIRST_ID = 'terminal-11111111-1111-4111-8111-111111111111';
 const SECOND_ID = 'terminal-22222222-2222-4222-8222-222222222222';
 const THIRD_ID = 'terminal-33333333-3333-4333-8333-333333333333';
 const cloneValue = (value) => JSON.parse(JSON.stringify(value));
+const git = (cwd, args) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 class FakeSession {
   constructor(id) {
@@ -181,6 +187,105 @@ test('persists create, active pane, folder assignment, removal, and contiguous o
   assert.equal('pid' in finalState.terminals[0], false);
 
   terminalManager.dispose();
+});
+
+test('removes only the terminal definition and process while preserving its real Git worktree', async () => {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'agenza-remove-terminal-'));
+  const repositoryPath = path.join(temporaryDirectory, 'repository');
+  const worktreePath = path.join(temporaryDirectory, 'agent-worktree');
+
+  fs.mkdirSync(repositoryPath);
+  git(repositoryPath, ['init', '--quiet', '--initial-branch=main']);
+  git(repositoryPath, ['config', 'user.name', 'Agenza Tests']);
+  git(repositoryPath, ['config', 'user.email', 'tests@agenza.local']);
+  fs.writeFileSync(path.join(repositoryPath, 'fixture.txt'), 'preserved\n', 'utf8');
+  git(repositoryPath, ['add', 'fixture.txt']);
+  git(repositoryPath, ['commit', '--quiet', '-m', 'initial']);
+  git(repositoryPath, ['branch', 'agent-work']);
+  git(repositoryPath, ['worktree', 'add', '--quiet', worktreePath, 'agent-work']);
+  fs.writeFileSync(path.join(worktreePath, 'agent-output.txt'), 'untracked work\n', 'utf8');
+
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: worktreePath,
+    repository: {
+      branch: 'refs/heads/agent-work',
+      root: repositoryPath,
+      worktree: {
+        ownership: {
+          creationId: 'worktree-33333333-3333-4333-8333-333333333333',
+          kind: 'agenza',
+        },
+        path: worktreePath,
+      },
+    },
+  };
+  const { savedStates, service, sessions, terminalManager } = createHarness(state);
+
+  try {
+    await service.initialize();
+    const secondBefore = service.getCatalog().sessions.find(({ id }) => id === SECOND_ID);
+    await service.remove(FIRST_ID);
+    const secondAfter = service.getCatalog().sessions.find(({ id }) => id === SECOND_ID);
+
+    assert.equal(sessions.get(FIRST_ID).disposed, true);
+    assert.equal(service.has(FIRST_ID), false);
+    assert.deepEqual(secondAfter, { ...secondBefore, order: 0 });
+    assert.deepEqual(
+      savedStates.at(-1).terminals.map(({ id }) => id),
+      [SECOND_ID],
+    );
+    assert.equal(fs.existsSync(worktreePath), true);
+    assert.equal(
+      fs.readFileSync(path.join(worktreePath, 'agent-output.txt'), 'utf8'),
+      'untracked work\n',
+    );
+    assert.match(git(repositoryPath, ['branch', '--list', 'agent-work']), /agent-work/);
+    assert.match(git(repositoryPath, ['worktree', 'list', '--porcelain']), /agent-worktree/);
+  } finally {
+    terminalManager.dispose();
+    fs.rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('restores the saved terminal definition if its process tree cannot be removed', async () => {
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\Available',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId: null, kind: 'external' },
+        path: 'C:\\Projects\\Available',
+      },
+    },
+  };
+  const { savedStates, service, sessions, terminalManager } = createHarness(state);
+
+  await service.initialize();
+  const firstSession = sessions.get(FIRST_ID);
+  const disposeSession = firstSession.dispose.bind(firstSession);
+  firstSession.dispose = () => {
+    throw new Error('simulated process-tree cleanup failure');
+  };
+
+  try {
+    await assert.rejects(service.remove(FIRST_ID), /process-tree cleanup failure/);
+    const restored = service.getCatalog().sessions.find(({ id }) => id === FIRST_ID);
+
+    assert.deepEqual(restored.workspace, state.terminals[0].workspace);
+    assert.equal(service.has(FIRST_ID), true);
+    assert.deepEqual(
+      savedStates.at(-1).terminals.map(({ id }) => id),
+      [FIRST_ID, SECOND_ID],
+    );
+  } finally {
+    firstSession.dispose = disposeSession;
+    terminalManager.dispose();
+  }
 });
 
 test('restores a deliberately empty saved layout without creating fallback sessions', async () => {

@@ -54,6 +54,13 @@ workspace, a full-width single pane, two columns, and a scrollable responsive gr
 Runtime snapshots combine the saved definition with current process and path-availability state,
 without writing process IDs, terminal content, or transient errors to disk.
 
+Terminal removal is a terminal-only transaction. The renderer confirmation names the saved pane
+and, when assigned, the branch and worktree that will remain. `WorkspaceService` removes only that
+terminal definition, updates the remaining layout order, and asks `TerminalManager` to dispose only
+the matching process tree. It invokes no Git command and never removes a project directory,
+worktree registration, or branch. If process-tree disposal fails, the previous terminal definition
+and its workspace assignment are written back so the pane can be recovered and removal retried.
+
 `WorkspaceStateStore` validates schema v1 and cross-record invariants before every read and write.
 It writes `workspace-state.json` through a validated temporary file and atomic rename, retaining the
 previous valid state as `workspace-state.backup.json`. Every saved mutation increments `revision`.

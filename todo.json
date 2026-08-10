@@ -134,7 +134,7 @@
       "id": "T211",
       "order": 11,
       "title": "Remove terminals without deleting Git workspaces",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T203", "T204", "T205"],
       "acceptance_criteria": [
         "Removing a terminal terminates only its process tree and removes only its saved terminal definition.",
