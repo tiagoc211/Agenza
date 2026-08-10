@@ -98,6 +98,14 @@ or inaccessible restored paths are shown locally as unavailable and can be repla
 preventing other definitions from loading. Cancellation and validation errors leave the other
 terminals untouched.
 
+Saved Git worktrees receive a deeper read-only restore and refresh check. Agenza compares the saved
+repository, branch, worktree registration, path, and checked-out branch with current Git discovery.
+Externally moved, removed, renamed, prunable, or inaccessible resources become a terminal-local
+stale status. A readable repository root can still drive the existing previewed reassignment flow;
+otherwise the pane offers a confirmed metadata-only detach. Detach stops only that terminal before
+atomically clearing its assignment and never deletes a directory, branch, registration, or managed
+ownership record. Recovery inspection does not run `git worktree prune` or any other Git mutation.
+
 Read-only Git discovery also runs only in the main process. The preload bridge accepts a stable
 terminal ID, never an arbitrary path or command, and discovers the repository from that terminal's
 validated current folder. Git is launched directly without a shell, with a five-second timeout, a

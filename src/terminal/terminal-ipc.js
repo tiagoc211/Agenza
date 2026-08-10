@@ -91,6 +91,27 @@ const registerTerminalIpc = ({
     return sessionCatalog.list();
   };
 
+  const handleDetachWorkspace = async (event, payload) => {
+    requireTrustedEvent(event, 'workspace detach');
+    const { id } = payload ?? {};
+    assertSessionId(manager, id);
+
+    if (typeof sessionCatalog.detachWorkspace !== 'function') {
+      throw new Error('Terminal workspace detach is unavailable.');
+    }
+
+    writeLog(logger, 'info', 'workspace.detach_requested', { terminalId: id });
+
+    try {
+      const snapshot = await sessionCatalog.detachWorkspace(id);
+      writeLog(logger, 'info', 'workspace.detach_succeeded', { terminalId: id });
+      return snapshot;
+    } catch (error) {
+      writeLog(logger, 'error', 'workspace.detach_failed', { error, terminalId: id });
+      throw error;
+    }
+  };
+
   const handleRemove = async (event, payload) => {
     requireTrustedEvent(event, 'remove');
     const { id } = payload ?? {};
@@ -221,6 +242,7 @@ const registerTerminalIpc = ({
 
   ipcMain.handle(TERMINAL_CHANNELS.activate, handleActivate);
   ipcMain.handle(TERMINAL_CHANNELS.create, handleCreate);
+  ipcMain.handle(TERMINAL_CHANNELS.detachWorkspace, handleDetachWorkspace);
   ipcMain.handle(TERMINAL_CHANNELS.list, handleList);
   ipcMain.handle(TERMINAL_CHANNELS.remove, handleRemove);
   ipcMain.handle(TERMINAL_CHANNELS.start, handleStart);
@@ -231,6 +253,7 @@ const registerTerminalIpc = ({
   return () => {
     ipcMain.removeHandler(TERMINAL_CHANNELS.activate);
     ipcMain.removeHandler(TERMINAL_CHANNELS.create);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.detachWorkspace);
     ipcMain.removeHandler(TERMINAL_CHANNELS.list);
     ipcMain.removeHandler(TERMINAL_CHANNELS.remove);
     ipcMain.removeHandler(TERMINAL_CHANNELS.start);

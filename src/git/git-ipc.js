@@ -83,9 +83,13 @@ const registerGitIpc = ({
     throw new TypeError('Git IPC worktree cleanup must provide preview and confirm functions.');
   }
 
-  const getTerminalProjectPath = (id) => {
+  const getTerminalProjectPath = (id, { allowRecovery = false } = {}) => {
     if (typeof id !== 'string' || !workspaceService.has(id)) {
       throw new Error('Invalid terminal Git discovery id.');
+    }
+
+    if (allowRecovery && typeof workspaceService.getGitInspectionFolder === 'function') {
+      return workspaceService.getGitInspectionFolder(id);
     }
 
     return workspaceService.getCurrentFolder(id);
@@ -98,7 +102,7 @@ const registerGitIpc = ({
 
     const { id } = payload ?? {};
 
-    const projectPath = getTerminalProjectPath(id);
+    const projectPath = getTerminalProjectPath(id, { allowRecovery: true });
 
     if (!projectPath) {
       return {
@@ -133,7 +137,7 @@ const registerGitIpc = ({
     }
 
     const { id, request } = payload ?? {};
-    const projectPath = getTerminalProjectPath(id);
+    const projectPath = getTerminalProjectPath(id, { allowRecovery: true });
 
     if (!projectPath) {
       return {
@@ -176,17 +180,30 @@ const registerGitIpc = ({
     }
 
     const { id } = payload ?? {};
+    getTerminalProjectPath(id);
+    const workspaceSnapshot =
+      typeof workspaceService.refreshWorkspace === 'function'
+        ? await workspaceService.refreshWorkspace(id)
+        : null;
     const projectPath = getTerminalProjectPath(id);
 
     if (!projectPath) {
-      return {
+      const result = {
         error: {
-          code: 'PROJECT_FOLDER_UNAVAILABLE',
-          message: 'Select an accessible project folder before refreshing Git status.',
+          code: workspaceSnapshot?.workspaceStatus?.code ?? 'PROJECT_FOLDER_UNAVAILABLE',
+          message:
+            workspaceSnapshot?.workspaceStatus?.message ??
+            'Select an accessible project folder before refreshing Git status.',
         },
         id,
         ok: false,
       };
+
+      if (workspaceSnapshot?.workspaceStatus) {
+        result.workspaceStatus = workspaceSnapshot.workspaceStatus;
+      }
+
+      return result;
     }
 
     writeLog(logger, 'info', 'git.status_requested', { terminalId: id });
@@ -194,7 +211,14 @@ const registerGitIpc = ({
     try {
       const status = await statusReader(projectPath);
       writeLog(logger, 'info', 'git.status_succeeded', { terminalId: id });
-      return { id, ok: true, status };
+      return {
+        id,
+        ok: true,
+        status,
+        ...(workspaceSnapshot?.workspaceStatus
+          ? { workspaceStatus: workspaceSnapshot.workspaceStatus }
+          : {}),
+      };
     } catch (error) {
       const errorPayload = toGitErrorPayload(error);
       writeLog(logger, 'warn', 'git.status_failed', {
@@ -279,7 +303,7 @@ const registerGitIpc = ({
     }
 
     const { id, operationId } = payload ?? {};
-    const projectPath = getTerminalProjectPath(id);
+    const projectPath = getTerminalProjectPath(id, { allowRecovery: true });
 
     if (typeof operationId !== 'string' || operationId.length > 100) {
       throw new Error('Invalid Git workspace operation id.');

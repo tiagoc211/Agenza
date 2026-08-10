@@ -188,6 +188,25 @@ test('restarts one dynamic session without changing another', async () => {
   manager.dispose();
 });
 
+test('stops one dynamic session without retiring its stable id', async () => {
+  const { manager, sessions } = createManagerHarness();
+  const first = manager.create();
+  const second = manager.create();
+
+  manager.start(first.id);
+  manager.start(second.id);
+  const stopped = await manager.stop(first.id);
+
+  assert.equal(stopped.isRunning, false);
+  assert.equal(manager.has(first.id), true);
+  assert.equal(manager.getSnapshot(second.id).isRunning, true);
+  assert.equal(sessions.get(first.id).killCount, 1);
+  manager.start(first.id);
+  assert.equal(manager.getSnapshot(first.id).isRunning, true);
+
+  manager.dispose();
+});
+
 test('removes only the selected process tree and retires its id', () => {
   const { manager, sessions } = createManagerHarness();
   const first = manager.create();

@@ -28,6 +28,8 @@ const createHarness = ({
   discoveryError = null,
   executionError = null,
   planError = null,
+  recoveryFolder = null,
+  recoveryStatus = null,
   statusError = null,
   terminalStartError = null,
 } = {}) => {
@@ -185,6 +187,12 @@ const createHarness = ({
       getManagedWorktree: (creationId) =>
         creationId === managedWorktree.creationId ? managedWorktree : null,
       getManagedWorktrees: () => [managedWorktree],
+      ...(recoveryStatus
+        ? {
+            getGitInspectionFolder: () => recoveryFolder,
+            refreshWorkspace: async () => ({ workspaceStatus: recoveryStatus }),
+          }
+        : {}),
       getCurrentFolder: (id) =>
         typeof currentFolder === 'function' ? currentFolder(id) : currentFolder,
       has: (id) => id === 'terminal-one' || id === 'terminal-two',
@@ -281,6 +289,41 @@ test('keeps a Git status failure local while another terminal can refresh', asyn
   assert.equal(second.ok, true);
   assert.equal(second.id, 'terminal-two');
   assert.deepEqual(harness.statusRequests, ['C:\\terminal-one', 'C:\\terminal-two']);
+
+  harness.dispose();
+});
+
+test('returns refreshed stale metadata and uses only its recovery root for reassignment discovery', async () => {
+  const recoveryStatus = {
+    branch: 'refs/heads/agent-one',
+    candidatePath: 'C:\\repo-agent-moved',
+    code: 'SAVED_GIT_WORKTREE_MOVED',
+    message: 'The saved worktree moved.',
+    path: 'C:\\repo-agent-old',
+    recoveryPath: 'C:\\repo',
+    repositoryRoot: 'C:\\repo',
+    status: 'stale',
+  };
+  const harness = createHarness({
+    currentFolder: null,
+    recoveryFolder: 'C:\\repo',
+    recoveryStatus,
+  });
+  const statusResult = await harness.status(harness.trustedEvent, { id: 'terminal-one' });
+  const discoveryResult = await harness.discover(harness.trustedEvent, { id: 'terminal-one' });
+
+  assert.deepEqual(statusResult, {
+    error: {
+      code: recoveryStatus.code,
+      message: recoveryStatus.message,
+    },
+    id: 'terminal-one',
+    ok: false,
+    workspaceStatus: recoveryStatus,
+  });
+  assert.equal(discoveryResult.ok, true);
+  assert.equal(discoveryResult.repository, harness.repository);
+  assert.deepEqual(harness.statusRequests, []);
 
   harness.dispose();
 });

@@ -153,6 +153,22 @@ Workspace state is also runtime-only and independent from the PTY state.
 connected terminal may remain connected while its read-only Git status is stale or blocked, unless
 its actual working directory becomes inaccessible.
 
+### Stale assignment recovery
+
+Restore and manual status refresh compare each saved Git assignment with the current repository,
+branch, registered worktree path, and worktree branch. A moved worktree is reported with its newly
+registered candidate path. Missing repositories, branches, worktrees, prunable registrations, and
+worktrees that changed branch are reported as terminal-local stale states; inspection never runs
+`git worktree prune` or changes repository metadata.
+
+When the saved repository root remains readable, the user can review and reassign a valid registered
+worktree through the normal preview and confirmation flow. Reassigning an Agenza-created worktree
+that Git proves was moved retains its creation ID and updates the managed-worktree catalog path.
+Alternatively, the user can detach the saved assignment. Detach stops only that terminal process,
+atomically persists an unassigned terminal, and keeps the branch, directory, Git registration, and
+managed ownership record unchanged. If persistence fails, the process remains stopped and the last
+valid assignment remains on disk for recovery after restart.
+
 ## Confirmed Git operation lifecycle
 
 Every mutating Git workflow uses an ephemeral operation object with a new operation ID and these

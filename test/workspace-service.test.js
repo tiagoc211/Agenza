@@ -22,6 +22,27 @@ class FakeSession {
     this.dataListeners = new Set();
     this.exitListeners = new Set();
     this.disposed = false;
+    this.isRunning = false;
+    this.killCount = 0;
+  }
+
+  start() {
+    this.isRunning = true;
+    return this.snapshot();
+  }
+
+  kill() {
+    this.killCount += 1;
+
+    if (!this.isRunning) {
+      return false;
+    }
+
+    this.isRunning = false;
+    for (const listener of this.exitListeners) {
+      listener({ exitCode: 0, signal: 0 });
+    }
+    return true;
   }
 
   onData(listener) {
@@ -35,11 +56,18 @@ class FakeSession {
   }
 
   snapshot() {
-    return { id: this.id, isRunning: false, pid: null, columns: 80, rows: 24 };
+    return {
+      id: this.id,
+      isRunning: this.isRunning,
+      pid: this.isRunning ? 123 : null,
+      columns: 80,
+      rows: 24,
+    };
   }
 
   dispose() {
     this.disposed = true;
+    this.kill();
   }
 }
 
@@ -75,7 +103,10 @@ const createState = () => ({
   ],
 });
 
-const createHarness = (initialState = createState()) => {
+const createHarness = (
+  initialState = createState(),
+  { inspectGitWorkspace = null, saveError = null } = {},
+) => {
   const savedStates = [];
   const sessions = new Map();
   const stateStore = {
@@ -86,6 +117,9 @@ const createHarness = (initialState = createState()) => {
       state: cloneValue(initialState),
     }),
     save: async (state) => {
+      if (saveError) {
+        throw saveError;
+      }
       validateWorkspaceState(state);
       savedStates.push(cloneValue(state));
     },
@@ -100,6 +134,7 @@ const createHarness = (initialState = createState()) => {
   });
   let minute = 3;
   const service = new WorkspaceService({
+    inspectGitWorkspace,
     now: () => `2026-08-09T12:0${minute++}:00.000Z`,
     stateStore,
     terminalManager,
@@ -334,6 +369,248 @@ test('lists persisted Git worktree assignments without exposing the selected ter
     { path: 'C:\\Projects\\Available', terminalId: FIRST_ID },
   ]);
   assert.deepEqual(service.getAssignedGitWorktrees(FIRST_ID), []);
+
+  terminalManager.dispose();
+});
+
+test('restores and refreshes stale Git metadata without changing persisted state', async () => {
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne-Old',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId: null, kind: 'external' },
+        path: 'C:\\Projects\\AgentOne-Old',
+      },
+    },
+  };
+  let inspectionCount = 0;
+  const staleStatus = {
+    branch: 'refs/heads/agent-one',
+    candidatePath: 'C:\\Projects\\AgentOne-Moved',
+    code: 'SAVED_GIT_WORKTREE_MOVED',
+    message: 'The saved worktree moved.',
+    path: 'C:\\Projects\\AgentOne-Old',
+    recoveryPath: 'C:\\Projects\\Repository',
+    repositoryRoot: 'C:\\Projects\\Repository',
+    status: 'stale',
+  };
+  const { savedStates, service, terminalManager } = createHarness(state, {
+    inspectGitWorkspace: async () => {
+      inspectionCount += 1;
+      return staleStatus;
+    },
+  });
+
+  const catalog = await service.initialize();
+  const refreshed = await service.refreshWorkspace(FIRST_ID);
+
+  assert.deepEqual(catalog.sessions[0].workspaceStatus, staleStatus);
+  assert.deepEqual(refreshed.workspaceStatus, staleStatus);
+  assert.equal(service.getCurrentFolder(FIRST_ID), null);
+  assert.equal(service.getGitInspectionFolder(FIRST_ID), 'C:\\Projects\\Repository');
+  assert.equal(inspectionCount, 2);
+  assert.deepEqual(savedStates, []);
+
+  terminalManager.dispose();
+});
+
+test('detaches only saved workspace metadata after stopping its terminal process', async () => {
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: {
+          creationId: 'worktree-33333333-3333-4333-8333-333333333333',
+          kind: 'agenza',
+        },
+        path: 'C:\\Projects\\AgentOne',
+      },
+    },
+  };
+  const { savedStates, service, sessions, terminalManager } = createHarness(state, {
+    inspectGitWorkspace: async () => ({
+      branch: 'refs/heads/agent-one',
+      candidatePath: null,
+      code: 'SAVED_GIT_WORKTREE_MISSING',
+      message: 'The saved worktree is missing.',
+      path: 'C:\\Projects\\AgentOne',
+      recoveryPath: 'C:\\Projects\\Repository',
+      repositoryRoot: 'C:\\Projects\\Repository',
+      status: 'stale',
+    }),
+  });
+
+  await service.initialize();
+  terminalManager.start(FIRST_ID);
+  const detached = await service.detachWorkspace(FIRST_ID);
+
+  assert.equal(sessions.get(FIRST_ID).killCount, 1);
+  assert.equal(detached.isRunning, false);
+  assert.deepEqual(detached.workspace, {
+    kind: 'unassigned',
+    projectPath: null,
+    repository: null,
+  });
+  assert.equal(service.getManagedWorktrees()[0].assignedTerminalId, null);
+  assert.equal(savedStates.at(-1).managedWorktrees.length, 1);
+  assert.deepEqual(savedStates.at(-1).terminals[0].workspace, detached.workspace);
+
+  terminalManager.dispose();
+});
+
+test('keeps stale assignment persisted but stops its process when detach persistence fails', async () => {
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId: null, kind: 'external' },
+        path: 'C:\\Projects\\AgentOne',
+      },
+    },
+  };
+  const { service, sessions, terminalManager } = createHarness(state, {
+    inspectGitWorkspace: async () => ({
+      branch: 'refs/heads/agent-one',
+      candidatePath: null,
+      code: 'SAVED_GIT_WORKTREE_MISSING',
+      message: 'missing',
+      path: 'C:\\Projects\\AgentOne',
+      recoveryPath: null,
+      repositoryRoot: 'C:\\Projects\\Repository',
+      status: 'stale',
+    }),
+    saveError: new Error('simulated atomic persistence failure'),
+  });
+
+  await service.initialize();
+  terminalManager.start(FIRST_ID);
+  await assert.rejects(service.detachWorkspace(FIRST_ID), /atomic persistence failure/);
+
+  assert.equal(sessions.get(FIRST_ID).isRunning, false);
+  assert.equal(service.getCatalog().sessions[0].workspace.kind, 'git-worktree');
+
+  terminalManager.dispose();
+});
+
+test('reassigns an externally moved worktree while preserving Agenza ownership', async () => {
+  const creationId = 'worktree-33333333-3333-4333-8333-333333333333';
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId, kind: 'agenza' },
+        path: 'C:\\Projects\\AgentOne',
+      },
+    },
+  };
+  const { savedStates, service, terminalManager } = createHarness(state, {
+    inspectGitWorkspace: async () => ({
+      branch: 'refs/heads/agent-one',
+      candidatePath: 'C:\\Projects\\MovedAgentOne',
+      code: 'SAVED_GIT_WORKTREE_MOVED',
+      message: 'The saved worktree moved.',
+      path: 'C:\\Projects\\AgentOne',
+      recoveryPath: 'C:\\Projects\\Repository',
+      repositoryRoot: 'C:\\Projects\\Repository',
+      status: 'stale',
+    }),
+  });
+
+  await service.initialize();
+  const reassigned = await service.assignGitWorktree(FIRST_ID, {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\MovedAgentOne',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId: null, kind: 'external' },
+        path: 'C:\\Projects\\MovedAgentOne',
+      },
+    },
+  });
+
+  assert.deepEqual(reassigned.workspace.repository.worktree.ownership, {
+    creationId,
+    kind: 'agenza',
+  });
+  assert.deepEqual(savedStates.at(-1).managedWorktrees, [
+    {
+      branchRef: 'refs/heads/agent-one',
+      creationId,
+      path: 'C:\\Projects\\MovedAgentOne',
+      repositoryRoot: 'C:\\Projects\\Repository',
+    },
+  ]);
+  assert.equal(service.getManagedWorktrees()[0].assignedTerminalId, FIRST_ID);
+
+  terminalManager.dispose();
+});
+
+test('reassigns an externally changed branch while preserving worktree ownership', async () => {
+  const creationId = 'worktree-33333333-3333-4333-8333-333333333333';
+  const state = createState();
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId, kind: 'agenza' },
+        path: 'C:\\Projects\\AgentOne',
+      },
+    },
+  };
+  const { savedStates, service, terminalManager } = createHarness(state, {
+    inspectGitWorkspace: async () => ({
+      branch: 'refs/heads/agent-one',
+      candidatePath: null,
+      code: 'SAVED_GIT_BRANCH_MISSING',
+      message: 'The saved branch changed.',
+      path: 'C:\\Projects\\AgentOne',
+      recoveryPath: 'C:\\Projects\\Repository',
+      repositoryRoot: 'C:\\Projects\\Repository',
+      status: 'stale',
+    }),
+  });
+
+  await service.initialize();
+  const reassigned = await service.assignGitWorktree(FIRST_ID, {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne',
+    repository: {
+      branch: 'refs/heads/renamed-agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: { creationId: null, kind: 'external' },
+        path: 'C:\\Projects\\AgentOne',
+      },
+    },
+  });
+
+  assert.deepEqual(reassigned.workspace.repository.worktree.ownership, {
+    creationId,
+    kind: 'agenza',
+  });
+  assert.equal(savedStates.at(-1).managedWorktrees[0].branchRef, 'refs/heads/renamed-agent-one');
+  assert.equal(savedStates.at(-1).managedWorktrees[0].path, 'C:\\Projects\\AgentOne');
 
   terminalManager.dispose();
 });

@@ -20,17 +20,24 @@ const getNextTerminalLabel = (terminals) => {
 class WorkspaceService {
   constructor({
     now = () => new Date().toISOString(),
+    inspectGitWorkspace = null,
     stateStore,
     terminalManager,
     validateFolder = validateProjectFolder,
   } = {}) {
-    if (!stateStore || !terminalManager || typeof validateFolder !== 'function') {
+    if (
+      !stateStore ||
+      !terminalManager ||
+      typeof validateFolder !== 'function' ||
+      (inspectGitWorkspace !== null && typeof inspectGitWorkspace !== 'function')
+    ) {
       throw new TypeError(
         'WorkspaceService requires state storage, a terminal manager, and folder validation.',
       );
     }
 
     this._now = now;
+    this._inspectGitWorkspace = inspectGitWorkspace;
     this._stateStore = stateStore;
     this._terminalManager = terminalManager;
     this._validateFolder = validateFolder;
@@ -203,6 +210,28 @@ class WorkspaceService {
       }
 
       const validatedPath = await this._validateFolder(workspace.projectPath);
+      const previousWorkspace = definition.workspace;
+      const previousAvailability = this._workspaceAvailability.get(id);
+      const sameRepository =
+        previousWorkspace.kind === 'git-worktree' &&
+        previousWorkspace.repository.root.toLowerCase() === workspace.repository.root.toLowerCase();
+      const recoversMovedWorktree =
+        sameRepository &&
+        previousAvailability?.code === 'SAVED_GIT_WORKTREE_MOVED' &&
+        typeof previousAvailability.candidatePath === 'string' &&
+        previousAvailability.candidatePath.toLowerCase() === validatedPath.toLowerCase() &&
+        previousWorkspace.repository.branch === workspace.repository.branch;
+      const recoversChangedBranch =
+        sameRepository &&
+        ['SAVED_GIT_BRANCH_MISSING', 'SAVED_GIT_WORKTREE_BRANCH_CHANGED'].includes(
+          previousAvailability?.code,
+        ) &&
+        previousWorkspace.repository.worktree.path.toLowerCase() === validatedPath.toLowerCase();
+      const preservesRecoveredOwnership =
+        previousWorkspace.kind === 'git-worktree' &&
+        previousWorkspace.repository.worktree.ownership.kind === 'agenza' &&
+        workspace.repository?.worktree?.ownership?.kind === 'external' &&
+        (recoversMovedWorktree || recoversChangedBranch);
       const committedWorkspace = {
         ...copyValue(workspace),
         projectPath: validatedPath,
@@ -210,6 +239,9 @@ class WorkspaceService {
           ...copyValue(workspace.repository),
           worktree: {
             ...copyValue(workspace.repository?.worktree),
+            ownership: preservesRecoveredOwnership
+              ? copyValue(previousWorkspace.repository.worktree.ownership)
+              : copyValue(workspace.repository?.worktree?.ownership),
             path: validatedPath,
           },
         },
@@ -229,7 +261,11 @@ class WorkspaceService {
           )
         : null;
       const managedWorktrees = existingManagedRecord
-        ? copyValue(this._state.managedWorktrees)
+        ? this._state.managedWorktrees.map((worktree) =>
+            worktree.creationId === managedRecord.creationId
+              ? copyValue(managedRecord)
+              : copyValue(worktree),
+          )
         : [...copyValue(this._state.managedWorktrees), ...(managedRecord ? [managedRecord] : [])];
       const nextState = {
         ...copyValue(this._state),
@@ -246,10 +282,61 @@ class WorkspaceService {
     });
   }
 
+  detachWorkspace(id) {
+    return this._enqueueMutation(async () => {
+      const definition = this._getDefinition(id);
+
+      if (definition.workspace.kind === 'unassigned') {
+        return this._createSessionSnapshot(definition);
+      }
+
+      await this._terminalManager.stop(id);
+      const nextDefinition = {
+        ...copyValue(definition),
+        updatedAt: this._now(),
+        workspace: createUnassignedWorkspace(),
+      };
+      const nextState = {
+        ...copyValue(this._state),
+        revision: this._state.revision + 1,
+        terminals: this._state.terminals.map((terminal) =>
+          terminal.id === id ? nextDefinition : copyValue(terminal),
+        ),
+      };
+
+      await this._commit(nextState);
+      this._workspaceAvailability.set(id, { status: 'unassigned' });
+      return this._createSessionSnapshot(nextDefinition);
+    });
+  }
+
   getCurrentFolder(id) {
     this._getDefinition(id);
     const availability = this._workspaceAvailability.get(id);
     return availability?.status === 'available' ? availability.path : null;
+  }
+
+  getGitInspectionFolder(id) {
+    const definition = this._getDefinition(id);
+    const availability = this._workspaceAvailability.get(id);
+
+    if (availability?.status === 'available') {
+      return availability.path;
+    }
+
+    if (definition.workspace.kind === 'git-worktree' && availability?.status === 'stale') {
+      return availability.recoveryPath ?? null;
+    }
+
+    return null;
+  }
+
+  refreshWorkspace(id) {
+    return this._enqueueMutation(async () => {
+      const definition = this._getDefinition(id);
+      await this._refreshWorkspaceAvailability(definition);
+      return this._createSessionSnapshot(definition);
+    });
   }
 
   getInitialFolders() {
@@ -334,6 +421,26 @@ class WorkspaceService {
   async _refreshWorkspaceAvailability(definition) {
     if (definition.workspace.kind === 'unassigned') {
       this._workspaceAvailability.set(definition.id, { status: 'unassigned' });
+      return;
+    }
+
+    if (definition.workspace.kind === 'git-worktree' && this._inspectGitWorkspace) {
+      try {
+        const result = await this._inspectGitWorkspace(copyValue(definition.workspace));
+        this._workspaceAvailability.set(definition.id, copyValue(result));
+      } catch {
+        this._workspaceAvailability.set(definition.id, {
+          branch: definition.workspace.repository.branch,
+          candidatePath: null,
+          code: 'SAVED_GIT_INSPECTION_FAILED',
+          message:
+            'Agenza could not validate this saved Git workspace. Detach it or choose another workspace.',
+          path: definition.workspace.projectPath,
+          recoveryPath: null,
+          repositoryRoot: definition.workspace.repository.root,
+          status: 'stale',
+        });
+      }
       return;
     }
 

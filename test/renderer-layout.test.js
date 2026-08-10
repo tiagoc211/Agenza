@@ -62,6 +62,7 @@ test('gives every pane independent controls, process state, and a stable label',
   for (const control of [
     'data-project-button',
     'data-worktree-button',
+    'data-recovery-button',
     'data-git-refresh',
     'data-copy-button',
     'data-paste-button',
@@ -95,7 +96,7 @@ test('shows and refreshes repository, branch, worktree, and change counts per pa
   }
 
   assert.match(renderer, /window\.agenza\.git\.status\(view\.id\)/);
-  assert.match(renderer, /view\.projectFolder !== requestedProjectFolder/);
+  assert.match(renderer, /view\.workspace\?\.projectPath !== requestedWorkspacePath/);
   assert.match(renderer, /tracked > 0/);
   assert.match(renderer, /untracked > 0/);
   assert.match(renderer, /conflicted > 0/);
@@ -210,11 +211,28 @@ test('restores persisted labels, active state, and available or missing project 
   assert.match(renderer, /restartButton\.textContent = 'Start'/);
 });
 
+test('recovers stale Git assignments without deleting Git resources', () => {
+  assert.match(html, /data-recovery-button/);
+  assert.match(html, /Detach saved workspace/);
+  assert.match(renderer, /workspaceStatus\?\.status === 'stale'/);
+  assert.match(renderer, /Registered worktree found at/);
+  assert.match(renderer, /window\.agenza\.terminal\.detachWorkspace\(view\.id\)/);
+  assert.match(renderer, /Use Reassign Git to recover it/);
+  assert.match(renderer, /No directory, branch, project file, or Git registration will be deleted/);
+  assert.match(renderer, /Any Agenza ownership record will remain available/);
+  assert.doesNotMatch(renderer, /git\s+prune|worktree\s+prune/);
+  assert.match(styles, /\.pane-recovery-button:not\(:disabled\)/);
+  assert.match(styles, /\.pane-recovery-button\[hidden\]/);
+});
+
 test('selects and displays an independent project folder before starting each session', () => {
   assert.match(renderer, /window\.agenza\.project\.selectFolder\(view\.id\)/);
   assert.match(renderer, /window\.agenza\.terminal\.start\(view\.id\)/);
   assert.match(renderer, /window\.agenza\.terminal\.restart\(view\.id\)/);
-  assert.match(renderer, /view\.projectFolder = result\.path/);
+  assert.match(
+    renderer,
+    /applyWorkspaceAvailability\(view, \{ path: result\.path, status: 'available' \}\)/,
+  );
   assert.match(renderer, /Choose a project folder to start Codex/);
 });
 

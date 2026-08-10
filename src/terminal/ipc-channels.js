@@ -1,6 +1,7 @@
 const TERMINAL_CHANNELS = Object.freeze({
   activate: 'agenza:terminal:activate',
   create: 'agenza:terminal:create',
+  detachWorkspace: 'agenza:terminal:detach-workspace',
   list: 'agenza:terminal:list',
   remove: 'agenza:terminal:remove',
   start: 'agenza:terminal:start',

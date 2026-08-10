@@ -158,7 +158,7 @@
       "id": "T213",
       "order": 13,
       "title": "Recover safely from stale workspace state",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T205", "T206", "T208", "T209", "T212"],
       "acceptance_criteria": [
         "Externally moved or deleted worktrees, branches, and repositories are detected during restore and refresh.",

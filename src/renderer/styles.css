@@ -367,6 +367,16 @@ body {
   color: #cbbcff;
 }
 
+.pane-recovery-button:not(:disabled) {
+  border-color: #8a6334;
+  background: #2d2113;
+  color: #f4ca78;
+}
+
+.pane-recovery-button[hidden] {
+  display: none;
+}
+
 .pane-action-button:hover:not(:disabled),
 .pane-action-button:focus-visible {
   border-color: #68d5ff;

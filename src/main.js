@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const { registerClipboardIpc } = require('./clipboard/clipboard-ipc');
 const { registerGitIpc } = require('./git/git-ipc');
+const { inspectSavedGitWorkspace } = require('./git/git-workspace-recovery');
 const { createResourceDisposer } = require('./lifecycle/resource-disposer');
 const { createAppLogger, createNoopLogger } = require('./logging/app-logger');
 const { registerProjectFolderIpc } = require('./project/project-folder');
@@ -73,6 +74,7 @@ const createMainWindow = async () => {
     ? path.join(app.getPath('temp'), 'Agenza', `startup-check-${process.pid}`)
     : app.getPath('userData');
   const workspaceService = new WorkspaceService({
+    inspectGitWorkspace: inspectSavedGitWorkspace,
     stateStore: new WorkspaceStateStore({ directory: workspaceDirectory }),
     terminalManager,
   });

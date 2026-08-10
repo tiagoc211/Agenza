@@ -18,6 +18,7 @@ const subscribe = (channel, callback) => {
 const terminalApi = Object.freeze({
   activate: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.activate, { id }),
   create: () => ipcRenderer.invoke(TERMINAL_CHANNELS.create),
+  detachWorkspace: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.detachWorkspace, { id }),
   list: () => ipcRenderer.invoke(TERMINAL_CHANNELS.list),
   remove: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.remove, { id }),
   start: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.start, { id }),

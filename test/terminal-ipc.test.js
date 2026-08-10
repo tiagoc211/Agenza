@@ -51,6 +51,7 @@ const createHarness = () => {
   const writes = [];
   const resizes = [];
   const removedIds = [];
+  const detachedIds = [];
   const activatedIds = [];
   let startCount = 0;
   let prepareCount = 0;
@@ -80,6 +81,14 @@ const createHarness = () => {
       const snapshot = { id, isRunning: false, pid: null };
       snapshots.push(snapshot);
       return snapshot;
+    },
+    detachWorkspace: async (id) => {
+      detachedIds.push(id);
+      return {
+        ...updateSnapshot(id, { isRunning: false, pid: null }),
+        workspace: { kind: 'unassigned', projectPath: null, repository: null },
+        workspaceStatus: { status: 'unassigned' },
+      };
     },
     getSnapshot: (id) => snapshots.find((snapshot) => snapshot.id === id),
     has: (id) => snapshots.some((snapshot) => snapshot.id === id),
@@ -132,6 +141,7 @@ const createHarness = () => {
   return {
     activatedIds,
     dataListeners,
+    detachedIds,
     dispose,
     exitListeners,
     ipcMain,
@@ -181,6 +191,26 @@ test('creates and lists dynamic sessions only for the owning renderer', async ()
     [FIRST_ID, SECOND_ID, created.id],
   );
   await assert.rejects(create({ sender: {}, senderFrame: {} }), /Untrusted/);
+
+  harness.dispose();
+});
+
+test('detaches stale workspace metadata through a narrow trusted operation', async () => {
+  const harness = createHarness();
+  const detachWorkspace = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.detachWorkspace);
+  const result = await detachWorkspace(harness.trustedEvent, { id: FIRST_ID });
+
+  assert.deepEqual(harness.detachedIds, [FIRST_ID]);
+  assert.equal(result.id, FIRST_ID);
+  assert.equal(result.workspace.kind, 'unassigned');
+  await assert.rejects(
+    detachWorkspace({ sender: {}, senderFrame: {} }, { id: FIRST_ID }),
+    /Untrusted/,
+  );
+  await assert.rejects(
+    detachWorkspace(harness.trustedEvent, { id: 'terminal-unknown' }),
+    /Invalid terminal session id/,
+  );
 
   harness.dispose();
 });

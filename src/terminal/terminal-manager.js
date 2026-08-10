@@ -158,6 +158,12 @@ class TerminalManager {
     return this.start(id, options);
   }
 
+  async stop(id) {
+    const session = this._getSession(id);
+    await this._stopSession(session);
+    return session.snapshot();
+  }
+
   remove(id) {
     const session = this._getSession(id);
     let disposalError;
