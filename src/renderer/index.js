@@ -154,9 +154,132 @@ const setControlsBusy = (view, isBusy) => {
   view.clearButton.disabled = isBusy;
   view.projectButton.disabled = isBusy;
   view.worktreeButton.disabled = isBusy || !view.projectFolder;
+  view.gitRefreshButton.disabled = isBusy || view.isGitRefreshing || !view.projectFolder;
   view.pasteButton.disabled = isBusy || !view.isConnected;
   view.restartButton.disabled = isBusy || !view.projectFolder;
   view.removeButton.disabled = isBusy;
+};
+
+const displayBranchName = (branch) => {
+  if (typeof branch !== 'string' || branch.length === 0) {
+    return 'Detached HEAD';
+  }
+
+  return branch.startsWith('refs/heads/') ? branch.slice('refs/heads/'.length) : branch;
+};
+
+const setGitSummaryValue = (element, value) => {
+  const displayValue = value || '—';
+  element.textContent = displayValue;
+  element.title = displayValue;
+};
+
+const setInitialGitSummary = (view) => {
+  if (!view.projectFolder) {
+    const savedRepository = view.workspace?.repository;
+    view.gitSummary.dataset.gitState = 'unavailable';
+    setGitSummaryValue(view.gitRepository, savedRepository?.root ?? 'Not inspected');
+    setGitSummaryValue(
+      view.gitBranch,
+      savedRepository ? displayBranchName(savedRepository.branch) : '—',
+    );
+    setGitSummaryValue(
+      view.gitWorktree,
+      savedRepository?.worktree?.path ?? view.workspace?.projectPath ?? '—',
+    );
+    view.gitChanges.textContent = 'Unavailable';
+    view.gitStatusMessage.textContent = view.workspace?.projectPath
+      ? 'The saved workspace is unavailable; choose another folder to refresh Git.'
+      : 'Choose a project folder to inspect Git.';
+    view.gitRefreshButton.disabled = true;
+    return;
+  }
+
+  const repository = view.workspace?.repository;
+  view.gitSummary.dataset.gitState = 'pending';
+  setGitSummaryValue(view.gitRepository, repository?.root ?? 'Not inspected');
+  setGitSummaryValue(view.gitBranch, repository ? displayBranchName(repository.branch) : '—');
+  setGitSummaryValue(view.gitWorktree, repository?.worktree?.path ?? view.projectFolder);
+  view.gitChanges.textContent = 'Not refreshed';
+  view.gitStatusMessage.textContent =
+    'Refresh to inspect tracked, untracked, and conflicted changes.';
+  view.gitRefreshButton.disabled = view.isBusy || view.isGitRefreshing;
+};
+
+const formatGitChanges = ({ conflicted, isClean, tracked, untracked }) => {
+  if (isClean) {
+    return 'Clean';
+  }
+
+  const parts = [];
+
+  if (tracked > 0) {
+    parts.push(`${tracked} tracked`);
+  }
+
+  if (untracked > 0) {
+    parts.push(`${untracked} untracked`);
+  }
+
+  if (conflicted > 0) {
+    parts.push(`${conflicted} conflicted`);
+  }
+
+  return parts.join(' · ') || 'Changes detected';
+};
+
+const refreshGitStatus = async (view) => {
+  if (!view.projectFolder || view.isGitRefreshing || view.isBusy) {
+    return;
+  }
+
+  const requestedProjectFolder = view.projectFolder;
+  view.isGitRefreshing = true;
+  view.gitRefreshButton.disabled = true;
+  view.gitRefreshButton.textContent = 'Refreshing...';
+  view.gitSummary.dataset.gitState = 'refreshing';
+  view.gitStatusMessage.textContent = 'Inspecting this terminal workspace...';
+
+  try {
+    const result = await window.agenza.git.status(view.id);
+
+    if (!terminalViews.has(view.id) || view.projectFolder !== requestedProjectFolder) {
+      return;
+    }
+
+    if (!result.ok) {
+      throw result.error;
+    }
+
+    const { changes } = result.status;
+    view.gitStatus = result.status;
+    setGitSummaryValue(view.gitRepository, result.status.repositoryRoot);
+    setGitSummaryValue(
+      view.gitBranch,
+      result.status.detached ? 'Detached HEAD' : displayBranchName(result.status.branch),
+    );
+    setGitSummaryValue(view.gitWorktree, result.status.worktreePath);
+    view.gitChanges.textContent = formatGitChanges(changes);
+    view.gitSummary.dataset.gitState =
+      changes.conflicted > 0 ? 'conflicted' : changes.isClean ? 'clean' : 'dirty';
+    view.gitStatusMessage.textContent = changes.isClean
+      ? 'Working tree is clean.'
+      : 'Local changes detected; refresh after the agent finishes.';
+  } catch (error) {
+    if (terminalViews.has(view.id) && view.projectFolder === requestedProjectFolder) {
+      view.gitStatus = null;
+      view.gitSummary.dataset.gitState = 'error';
+      view.gitChanges.textContent = 'Status unavailable';
+      view.gitStatusMessage.textContent = formatUserFacingError(
+        error,
+        'Unable to refresh Git status for this terminal.',
+      );
+    }
+  } finally {
+    view.isGitRefreshing = false;
+    view.gitRefreshButton.textContent = 'Refresh Git';
+    view.gitRefreshButton.disabled = view.isBusy || !view.projectFolder;
+  }
 };
 
 const branchToPathSegment = (branch) =>
@@ -467,6 +590,8 @@ const confirmGitWorkspace = async () => {
     view.projectFolder = result.operation.workspace.projectPath;
     view.projectButton.textContent = 'Change folder';
     view.restartButton.textContent = 'Restart';
+    setInitialGitSummary(view);
+    state.refreshOnClose = true;
 
     if (result.session?.isRunning) {
       view.isConnected = true;
@@ -587,6 +712,7 @@ const chooseProjectFolder = async (view) => {
     return;
   }
 
+  let refreshAfterSelection = false;
   setControlsBusy(view, true);
   view.projectButton.textContent = 'Selecting...';
 
@@ -604,6 +730,8 @@ const chooseProjectFolder = async (view) => {
       projectPath: result.path,
       repository: null,
     };
+    setInitialGitSummary(view);
+    refreshAfterSelection = true;
     await launchSession(view, {
       restart: isRestart,
       failureMessage: 'Unable to use project folder',
@@ -620,6 +748,10 @@ const chooseProjectFolder = async (view) => {
   } finally {
     setControlsBusy(view, false);
     view.projectButton.textContent = view.projectFolder ? 'Change folder' : 'Choose folder';
+
+    if (refreshAfterSelection) {
+      refreshGitStatus(view);
+    }
   }
 };
 
@@ -734,6 +866,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   const clearButton = pane.querySelector('[data-clear-button]');
   const restartButton = pane.querySelector('[data-restart-button]');
   const removeButton = pane.querySelector('[data-remove-button]');
+  const gitRefreshButton = pane.querySelector('[data-git-refresh]');
 
   pane.dataset.paneId = snapshot.id;
   pane.dataset.activePane = 'false';
@@ -748,6 +881,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   clearButton.setAttribute('aria-label', `Clear ${label}`);
   restartButton.setAttribute('aria-label', `Restart ${label}`);
   worktreeButton.setAttribute('aria-label', `Assign a Git workspace to ${label}`);
+  gitRefreshButton.setAttribute('aria-label', `Refresh Git status for ${label}`);
   removeButton.setAttribute('aria-label', `Remove ${label}`);
   terminalGrid.append(pane);
 
@@ -798,9 +932,18 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
     copyButton,
     descriptionElement: pane.querySelector('[data-terminal-description]'),
     fitAddon,
+    gitBranch: pane.querySelector('[data-git-branch]'),
+    gitChanges: pane.querySelector('[data-git-changes]'),
+    gitRefreshButton,
+    gitRepository: pane.querySelector('[data-git-repository]'),
+    gitStatus: null,
+    gitStatusMessage: pane.querySelector('[data-git-status-message]'),
+    gitSummary: pane.querySelector('[data-git-summary]'),
+    gitWorktree: pane.querySelector('[data-git-worktree]'),
     id: snapshot.id,
     isBusy: false,
     isConnected: snapshot.isRunning,
+    isGitRefreshing: false,
     isRemoving: false,
     isRestarting: false,
     label,
@@ -817,6 +960,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   };
 
   terminalViews.set(view.id, view);
+  setInitialGitSummary(view);
 
   if (restoredStatus.status === 'available') {
     projectButton.textContent = 'Change folder';
@@ -852,6 +996,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
 
   projectButton.addEventListener('click', () => chooseProjectFolder(view));
   worktreeButton.addEventListener('click', () => openGitWorkspaceDialog(view));
+  gitRefreshButton.addEventListener('click', () => refreshGitStatus(view));
   copyButton.addEventListener('click', () => {
     runClipboardAction(() => copyTerminalSelection(view));
   });
@@ -885,6 +1030,10 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   if (activate) {
     setActivePane(pane, { persist: false });
     terminal.focus();
+  }
+
+  if (restoredFolder) {
+    refreshGitStatus(view);
   }
 
   return view;
@@ -1004,6 +1153,7 @@ worktreeDialog.addEventListener('cancel', (event) => {
 });
 worktreeDialog.addEventListener('close', () => {
   const view = worktreeDialogState?.view;
+  const refreshAfterAssignment = worktreeDialogState?.refreshOnClose === true;
   worktreeDialogState = null;
   worktreeForm.reset();
   worktreeFields.hidden = true;
@@ -1019,6 +1169,10 @@ worktreeDialog.addEventListener('close', () => {
 
   if (view && terminalViews.has(view.id)) {
     setControlsBusy(view, false);
+
+    if (refreshAfterAssignment) {
+      refreshGitStatus(view);
+    }
   }
 });
 

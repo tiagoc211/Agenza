@@ -6,6 +6,7 @@ const {
   toGitWorkspaceExecutionErrorPayload,
 } = require('./git-workspace-executor');
 const { GitWorkspacePlanner, toGitWorkspacePlanErrorPayload } = require('./git-workspace-planner');
+const { readGitWorkspaceStatus } = require('./git-status');
 const { GIT_CHANNELS } = require('./ipc-channels');
 
 const isTrustedEvent = (event, window) =>
@@ -25,6 +26,7 @@ const registerGitIpc = ({
   logger,
   executor,
   planner,
+  readStatus,
   startTerminal = async () => null,
   window,
   workspaceService,
@@ -44,6 +46,12 @@ const registerGitIpc = ({
   const workspacePlanner = planner ?? new GitWorkspacePlanner({ discover });
   const workspaceExecutor =
     executor ?? new GitWorkspaceExecutor({ discover, planner: workspacePlanner });
+  const statusReader =
+    readStatus ?? ((projectPath) => readGitWorkspaceStatus(projectPath, { discover }));
+
+  if (typeof statusReader !== 'function') {
+    throw new TypeError('Git IPC status reader must be a function.');
+  }
 
   if (!workspacePlanner || typeof workspacePlanner.plan !== 'function') {
     throw new TypeError('Git IPC workspace planner must provide a plan function.');
@@ -145,6 +153,41 @@ const registerGitIpc = ({
     }
   };
 
+  const handleStatus = async (event, payload) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error('Untrusted Git status request.');
+    }
+
+    const { id } = payload ?? {};
+    const projectPath = getTerminalProjectPath(id);
+
+    if (!projectPath) {
+      return {
+        error: {
+          code: 'PROJECT_FOLDER_UNAVAILABLE',
+          message: 'Select an accessible project folder before refreshing Git status.',
+        },
+        id,
+        ok: false,
+      };
+    }
+
+    writeLog(logger, 'info', 'git.status_requested', { terminalId: id });
+
+    try {
+      const status = await statusReader(projectPath);
+      writeLog(logger, 'info', 'git.status_succeeded', { terminalId: id });
+      return { id, ok: true, status };
+    } catch (error) {
+      const errorPayload = toGitErrorPayload(error);
+      writeLog(logger, 'warn', 'git.status_failed', {
+        error: { code: errorPayload.code },
+        terminalId: id,
+      });
+      return { error: errorPayload, id, ok: false };
+    }
+  };
+
   const createConfirmationHandler = (executorMethod, operationName) => async (event, payload) => {
     if (!isTrustedEvent(event, window)) {
       throw new Error('Untrusted Git workspace confirmation request.');
@@ -220,6 +263,7 @@ const registerGitIpc = ({
   ipcMain.handle(GIT_CHANNELS.createNewBranch, handleCreateNewBranch);
   ipcMain.handle(GIT_CHANNELS.discover, handleDiscover);
   ipcMain.handle(GIT_CHANNELS.planWorkspace, handlePlanWorkspace);
+  ipcMain.handle(GIT_CHANNELS.status, handleStatus);
 
   return () => {
     workspacePlanner.clearPreviews?.();
@@ -228,6 +272,7 @@ const registerGitIpc = ({
     ipcMain.removeHandler(GIT_CHANNELS.createNewBranch);
     ipcMain.removeHandler(GIT_CHANNELS.discover);
     ipcMain.removeHandler(GIT_CHANNELS.planWorkspace);
+    ipcMain.removeHandler(GIT_CHANNELS.status);
   };
 };
 

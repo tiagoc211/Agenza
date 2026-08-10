@@ -107,6 +107,39 @@
               </span>
             </div>
           </header>
+          <section
+            class="workspace-summary"
+            data-git-summary
+            data-git-state="unavailable"
+            aria-label="Terminal Git workspace status"
+          >
+            <div class="workspace-summary-details">
+              <div class="workspace-summary-detail workspace-summary-repository">
+                <span>Repository</span>
+                <output data-git-repository title="Not inspected">Not inspected</output>
+              </div>
+              <div class="workspace-summary-detail">
+                <span>Branch</span>
+                <output data-git-branch title="Not inspected">&mdash;</output>
+              </div>
+              <div class="workspace-summary-detail workspace-summary-worktree">
+                <span>Worktree</span>
+                <output data-git-worktree title="No folder selected">&mdash;</output>
+              </div>
+              <div class="workspace-summary-detail">
+                <span>Changes</span>
+                <output class="git-change-summary" data-git-changes>Unavailable</output>
+              </div>
+            </div>
+            <div class="workspace-summary-footer">
+              <p role="status" aria-live="polite" data-git-status-message>
+                Choose a project folder to inspect Git.
+              </p>
+              <button class="git-refresh-button" type="button" data-git-refresh disabled>
+                Refresh Git
+              </button>
+            </div>
+          </section>
           <div class="terminal-frame">
             <div class="terminal-mount" data-terminal-mount></div>
           </div>

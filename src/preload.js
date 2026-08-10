@@ -41,6 +41,7 @@ const gitApi = Object.freeze({
     ipcRenderer.invoke(GIT_CHANNELS.createNewBranch, { id, operationId }),
   discover: (id) => ipcRenderer.invoke(GIT_CHANNELS.discover, { id }),
   planWorkspace: (id, request) => ipcRenderer.invoke(GIT_CHANNELS.planWorkspace, { id, request }),
+  status: (id) => ipcRenderer.invoke(GIT_CHANNELS.status, { id }),
 });
 
 const clipboardApi = Object.freeze({

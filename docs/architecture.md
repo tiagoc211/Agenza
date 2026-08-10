@@ -92,6 +92,15 @@ state. Missing Git, non-repository folders, timeouts, excessive output, and unex
 converted to concise structured errors carrying the requesting terminal ID, so one failure cannot
 affect another terminal or PTY.
 
+Each terminal pane has a runtime-only Git summary showing the discovered repository root, current
+branch, worktree path, and aggregate change counts. Refresh invokes the fixed read-only command
+`git status --porcelain=v2 -z --untracked-files=normal --ignore-submodules=none` from the validated
+worktree. The bounded parser returns only tracked, untracked, and conflicted counts plus a clean
+flag; file names, file contents, diffs, and status output are not exposed to the renderer, persisted,
+or logged. A response is applied only if the terminal still owns the same project path. Missing Git,
+non-repository folders, malformed or excessive output, and timeouts update only that pane's Git
+summary and never change its Codex process state or another terminal's status.
+
 `GitWorkspacePlanner` turns fresh discovery facts and renderer intent into an immutable,
 runtime-only operation preview. It supports three explicit intents: create a new branch and
 worktree, create a worktree for an eligible existing branch, or attach an existing registered

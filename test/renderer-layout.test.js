@@ -53,6 +53,7 @@ test('gives every pane independent controls, process state, and a stable label',
   for (const control of [
     'data-project-button',
     'data-worktree-button',
+    'data-git-refresh',
     'data-copy-button',
     'data-paste-button',
     'data-clear-button',
@@ -69,6 +70,30 @@ test('gives every pane independent controls, process state, and a stable label',
   assert.match(renderer, /terminalViews\.get\(id\)\?\.terminal\.write\(data\)/);
   assert.match(renderer, /window\.agenza\.terminal\.resize\(view\.id/);
   assert.match(renderer, /window\.agenza\.terminal\.activate\(nextActiveId\)/);
+});
+
+test('shows and refreshes repository, branch, worktree, and change counts per pane', () => {
+  for (const field of [
+    'data-git-summary',
+    'data-git-repository',
+    'data-git-branch',
+    'data-git-worktree',
+    'data-git-changes',
+    'data-git-status-message',
+    'data-git-refresh',
+  ]) {
+    assert.equal((html.match(new RegExp(field, 'g')) ?? []).length, 1);
+  }
+
+  assert.match(renderer, /window\.agenza\.git\.status\(view\.id\)/);
+  assert.match(renderer, /view\.projectFolder !== requestedProjectFolder/);
+  assert.match(renderer, /tracked > 0/);
+  assert.match(renderer, /untracked > 0/);
+  assert.match(renderer, /conflicted > 0/);
+  assert.match(renderer, /view\.gitSummary\.dataset\.gitState = 'error'/);
+  assert.match(renderer, /Unable to refresh Git status for this terminal/);
+  assert.match(styles, /\.workspace-summary\[data-git-state='clean'\]/);
+  assert.match(styles, /\.workspace-summary\[data-git-state='conflicted'\]/);
 });
 
 test('previews and confirms a new branch worktree for only the selected terminal', () => {
@@ -159,7 +184,7 @@ test('preserves independent clear, restart, and terminal-local recovery behavior
 
 test('tracks one active pane and cycles focus across the current dynamic order', () => {
   assert.match(html, /aria-keyshortcuts="F6 Shift\+F6"/);
-  assert.equal((html.match(/aria-live="polite"/g) ?? []).length, 2);
+  assert.ok((html.match(/aria-live="polite"/g) ?? []).length >= 3);
   assert.match(renderer, /getOrderedViews\(\)/);
   assert.match(renderer, /classList\.toggle\('is-active'/);
   assert.match(renderer, /event\.key !== 'F6'/);

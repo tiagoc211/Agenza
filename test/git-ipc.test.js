@@ -28,6 +28,7 @@ const createHarness = ({
   discoveryError = null,
   executionError = null,
   planError = null,
+  statusError = null,
   terminalStartError = null,
 } = {}) => {
   const ipcMain = new FakeIpcMain();
@@ -43,6 +44,7 @@ const createHarness = ({
   const planRequests = [];
   const executionRequests = [];
   const startedIds = [];
+  const statusRequests = [];
   const assignedWorkspaces = [];
   const preview = {
     baseBranch: 'main',
@@ -62,6 +64,14 @@ const createHarness = ({
         path: 'C:\\repo-agent-one',
       },
     },
+  };
+  const gitStatus = {
+    branch: 'main',
+    branchRef: 'refs/heads/main',
+    changes: { conflicted: 0, isClean: true, tracked: 0, untracked: 0 },
+    detached: false,
+    repositoryRoot: 'C:\\repo',
+    worktreePath: 'C:\\repo',
   };
   const executeWorkspace = (method) => async (request) => {
     executionRequests.push({ method, ...request });
@@ -107,6 +117,16 @@ const createHarness = ({
         return preview;
       },
     },
+    readStatus: async (projectPath) => {
+      statusRequests.push(projectPath);
+      const error = typeof statusError === 'function' ? statusError(projectPath) : statusError;
+
+      if (error) {
+        throw error;
+      }
+
+      return { ...gitStatus, worktreePath: projectPath };
+    },
     startTerminal: async (id) => {
       startedIds.push(id);
 
@@ -128,7 +148,8 @@ const createHarness = ({
           terminalId: id === 'terminal-one' ? 'terminal-two' : 'terminal-one',
         },
       ],
-      getCurrentFolder: () => currentFolder,
+      getCurrentFolder: (id) =>
+        typeof currentFolder === 'function' ? currentFolder(id) : currentFolder,
       has: (id) => id === 'terminal-one' || id === 'terminal-two',
     },
   });
@@ -144,6 +165,8 @@ const createHarness = ({
     preview,
     repository,
     startedIds,
+    status: ipcMain.handlers.get(GIT_CHANNELS.status),
+    statusRequests,
     trustedEvent: { sender: webContents, senderFrame: mainFrame },
     workspace,
   };
@@ -180,6 +203,46 @@ test('discovers Git only for the selected folder belonging to the requesting ter
 
   harness.dispose();
   assert.equal(harness.ipcMain.handlers.size, 0);
+});
+
+test('refreshes read-only Git status only for the requesting terminal folder', async () => {
+  const harness = createHarness({
+    currentFolder: (id) => `C:\\${id}`,
+  });
+  const result = await harness.status(harness.trustedEvent, { id: 'terminal-two' });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.id, 'terminal-two');
+  assert.equal(result.status.worktreePath, 'C:\\terminal-two');
+  assert.deepEqual(harness.statusRequests, ['C:\\terminal-two']);
+  assert.deepEqual(harness.startedIds, []);
+  await assert.rejects(
+    harness.status({ sender: {}, senderFrame: {} }, { id: 'terminal-two' }),
+    /Untrusted/,
+  );
+
+  harness.dispose();
+});
+
+test('keeps a Git status failure local while another terminal can refresh', async () => {
+  const harness = createHarness({
+    currentFolder: (id) => `C:\\${id}`,
+    statusError: (projectPath) =>
+      projectPath.endsWith('terminal-one')
+        ? new GitDiscoveryError(GIT_ERROR_CODES.notRepository)
+        : null,
+  });
+  const first = await harness.status(harness.trustedEvent, { id: 'terminal-one' });
+  const second = await harness.status(harness.trustedEvent, { id: 'terminal-two' });
+
+  assert.equal(first.ok, false);
+  assert.equal(first.id, 'terminal-one');
+  assert.equal(first.error.code, GIT_ERROR_CODES.notRepository);
+  assert.equal(second.ok, true);
+  assert.equal(second.id, 'terminal-two');
+  assert.deepEqual(harness.statusRequests, ['C:\\terminal-one', 'C:\\terminal-two']);
+
+  harness.dispose();
 });
 
 test('returns a terminal-scoped immutable workspace preview before confirmation', async () => {

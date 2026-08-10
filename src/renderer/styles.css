@@ -230,7 +230,7 @@ body {
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid #252d3b;
   border-radius: 10px;
@@ -380,6 +380,103 @@ body {
 .terminal-pane[data-session-state='stopping'] .pane-state {
   border-color: #725f2c;
   color: #f4ca78;
+}
+
+.workspace-summary {
+  display: grid;
+  min-width: 0;
+  gap: 0.45rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #1c2330;
+  background: #0d121a;
+}
+
+.workspace-summary-details {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.5fr) minmax(6rem, 0.5fr);
+  gap: 0.35rem 0.8rem;
+}
+
+.workspace-summary-detail {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 4.7rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.workspace-summary-detail > span {
+  color: #718096;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.workspace-summary-detail output {
+  min-width: 0;
+  overflow: hidden;
+  color: #b8c3d2;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-summary-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.workspace-summary-footer p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #718096;
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-refresh-button {
+  flex: none;
+  padding: 0.22rem 0.45rem;
+  border: 1px solid #354052;
+  border-radius: 5px;
+  background: #171d28;
+  color: #aeb9c9;
+  font: inherit;
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+
+.git-refresh-button:hover:not(:disabled),
+.git-refresh-button:focus-visible {
+  border-color: #68d5ff;
+  outline: none;
+}
+
+.git-refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspace-summary[data-git-state='clean'] .git-change-summary {
+  color: #73d69c;
+}
+
+.workspace-summary[data-git-state='dirty'] .git-change-summary {
+  color: #f4ca78;
+}
+
+.workspace-summary[data-git-state='conflicted'] .git-change-summary,
+.workspace-summary[data-git-state='error'] .git-change-summary,
+.workspace-summary[data-git-state='error'] [data-git-status-message] {
+  color: #ff8ba0;
 }
 
 .terminal-frame,
