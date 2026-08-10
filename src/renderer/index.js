@@ -202,6 +202,16 @@ const formatUserFacingError = (error, fallback = 'An unexpected error occurred.'
   return (printableMessage || fallback).slice(0, 500);
 };
 
+const formatUserFacingActionError = (error, fallback) => {
+  const message = formatUserFacingError(error, fallback);
+  const recovery =
+    typeof error?.recovery === 'string'
+      ? formatUserFacingError({ message: error.recovery }, '')
+      : '';
+
+  return recovery && recovery !== message ? `${message} ${recovery}` : message;
+};
+
 const showSessionFailure = (view, { description, error, heading, recovery }) => {
   view.terminal.writeln(`\r\n\x1b[31m${heading}\x1b[0m`);
   view.terminal.writeln(`\x1b[31m${formatUserFacingError(error)}\x1b[0m`);
@@ -247,7 +257,7 @@ const applyWorkspaceAvailability = (view, workspaceStatus) => {
 };
 
 const setCleanupError = (error, fallback = 'Unable to inspect this worktree.') => {
-  cleanupError.textContent = error ? formatUserFacingError(error, fallback) : '';
+  cleanupError.textContent = error ? formatUserFacingActionError(error, fallback) : '';
   cleanupError.hidden = !error;
 };
 
@@ -529,6 +539,12 @@ const refreshGitStatus = async (view) => {
       if (view.workspaceStatus?.status === 'stale') {
         view.gitStatus = null;
         setInitialGitSummary(view);
+        if (result.error?.recovery) {
+          view.gitStatusMessage.textContent += ` ${formatUserFacingError(
+            { message: result.error.recovery },
+            '',
+          )}`;
+        }
         return;
       }
       throw result.error;
@@ -553,7 +569,7 @@ const refreshGitStatus = async (view) => {
       view.gitStatus = null;
       view.gitSummary.dataset.gitState = 'error';
       view.gitChanges.textContent = 'Status unavailable';
-      view.gitStatusMessage.textContent = formatUserFacingError(
+      view.gitStatusMessage.textContent = formatUserFacingActionError(
         error,
         'Unable to refresh Git status for this terminal.',
       );
@@ -590,7 +606,7 @@ const resetWorktreePreview = () => {
 };
 
 const setWorktreeDialogError = (error = null, fallback) => {
-  worktreeError.textContent = error ? formatUserFacingError(error, fallback) : '';
+  worktreeError.textContent = error ? formatUserFacingActionError(error, fallback) : '';
   worktreeError.hidden = !error;
 };
 
@@ -910,7 +926,9 @@ const confirmGitWorkspace = async () => {
         description: 'Workspace assigned - Codex start needs attention',
         error: result.terminalError,
         heading: 'The Git workspace was assigned, but Codex did not start.',
-        recovery: 'The workspace assignment is saved. Use Restart to try Codex again.',
+        recovery:
+          result.terminalError.recovery ??
+          'The workspace assignment is saved. Use Restart to try Codex again.',
       });
     }
 

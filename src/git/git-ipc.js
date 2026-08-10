@@ -1,5 +1,7 @@
 const { discoverGitRepository } = require('./git-discovery');
 const { toGitErrorPayload } = require('./git-command');
+const { addGitRecovery } = require('./git-error-guidance');
+const { writeGitLifecycleLog } = require('./git-lifecycle-log');
 const {
   GitWorkspaceExecutionError,
   GitWorkspaceExecutor,
@@ -12,14 +14,6 @@ const { GIT_CHANNELS } = require('./ipc-channels');
 
 const isTrustedEvent = (event, window) =>
   event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
-
-const writeLog = (logger, level, event, details) => {
-  try {
-    return logger?.[level]?.(event, details) ?? false;
-  } catch {
-    return false;
-  }
-};
 
 const registerGitIpc = ({
   discover = discoverGitRepository,
@@ -105,27 +99,40 @@ const registerGitIpc = ({
     const projectPath = getTerminalProjectPath(id, { allowRecovery: true });
 
     if (!projectPath) {
+      const error = addGitRecovery({
+        code: 'PROJECT_FOLDER_UNAVAILABLE',
+        message: 'Select an accessible project folder before inspecting Git.',
+      });
+      writeGitLifecycleLog(logger, 'warn', 'git.discovery_blocked', {
+        errorCode: error.code,
+        terminalId: id,
+        workspaceState: 'blocked',
+      });
       return {
-        error: {
-          code: 'PROJECT_FOLDER_UNAVAILABLE',
-          message: 'Select an accessible project folder before inspecting Git.',
-        },
+        error,
         id,
         ok: false,
       };
     }
 
-    writeLog(logger, 'info', 'git.discovery_requested', { terminalId: id });
+    writeGitLifecycleLog(logger, 'info', 'git.discovery_requested', {
+      terminalId: id,
+      workspaceState: 'available',
+    });
 
     try {
       const repository = await discover(projectPath);
-      writeLog(logger, 'info', 'git.discovery_succeeded', { terminalId: id });
+      writeGitLifecycleLog(logger, 'info', 'git.discovery_succeeded', {
+        terminalId: id,
+        workspaceState: 'discovered',
+      });
       return { id, ok: true, repository };
     } catch (error) {
-      const errorPayload = toGitErrorPayload(error);
-      writeLog(logger, 'warn', 'git.discovery_failed', {
-        error: { code: errorPayload.code },
+      const errorPayload = addGitRecovery(toGitErrorPayload(error));
+      writeGitLifecycleLog(logger, 'warn', 'git.discovery_failed', {
+        errorCode: errorPayload.code,
         terminalId: id,
+        workspaceState: 'failed',
       });
       return { error: errorPayload, id, ok: false };
     }
@@ -140,17 +147,28 @@ const registerGitIpc = ({
     const projectPath = getTerminalProjectPath(id, { allowRecovery: true });
 
     if (!projectPath) {
+      const error = addGitRecovery({
+        code: 'PROJECT_FOLDER_UNAVAILABLE',
+        message: 'Select an accessible Git project folder before planning a worktree.',
+      });
+      writeGitLifecycleLog(logger, 'warn', 'git.workspace_preview_blocked', {
+        errorCode: error.code,
+        operationType: 'preview',
+        terminalId: id,
+        workspaceState: 'blocked',
+      });
       return {
-        error: {
-          code: 'PROJECT_FOLDER_UNAVAILABLE',
-          message: 'Select an accessible Git project folder before planning a worktree.',
-        },
+        error,
         id,
         ok: false,
       };
     }
 
-    writeLog(logger, 'info', 'git.workspace_preview_requested', { terminalId: id });
+    writeGitLifecycleLog(logger, 'info', 'git.workspace_preview_requested', {
+      operationType: 'preview',
+      terminalId: id,
+      workspaceState: 'available',
+    });
 
     try {
       const preview = await workspacePlanner.plan({
@@ -159,16 +177,20 @@ const registerGitIpc = ({
         request,
         terminalId: id,
       });
-      writeLog(logger, 'info', 'git.workspace_preview_succeeded', {
+      writeGitLifecycleLog(logger, 'info', 'git.workspace_preview_succeeded', {
         operationId: preview.operationId,
+        operationType: 'preview',
         terminalId: id,
+        workspaceState: 'previewed',
       });
       return { id, ok: true, preview };
     } catch (error) {
-      const errorPayload = toGitWorkspacePlanErrorPayload(error);
-      writeLog(logger, 'warn', 'git.workspace_preview_failed', {
-        error: { code: errorPayload.code },
+      const errorPayload = addGitRecovery(toGitWorkspacePlanErrorPayload(error));
+      writeGitLifecycleLog(logger, 'warn', 'git.workspace_preview_failed', {
+        errorCode: errorPayload.code,
+        operationType: 'preview',
         terminalId: id,
+        workspaceState: 'failed',
       });
       return { error: errorPayload, id, ok: false };
     }
@@ -181,20 +203,38 @@ const registerGitIpc = ({
 
     const { id } = payload ?? {};
     getTerminalProjectPath(id);
-    const workspaceSnapshot =
-      typeof workspaceService.refreshWorkspace === 'function'
-        ? await workspaceService.refreshWorkspace(id)
-        : null;
+    let workspaceSnapshot = null;
+
+    try {
+      workspaceSnapshot =
+        typeof workspaceService.refreshWorkspace === 'function'
+          ? await workspaceService.refreshWorkspace(id)
+          : null;
+    } catch {
+      const error = addGitRecovery({
+        code: 'GIT_WORKSPACE_REFRESH_FAILED',
+        message: 'Agenza could not refresh this saved workspace safely.',
+      });
+      writeGitLifecycleLog(logger, 'warn', 'git.status_failed', {
+        errorCode: error.code,
+        operationType: 'status',
+        terminalId: id,
+        workspaceState: 'failed',
+      });
+      return { error, id, ok: false };
+    }
+
     const projectPath = getTerminalProjectPath(id);
 
     if (!projectPath) {
+      const error = addGitRecovery({
+        code: workspaceSnapshot?.workspaceStatus?.code ?? 'PROJECT_FOLDER_UNAVAILABLE',
+        message:
+          workspaceSnapshot?.workspaceStatus?.message ??
+          'Select an accessible project folder before refreshing Git status.',
+      });
       const result = {
-        error: {
-          code: workspaceSnapshot?.workspaceStatus?.code ?? 'PROJECT_FOLDER_UNAVAILABLE',
-          message:
-            workspaceSnapshot?.workspaceStatus?.message ??
-            'Select an accessible project folder before refreshing Git status.',
-        },
+        error,
         id,
         ok: false,
       };
@@ -203,14 +243,30 @@ const registerGitIpc = ({
         result.workspaceStatus = workspaceSnapshot.workspaceStatus;
       }
 
+      writeGitLifecycleLog(logger, 'warn', 'git.status_blocked', {
+        errorCode: error.code,
+        operationType: 'status',
+        terminalId: id,
+        workspaceState: workspaceSnapshot?.workspaceStatus ? 'stale' : 'blocked',
+      });
       return result;
     }
 
-    writeLog(logger, 'info', 'git.status_requested', { terminalId: id });
+    writeGitLifecycleLog(logger, 'info', 'git.status_requested', {
+      operationType: 'status',
+      terminalId: id,
+      workspaceState: 'available',
+    });
 
     try {
       const status = await statusReader(projectPath);
-      writeLog(logger, 'info', 'git.status_succeeded', { terminalId: id });
+      const workspaceState =
+        status.changes?.conflicted > 0 ? 'conflicted' : status.changes?.isClean ? 'clean' : 'dirty';
+      writeGitLifecycleLog(logger, 'info', 'git.status_succeeded', {
+        operationType: 'status',
+        terminalId: id,
+        workspaceState,
+      });
       return {
         id,
         ok: true,
@@ -220,10 +276,12 @@ const registerGitIpc = ({
           : {}),
       };
     } catch (error) {
-      const errorPayload = toGitErrorPayload(error);
-      writeLog(logger, 'warn', 'git.status_failed', {
-        error: { code: errorPayload.code },
+      const errorPayload = addGitRecovery(toGitErrorPayload(error));
+      writeGitLifecycleLog(logger, 'warn', 'git.status_failed', {
+        errorCode: errorPayload.code,
+        operationType: 'status',
         terminalId: id,
+        workspaceState: 'failed',
       });
       return { error: errorPayload, id, ok: false };
     }
@@ -243,7 +301,11 @@ const registerGitIpc = ({
     }
 
     const { creationId } = payload ?? {};
-    writeLog(logger, 'info', 'git.worktree_cleanup_preview_requested', { creationId });
+    writeGitLifecycleLog(logger, 'info', 'git.worktree_cleanup_preview_requested', {
+      creationId,
+      operationType: 'cleanup',
+      workspaceState: 'available',
+    });
 
     try {
       const preview = await worktreeCleanup.preview({
@@ -251,16 +313,20 @@ const registerGitIpc = ({
         creationId,
         getManagedWorktree: (id) => workspaceService.getManagedWorktree?.(id) ?? null,
       });
-      writeLog(logger, 'info', 'git.worktree_cleanup_preview_succeeded', {
+      writeGitLifecycleLog(logger, 'info', 'git.worktree_cleanup_preview_succeeded', {
         creationId,
         operationId: preview.operationId,
+        operationType: 'cleanup',
+        workspaceState: 'previewed',
       });
       return { ok: true, preview };
     } catch (error) {
-      const errorPayload = toGitWorktreeCleanupErrorPayload(error);
-      writeLog(logger, 'warn', 'git.worktree_cleanup_preview_failed', {
+      const errorPayload = addGitRecovery(toGitWorktreeCleanupErrorPayload(error));
+      writeGitLifecycleLog(logger, 'warn', 'git.worktree_cleanup_preview_failed', {
         creationId,
-        error: { code: errorPayload.code },
+        errorCode: errorPayload.code,
+        operationType: 'cleanup',
+        workspaceState: 'failed',
       });
       return { error: errorPayload, ok: false };
     }
@@ -272,7 +338,11 @@ const registerGitIpc = ({
     }
 
     const { operationId } = payload ?? {};
-    writeLog(logger, 'info', 'git.worktree_cleanup_requested', { operationId });
+    writeGitLifecycleLog(logger, 'info', 'git.worktree_cleanup_requested', {
+      operationId,
+      operationType: 'cleanup',
+      workspaceState: 'available',
+    });
 
     try {
       const operation = await worktreeCleanup.confirm({
@@ -282,16 +352,20 @@ const registerGitIpc = ({
           workspaceService.getManagedWorktree?.(creationId) ?? null,
         operationId,
       });
-      writeLog(logger, 'info', 'git.worktree_cleanup_succeeded', {
+      writeGitLifecycleLog(logger, 'info', 'git.worktree_cleanup_succeeded', {
         creationId: operation.creationId,
         operationId,
+        operationType: 'cleanup',
+        workspaceState: 'succeeded',
       });
       return { ok: true, operation };
     } catch (error) {
-      const errorPayload = toGitWorktreeCleanupErrorPayload(error);
-      writeLog(logger, 'warn', 'git.worktree_cleanup_failed', {
-        error: { code: errorPayload.code },
+      const errorPayload = addGitRecovery(toGitWorktreeCleanupErrorPayload(error));
+      writeGitLifecycleLog(logger, 'warn', 'git.worktree_cleanup_failed', {
+        errorCode: errorPayload.code,
         operationId,
+        operationType: 'cleanup',
+        workspaceState: 'failed',
       });
       return { error: errorPayload, ok: false };
     }
@@ -309,9 +383,11 @@ const registerGitIpc = ({
       throw new Error('Invalid Git workspace operation id.');
     }
 
-    writeLog(logger, 'info', `git.workspace_${operationName}_requested`, {
+    writeGitLifecycleLog(logger, 'info', `git.workspace_${operationName}_requested`, {
       operationId,
+      operationType: operationName,
       terminalId: id,
+      workspaceState: 'available',
     });
 
     try {
@@ -328,33 +404,41 @@ const registerGitIpc = ({
 
       try {
         session = await startTerminal(id);
-      } catch (error) {
-        terminalError = {
+      } catch {
+        terminalError = addGitRecovery({
           code: 'TERMINAL_START_FAILED',
-          message:
-            'The workspace was assigned, but Codex could not start. Verify Codex in a normal terminal and retry.',
-        };
-        writeLog(logger, 'error', 'git.workspace_terminal_start_failed', {
-          error,
+          message: 'The workspace was assigned, but Codex could not start.',
+        });
+        writeGitLifecycleLog(logger, 'error', 'git.workspace_terminal_start_failed', {
+          errorCode: terminalError.code,
           operationId,
+          operationType: operationName,
           terminalId: id,
+          workspaceState: 'failed',
         });
       }
 
-      writeLog(logger, 'info', `git.workspace_${operationName}_succeeded`, {
+      writeGitLifecycleLog(logger, 'info', `git.workspace_${operationName}_succeeded`, {
         operationId,
+        operationType: operationName,
+        ownershipKind: operation.workspace?.repository?.worktree?.ownership?.kind,
         terminalId: id,
+        workspaceState: 'succeeded',
       });
       return { id, ok: true, operation, session, terminalError };
     } catch (error) {
-      const errorPayload =
+      const errorPayload = addGitRecovery(
         error instanceof GitWorkspaceExecutionError
           ? toGitWorkspaceExecutionErrorPayload(error)
-          : toGitWorkspacePlanErrorPayload(error);
-      writeLog(logger, 'error', `git.workspace_${operationName}_failed`, {
-        error: { code: errorPayload.code },
+          : toGitWorkspacePlanErrorPayload(error),
+      );
+      writeGitLifecycleLog(logger, 'error', `git.workspace_${operationName}_failed`, {
+        errorCode: errorPayload.code,
         operationId,
+        operationType: operationName,
+        rollbackState: errorPayload.rollbackState,
         terminalId: id,
+        workspaceState: 'failed',
       });
       return { error: errorPayload, id, ok: false };
     }

@@ -121,6 +121,10 @@ Agenza stores newline-delimited JSON diagnostics in `%APPDATA%\Agenza\logs\agenz
 application and process lifecycle metadata, but never terminal input, terminal output, commands,
 environment variables, or authentication secrets.
 
+Git lifecycle entries contain only event categories, error codes, safe state/ownership values, and
+hashed terminal, operation, or Agenza-worktree correlators. They do not contain repository paths,
+branch names, file names, Git output, remote URLs, or command arguments.
+
 An error in one pane is shown locally and does not stop the other pane.
 
 ## Troubleshooting
@@ -134,6 +138,14 @@ works in the terminal, fully close and reopen Agenza so the desktop app receives
 
 Choose an existing absolute directory that the current Windows user can read and write. An error or
 canceled selection in one pane does not change the other pane.
+
+### A Git workspace action fails
+
+Follow the recovery action shown in the affected terminal or workspace dialog. A timeout, excessive
+output, or unfamiliar Git response is stopped safely and does not interrupt the other Codex
+terminals. If the action keeps failing, inspect that repository with Git in a normal terminal, then
+retry **Refresh Git** or review the workspace operation again. The diagnostic log records the safe
+error category without Git commands, paths, credentials, or environment values.
 
 ### Codex exited unexpectedly
 

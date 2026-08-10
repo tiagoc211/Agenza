@@ -182,7 +182,7 @@
       "id": "T215",
       "order": 15,
       "title": "Add Git workspace logging and user-facing error handling",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T206", "T208", "T209", "T212", "T213"],
       "acceptance_criteria": [
         "Git discovery and mutation failures provide concise recovery actions scoped to the affected terminal.",

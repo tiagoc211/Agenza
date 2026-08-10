@@ -109,13 +109,16 @@ ownership record. Recovery inspection does not run `git worktree prune` or any o
 Read-only Git discovery also runs only in the main process. The preload bridge accepts a stable
 terminal ID, never an arbitrary path or command, and discovers the repository from that terminal's
 validated current folder. Git is launched directly without a shell, with a five-second timeout, a
-one-megabyte output limit, hidden Windows process windows, and fixed internal arguments. Discovery
+one-megabyte output limit, hidden Windows process windows, and fixed internal arguments. An
+independent main-process watchdog terminates and rejects a stalled child even if the normal process
+callback never arrives. Discovery
 uses `rev-parse`, `worktree list --porcelain -z`, and `for-each-ref` to return the canonical main
 repository root, selected worktree path, current branch or detached state, local branches, and all
 registered worktrees including locked or prunable metadata. These commands do not mutate repository
 state. Missing Git, non-repository folders, timeouts, excessive output, and unexpected formats are
 converted to concise structured errors carrying the requesting terminal ID, so one failure cannot
-affect another terminal or PTY.
+affect another terminal or PTY. Every structured error also carries a fixed recovery action that the
+renderer shows only in the affected terminal summary or workspace dialog.
 
 Each terminal pane has a runtime-only Git summary showing the discovered repository root, current
 branch, worktree path, and aggregate change counts. Refresh invokes the fixed read-only command
@@ -206,7 +209,11 @@ directory. Logging is limited to application, window, IPC, and terminal lifecycl
 input and output routes never call the logger, sensitive field names are always redacted, token-like
 values and control characters are sanitized, and logging failures do not stop the app. Terminal
 startup and restart errors are caught per ID, logged without terminal content, and returned only to
-the affected pane with a concise recovery instruction.
+the affected pane with a concise recovery instruction. Git lifecycle logging has a stricter
+allowlist: it accepts only fixed Git event names, error categories, operation/state/ownership values,
+and one-way hashed terminal, preview, or Agenza-worktree correlators. Repository and worktree paths,
+branch and file names, commands and arguments, stdout/stderr, remote URLs, environment values, and
+raw errors are discarded before reaching the general logger.
 
 Automated validation has four entry points. `npm test` runs the Node test suite with faked PTY and
 Electron boundaries. `npm run test:smoke` launches the packaged executable with `--startup-check`

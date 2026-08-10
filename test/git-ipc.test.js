@@ -7,6 +7,8 @@ const {
   GitWorkspaceExecutionError,
 } = require('../src/git/git-workspace-executor');
 const { registerGitIpc } = require('../src/git/git-ipc');
+const { getGitRecoveryAction } = require('../src/git/git-error-guidance');
+const { fingerprintIdentifier } = require('../src/git/git-lifecycle-log');
 const { GIT_CHANNELS } = require('../src/git/ipc-channels');
 
 class FakeIpcMain {
@@ -138,6 +140,7 @@ const createHarness = ({
     },
     ipcMain,
     logger: {
+      error: (event, details) => logs.push({ details, event, level: 'error' }),
       info: (event, details) => logs.push({ details, event, level: 'info' }),
       warn: (event, details) => logs.push({ details, event, level: 'warn' }),
     },
@@ -238,12 +241,18 @@ test('discovers Git only for the selected folder belonging to the requesting ter
   );
   assert.deepEqual(harness.logs, [
     {
-      details: { terminalId: 'terminal-one' },
+      details: {
+        terminal: fingerprintIdentifier('terminal', 'terminal-one'),
+        workspaceState: 'available',
+      },
       event: 'git.discovery_requested',
       level: 'info',
     },
     {
-      details: { terminalId: 'terminal-one' },
+      details: {
+        terminal: fingerprintIdentifier('terminal', 'terminal-one'),
+        workspaceState: 'discovered',
+      },
       event: 'git.discovery_succeeded',
       level: 'info',
     },
@@ -276,16 +285,15 @@ test('keeps a Git status failure local while another terminal can refresh', asyn
   const harness = createHarness({
     currentFolder: (id) => `C:\\${id}`,
     statusError: (projectPath) =>
-      projectPath.endsWith('terminal-one')
-        ? new GitDiscoveryError(GIT_ERROR_CODES.notRepository)
-        : null,
+      projectPath.endsWith('terminal-one') ? new GitDiscoveryError(GIT_ERROR_CODES.timeout) : null,
   });
   const first = await harness.status(harness.trustedEvent, { id: 'terminal-one' });
   const second = await harness.status(harness.trustedEvent, { id: 'terminal-two' });
 
   assert.equal(first.ok, false);
   assert.equal(first.id, 'terminal-one');
-  assert.equal(first.error.code, GIT_ERROR_CODES.notRepository);
+  assert.equal(first.error.code, GIT_ERROR_CODES.timeout);
+  assert.equal(first.error.recovery, getGitRecoveryAction(GIT_ERROR_CODES.timeout));
   assert.equal(second.ok, true);
   assert.equal(second.id, 'terminal-two');
   assert.deepEqual(harness.statusRequests, ['C:\\terminal-one', 'C:\\terminal-two']);
@@ -316,6 +324,7 @@ test('returns refreshed stale metadata and uses only its recovery root for reass
     error: {
       code: recoveryStatus.code,
       message: recoveryStatus.message,
+      recovery: getGitRecoveryAction(recoveryStatus.code),
     },
     id: 'terminal-one',
     ok: false,
@@ -474,14 +483,25 @@ test('reports rollback failures and keeps a completed workspace when only Codex 
 
   assert.equal(mutationResult.ok, false);
   assert.equal(mutationResult.error.code, GIT_EXECUTION_ERROR_CODES.createFailed);
+  assert.equal(
+    mutationResult.error.recovery,
+    getGitRecoveryAction(GIT_EXECUTION_ERROR_CODES.createFailed),
+  );
   assert.equal(mutationResult.error.rollbackState, 'rolled-back');
   assert.deepEqual(failedMutation.startedIds, []);
   assert.equal(startResult.ok, true);
   assert.equal(startResult.session, null);
   assert.equal(startResult.terminalError.code, 'TERMINAL_START_FAILED');
+  assert.equal(startResult.terminalError.recovery, getGitRecoveryAction('TERMINAL_START_FAILED'));
   assert.deepEqual(failedStart.assignedWorkspaces, [
     { id: 'terminal-one', workspace: failedStart.workspace },
   ]);
+  const serializedLogs = JSON.stringify(failedStart.logs);
+  assert.equal(serializedLogs.includes('Codex unavailable'), false);
+  assert.equal(serializedLogs.includes('terminal-one'), false);
+  assert.equal(serializedLogs.includes('operation-one'), false);
+  assert.equal(serializedLogs.includes('C:\\repo'), false);
+  assert.match(serializedLogs, /TERMINAL_START_FAILED/);
 
   failedMutation.dispose();
   failedStart.dispose();
@@ -497,6 +517,7 @@ test('returns concise terminal-local errors for unavailable folders and Git fail
     error: {
       code: 'PROJECT_FOLDER_UNAVAILABLE',
       message: 'Select an accessible project folder before inspecting Git.',
+      recovery: getGitRecoveryAction('PROJECT_FOLDER_UNAVAILABLE'),
     },
     id: 'terminal-one',
     ok: false,
@@ -508,6 +529,7 @@ test('returns concise terminal-local errors for unavailable folders and Git fail
   assert.equal(firstFailure.ok, false);
   assert.equal(firstFailure.error.code, GIT_ERROR_CODES.missing);
   assert.match(firstFailure.error.message, /Install Git/);
+  assert.equal(firstFailure.error.recovery, getGitRecoveryAction(GIT_ERROR_CODES.missing));
   assert.equal(secondSuccess.id, 'terminal-two');
   assert.equal(secondSuccess.ok, false);
   assert.equal(secondSuccess.error.code, GIT_ERROR_CODES.missing);

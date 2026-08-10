@@ -219,9 +219,11 @@ The workspace state must not contain:
   credentials, diffs, file contents, or commit messages; or
 - transient validation errors, dirty-file lists, operation previews, or runtime lifecycle states.
 
-Logs follow the same privacy boundary. They may record stable terminal IDs, safe operation IDs,
-state names, ownership kind, timestamps, and sanitized error categories, but not terminal content or
-secret-bearing Git arguments.
+Logs follow the same privacy boundary. Git lifecycle logs may record one-way hashed terminal,
+operation, and Agenza-worktree correlators plus allowlisted state names, ownership kind, timestamps,
+and sanitized error categories. They never record raw IDs, repository or worktree paths, branch or
+file names, terminal content, commands or arguments, Git output, remote URLs, environment values, or
+raw errors.
 
 ## Implementation boundaries
 

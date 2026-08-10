@@ -242,6 +242,8 @@ test('preserves independent clear, restart, and terminal-local recovery behavior
   assert.match(renderer, /Use Restart above to launch this session again/);
   assert.match(renderer, /setSessionState\(view, 'exited', 'Exited'/);
   assert.match(renderer, /const formatUserFacingError/);
+  assert.match(renderer, /const formatUserFacingActionError/);
+  assert.match(renderer, /typeof error\?\.recovery === 'string'/);
   assert.match(renderer, /\.slice\(0, 500\)/);
   assert.match(renderer, /Check that Codex works in a normal terminal/);
   assert.match(renderer, /Choose a readable and writable project folder/);

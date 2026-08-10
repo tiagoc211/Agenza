@@ -104,27 +104,55 @@ const runGit = (
   }
 
   return new Promise((resolve, reject) => {
-    execFileImpl(
-      'git',
-      args,
-      {
-        cwd,
-        encoding: 'utf8',
-        maxBuffer,
-        timeout: timeoutMs,
-        windowsHide: true,
-      },
-      (error, stdout = '', stderr = '') => {
-        const exitCode = error ? error.code : 0;
+    let childProcess = null;
+    let settled = false;
+    const settle = (callback, value) => {
+      if (settled) {
+        return;
+      }
 
-        if (!error || (Number.isInteger(exitCode) && allowedExitCodes.includes(exitCode))) {
-          resolve({ exitCode, stderr: String(stderr), stdout: String(stdout) });
-          return;
-        }
+      settled = true;
+      clearTimeout(watchdog);
+      callback(value);
+    };
+    const watchdog = setTimeout(() => {
+      try {
+        childProcess?.kill?.();
+      } catch {
+        // The timeout still rejects even when the child process cannot be killed directly.
+      }
 
-        reject(new GitDiscoveryError(classifyGitFailure(error, stderr), { cause: error }));
-      },
-    );
+      settle(reject, new GitDiscoveryError(GIT_ERROR_CODES.timeout));
+    }, timeoutMs);
+
+    try {
+      childProcess = execFileImpl(
+        'git',
+        args,
+        {
+          cwd,
+          encoding: 'utf8',
+          maxBuffer,
+          timeout: timeoutMs,
+          windowsHide: true,
+        },
+        (error, stdout = '', stderr = '') => {
+          const exitCode = error ? error.code : 0;
+
+          if (!error || (Number.isInteger(exitCode) && allowedExitCodes.includes(exitCode))) {
+            settle(resolve, { exitCode, stderr: String(stderr), stdout: String(stdout) });
+            return;
+          }
+
+          settle(
+            reject,
+            new GitDiscoveryError(classifyGitFailure(error, stderr), { cause: error }),
+          );
+        },
+      );
+    } catch (error) {
+      settle(reject, new GitDiscoveryError(classifyGitFailure(error, ''), { cause: error }));
+    }
   });
 };
 

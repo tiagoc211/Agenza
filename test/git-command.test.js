@@ -90,3 +90,36 @@ test('rejects unbounded or malformed Git command requests before spawning', () =
     (error) => error.code === GIT_ERROR_CODES.invalidRequest,
   );
 });
+
+test('independent watchdog terminates a stalled Git invocation', async () => {
+  let killCount = 0;
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    runGit(['status'], {
+      cwd: 'C:\\repo',
+      execFileImpl: () => ({
+        kill: () => {
+          killCount += 1;
+        },
+      }),
+      timeoutMs: 20,
+    }),
+    (error) => error.code === GIT_ERROR_CODES.timeout,
+  );
+
+  assert.equal(killCount, 1);
+  assert.ok(Date.now() - startedAt < 1000);
+});
+
+test('maps synchronous process-launch failures without crashing the caller', async () => {
+  await assert.rejects(
+    runGit(['status'], {
+      cwd: 'C:\\repo',
+      execFileImpl: () => {
+        throw Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' });
+      },
+    }),
+    (error) => error.code === GIT_ERROR_CODES.missing,
+  );
+});
