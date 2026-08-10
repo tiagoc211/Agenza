@@ -20,15 +20,42 @@
           </div>
         </div>
         <div class="workspace-actions">
-          <div class="workspace-status" aria-label="Workspace status" aria-live="polite">
+          <div
+            class="workspace-status"
+            role="status"
+            aria-label="Workspace status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <span class="status-dot" aria-hidden="true"></span>
             <span data-terminal-count>No terminals</span>
           </div>
-          <button class="cleanup-worktree-button" type="button" data-cleanup-worktree disabled>
+          <button
+            class="cleanup-worktree-button"
+            type="button"
+            aria-label="Clean an Agenza-created worktree"
+            aria-haspopup="dialog"
+            aria-controls="cleanup-worktree-dialog"
+            aria-expanded="false"
+            data-cleanup-worktree
+            disabled
+          >
             Clean worktree
           </button>
           <span class="visually-hidden" role="status" aria-live="polite" data-cleanup-status></span>
-          <button class="add-terminal-button" type="button" data-add-terminal>
+          <span
+            class="visually-hidden"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-workspace-announcement
+          ></span>
+          <button
+            class="add-terminal-button"
+            type="button"
+            aria-label="Add a new terminal"
+            data-add-terminal
+          >
             <span aria-hidden="true">+</span>
             Add terminal
           </button>
@@ -51,14 +78,19 @@
           <span class="empty-workspace-mark" aria-hidden="true">&gt;_</span>
           <h2>No terminals open</h2>
           <p>Add a terminal to choose a project folder and start Codex.</p>
-          <button class="empty-workspace-action" type="button" data-empty-add-terminal>
+          <button
+            class="empty-workspace-action"
+            type="button"
+            aria-label="Add a new terminal"
+            data-empty-add-terminal
+          >
             Add terminal
           </button>
         </section>
       </main>
 
       <template id="terminal-pane-template">
-        <section class="terminal-pane" data-session-state="waiting">
+        <section class="terminal-pane" data-session-state="waiting" aria-busy="false">
           <header class="pane-header">
             <div class="pane-identity">
               <span class="pane-number" aria-hidden="true" data-terminal-number></span>
@@ -158,12 +190,18 @@
         </section>
       </template>
 
-      <dialog class="workspace-dialog" data-worktree-dialog>
+      <dialog
+        class="workspace-dialog"
+        id="git-workspace-dialog"
+        aria-labelledby="git-workspace-dialog-title"
+        aria-describedby="git-workspace-dialog-intro"
+        data-worktree-dialog
+      >
         <form class="workspace-dialog-form" method="dialog" data-worktree-form>
           <header class="workspace-dialog-header">
             <div>
               <p class="workspace-dialog-eyebrow">Git workspace</p>
-              <h2>Assign an isolated Git workspace</h2>
+              <h2 id="git-workspace-dialog-title">Assign an isolated Git workspace</h2>
             </div>
             <button
               class="workspace-dialog-close"
@@ -175,7 +213,14 @@
             </button>
           </header>
 
-          <p class="workspace-dialog-intro" data-worktree-intro>
+          <p
+            class="workspace-dialog-intro"
+            id="git-workspace-dialog-intro"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-worktree-intro
+          >
             Loading the selected terminal repository&hellip;
           </p>
 
@@ -283,12 +328,18 @@
         </form>
       </dialog>
 
-      <dialog class="workspace-dialog cleanup-dialog" data-cleanup-dialog>
+      <dialog
+        class="workspace-dialog cleanup-dialog"
+        id="cleanup-worktree-dialog"
+        aria-labelledby="cleanup-worktree-dialog-title"
+        aria-describedby="cleanup-worktree-dialog-intro"
+        data-cleanup-dialog
+      >
         <form class="workspace-dialog-form" method="dialog" data-cleanup-form>
           <header class="workspace-dialog-header">
             <div>
               <p class="workspace-dialog-eyebrow">Git cleanup</p>
-              <h2>Remove an Agenza-created worktree</h2>
+              <h2 id="cleanup-worktree-dialog-title">Remove an Agenza-created worktree</h2>
             </div>
             <button
               class="workspace-dialog-close"
@@ -300,7 +351,7 @@
             </button>
           </header>
 
-          <p class="workspace-dialog-intro">
+          <p class="workspace-dialog-intro" id="cleanup-worktree-dialog-intro">
             This is separate from terminal removal. Agenza will never delete the Git branch.
           </p>
 

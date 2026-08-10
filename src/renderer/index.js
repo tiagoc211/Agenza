@@ -39,6 +39,7 @@ const confirmWorktreeButton = document.querySelector('[data-confirm-worktree]');
 const cancelWorktreeButtons = document.querySelectorAll('[data-cancel-worktree]');
 const cleanupButton = document.querySelector('[data-cleanup-worktree]');
 const cleanupStatus = document.querySelector('[data-cleanup-status]');
+const workspaceAnnouncement = document.querySelector('[data-workspace-announcement]');
 const cleanupDialog = document.querySelector('[data-cleanup-dialog]');
 const cleanupForm = document.querySelector('[data-cleanup-form]');
 const cleanupSelect = document.querySelector('[data-cleanup-worktree-select]');
@@ -90,7 +91,21 @@ const workspaceOperationTypes = Object.freeze({
   createNewBranch: 'create-new-branch-worktree',
 });
 
-const getOrderedViews = () => [...terminalViews.values()];
+const getOrderedViews = () =>
+  [...terminalGrid.querySelectorAll('[data-pane-id]')]
+    .map((pane) => terminalViews.get(pane.dataset.paneId))
+    .filter(Boolean);
+
+const announceWorkspace = (message) => {
+  workspaceAnnouncement.textContent = message;
+};
+
+const isTerminalFocusShortcut = (event) =>
+  event.type === 'keydown' &&
+  event.key === 'F6' &&
+  !event.altKey &&
+  !event.ctrlKey &&
+  !event.metaKey;
 
 const setActivePane = (activePane, { persist = true } = {}) => {
   const nextActiveId = activePane?.dataset.paneId ?? null;
@@ -111,6 +126,28 @@ const setActivePane = (activePane, { persist = true } = {}) => {
   }
 };
 
+const focusAdjacentTerminal = ({ direction, fromView = null }) => {
+  const views = getOrderedViews();
+
+  if (views.length === 0) {
+    return false;
+  }
+
+  const focusedPane = document.activeElement?.closest?.('[data-pane-id]');
+  const focusedView = focusedPane ? terminalViews.get(focusedPane.dataset.paneId) : null;
+  const currentView = fromView ?? focusedView ?? terminalViews.get(activeTerminalId);
+  const currentIndex = views.indexOf(currentView);
+  const startingIndex = currentIndex === -1 ? (direction < 0 ? 0 : views.length - 1) : currentIndex;
+  const nextIndex = (startingIndex + direction + views.length) % views.length;
+  const nextView = views[nextIndex];
+
+  setActivePane(nextView.pane);
+  nextView.pane.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  nextView.terminal.focus();
+  announceWorkspace(`${nextView.label}, terminal ${nextIndex + 1} of ${views.length}.`);
+  return true;
+};
+
 const updateWorkspaceLayout = () => {
   const count = terminalViews.size;
 
@@ -118,6 +155,13 @@ const updateWorkspaceLayout = () => {
   emptyWorkspace.hidden = count !== 0;
   terminalCount.textContent =
     count === 0 ? 'No terminals' : `${count} ${count === 1 ? 'terminal' : 'terminals'}`;
+
+  for (const [index, view] of getOrderedViews().entries()) {
+    view.pane.setAttribute(
+      'aria-description',
+      `${view.label}, terminal ${index + 1} of ${count}. Press F6 for the next terminal or Shift+F6 for the previous terminal.`,
+    );
+  }
 };
 
 const fitTerminals = () => {
@@ -135,6 +179,7 @@ resizeObserver.observe(terminalGrid);
 const setSessionState = (view, state, label, description) => {
   view.pane.dataset.sessionState = state;
   view.stateElement.textContent = label;
+  view.stateElement.setAttribute('aria-label', `${view.label} status: ${label}. ${description}`);
   view.descriptionElement.textContent = description;
   view.descriptionElement.title = description;
   view.restartButton.classList.toggle(
@@ -166,6 +211,7 @@ const showSessionFailure = (view, { description, error, heading, recovery }) => 
 
 const setControlsBusy = (view, isBusy) => {
   view.isBusy = isBusy;
+  view.pane.setAttribute('aria-busy', String(isBusy));
   const canInspectGit = Boolean(view.projectFolder || view.gitRecoveryPath);
   view.clearButton.disabled = isBusy;
   view.projectButton.disabled = isBusy;
@@ -280,6 +326,8 @@ const openCleanupDialog = async () => {
   }
 
   cleanupDialog.showModal();
+  cleanupButton.setAttribute('aria-expanded', 'true');
+  announceWorkspace('Worktree cleanup dialog opened.');
   (eligibleOption ? cleanupSelect : cancelCleanupButtons[0]).focus();
 };
 
@@ -310,6 +358,9 @@ const previewWorktreeCleanup = async () => {
     cleanupPath.textContent = result.preview.worktreePath;
     cleanupPreview.hidden = false;
     confirmCleanupButton.disabled = false;
+    announceWorkspace(
+      `Cleanup safety checks passed for ${displayBranchName(result.preview.branchRef)}. Review the worktree path before confirming removal.`,
+    );
     confirmCleanupButton.focus();
   } catch (error) {
     if (cleanupDialogState === state) {
@@ -351,6 +402,9 @@ const confirmWorktreeCleanup = async () => {
     }
 
     cleanupStatus.textContent = `Removed worktree ${result.operation.worktreePath}. Branch ${displayBranchName(result.operation.branchRef)} was kept.`;
+    announceWorkspace(
+      `Worktree removed safely. Branch ${displayBranchName(result.operation.branchRef)} was kept.`,
+    );
     state.isRemoving = false;
     cleanupDialog.close();
     await refreshManagedWorktrees();
@@ -620,6 +674,10 @@ const configureWorkspaceOperation = ({ resetPath = false } = {}) => {
   }
 
   confirmWorktreeButton.textContent = getConfirmationLabel(type);
+  confirmWorktreeButton.setAttribute(
+    'aria-label',
+    `${getConfirmationLabel(type)} for ${state.view.label}`,
+  );
   resetWorktreePreview();
   setWorktreeDialogError();
 };
@@ -647,6 +705,8 @@ const openGitWorkspaceDialog = async (view) => {
   resetWorktreePreview();
   setWorktreeDialogError();
   worktreeDialog.showModal();
+  view.worktreeButton.setAttribute('aria-expanded', 'true');
+  announceWorkspace(`Git workspace dialog opened for ${view.label}.`);
 
   try {
     const result = await window.agenza.git.discover(view.id);
@@ -765,7 +825,14 @@ const previewGitWorkspace = async () => {
           : 'Agenza will only assign this registered worktree and restart this terminal. No branch, directory, or Git registration will be created or deleted.';
     worktreePreview.hidden = false;
     confirmWorktreeButton.textContent = getConfirmationLabel(type);
+    confirmWorktreeButton.setAttribute(
+      'aria-label',
+      `${getConfirmationLabel(type)} for ${state.view.label}`,
+    );
     confirmWorktreeButton.disabled = false;
+    announceWorkspace(
+      `${state.view.label} Git operation is ready for confirmation. Review the branch and worktree path.`,
+    );
     confirmWorktreeButton.focus();
   } catch (error) {
     if (worktreeDialogState === state) {
@@ -824,6 +891,9 @@ const confirmGitWorkspace = async () => {
     view.restartButton.textContent = 'Restart';
     setInitialGitSummary(view);
     state.refreshOnClose = true;
+    announceWorkspace(
+      `${view.label} is assigned to ${displayBranchName(result.operation.workspace.repository.branch)}.`,
+    );
 
     if (result.session?.isRunning) {
       view.isConnected = true;
@@ -1065,6 +1135,7 @@ const detachStaleWorkspace = async (view) => {
     view.restartButton.textContent = 'Restart';
     setInitialGitSummary(view);
     setSessionState(view, 'waiting', 'Waiting', 'Choose a project folder');
+    announceWorkspace(`${view.label} saved workspace was detached. No Git resources were deleted.`);
     await refreshManagedWorktrees();
   } catch (error) {
     view.isConnected = false;
@@ -1124,9 +1195,13 @@ const removeTerminalView = async (view) => {
     const nextView = remainingViews[Math.min(removedIndex, remainingViews.length - 1)];
     setActivePane(nextView.pane);
     nextView.terminal.focus();
+    announceWorkspace(`${view.label} removed. Focus moved to ${nextView.label}.`);
   } else if (remainingViews.length === 0) {
     setActivePane(null);
     addTerminalButton.focus();
+    announceWorkspace(`${view.label} removed. No terminals remain.`);
+  } else {
+    announceWorkspace(`${view.label} removed. ${remainingViews.length} terminals remain.`);
   }
 
   fitTerminals();
@@ -1137,6 +1212,13 @@ const configureTerminalShortcuts = (view) => {
   view.terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== 'keydown') {
       return true;
+    }
+
+    if (isTerminalFocusShortcut(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      focusAdjacentTerminal({ direction: event.shiftKey ? -1 : 1, fromView: view });
+      return false;
     }
 
     const key = event.key.toLowerCase();
@@ -1202,13 +1284,21 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   pane.querySelector('[data-terminal-number]').textContent = String(displayNumber).padStart(2, '0');
   mount.id = `terminal-mount-${snapshot.id}`;
   mount.setAttribute('aria-label', `${label} Codex console`);
+  mount.setAttribute('aria-keyshortcuts', 'F6 Shift+F6');
   copyButton.setAttribute('aria-label', `Copy selected text from ${label}`);
   pasteButton.setAttribute('aria-label', `Paste text into ${label}`);
   clearButton.setAttribute('aria-label', `Clear ${label}`);
   restartButton.setAttribute('aria-label', `Restart ${label}`);
-  worktreeButton.setAttribute('aria-label', `Assign a Git workspace to ${label}`);
+  projectButton.setAttribute('aria-label', `Choose or change the project folder for ${label}`);
+  worktreeButton.setAttribute('aria-label', `Assign or reassign a Git workspace to ${label}`);
+  worktreeButton.setAttribute('aria-haspopup', 'dialog');
+  worktreeButton.setAttribute('aria-controls', 'git-workspace-dialog');
+  worktreeButton.setAttribute('aria-expanded', 'false');
   gitRefreshButton.setAttribute('aria-label', `Refresh Git status for ${label}`);
-  removeButton.setAttribute('aria-label', `Remove ${label}`);
+  removeButton.setAttribute(
+    'aria-label',
+    `Remove ${label} without deleting its project folder, worktree, or branch`,
+  );
   terminalGrid.append(pane);
 
   const terminal = new Terminal({
@@ -1301,6 +1391,8 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   };
 
   terminalViews.set(view.id, view);
+  view.gitSummary.setAttribute('aria-label', `${label} Git workspace status`);
+  view.gitStatusMessage.setAttribute('aria-label', `${label} Git status message`);
   applyWorkspaceAvailability(view, restoredStatus);
   setInitialGitSummary(view);
 
@@ -1391,11 +1483,13 @@ const addTerminal = async () => {
 
   try {
     const snapshot = await window.agenza.terminal.create();
-    createTerminalView(snapshot);
+    const view = createTerminalView(snapshot);
+    announceWorkspace(`${view.label} added. ${terminalViews.size} terminals open.`);
     addTerminalButton.title = '';
   } catch (error) {
     addTerminalButton.title = formatUserFacingError(error, 'Unable to add a terminal.');
     terminalCount.textContent = 'Unable to add terminal';
+    announceWorkspace(addTerminalButton.title);
   } finally {
     addTerminalButton.disabled = false;
     emptyAddTerminalButton.disabled = false;
@@ -1427,25 +1521,18 @@ const disposeExitSubscription = window.agenza.terminal.onExit(({ id, exitCode })
 });
 
 const handleTerminalFocusShortcut = (event) => {
-  if (event.key !== 'F6' || event.altKey || event.ctrlKey || event.metaKey) {
+  if (event.defaultPrevented || !isTerminalFocusShortcut(event)) {
     return;
   }
 
-  const views = getOrderedViews();
-
-  if (views.length < 2) {
+  if (worktreeDialog.open || cleanupDialog.open) {
+    event.preventDefault();
     return;
   }
 
-  event.preventDefault();
-  const activeIndex = views.findIndex(({ pane }) => pane.classList.contains('is-active'));
-  const direction = event.shiftKey ? -1 : 1;
-  const startingIndex = activeIndex === -1 ? (event.shiftKey ? 0 : views.length - 1) : activeIndex;
-  const nextIndex = (startingIndex + direction + views.length) % views.length;
-  const nextView = views[nextIndex];
-
-  setActivePane(nextView.pane);
-  nextView.terminal.focus();
+  if (focusAdjacentTerminal({ direction: event.shiftKey ? -1 : 1 })) {
+    event.preventDefault();
+  }
 };
 
 document.addEventListener('keydown', handleTerminalFocusShortcut);
@@ -1468,6 +1555,7 @@ cleanupDialog.addEventListener('cancel', (event) => {
   }
 });
 cleanupDialog.addEventListener('close', () => {
+  cleanupButton.setAttribute('aria-expanded', 'false');
   cleanupDialogState = null;
   cleanupForm.reset();
   cleanupPreview.hidden = true;
@@ -1480,6 +1568,7 @@ cleanupDialog.addEventListener('close', () => {
   for (const button of cancelCleanupButtons) {
     button.disabled = false;
   }
+  cleanupButton.focus();
 });
 workspaceOperation.addEventListener('change', () => {
   configureWorkspaceOperation({ resetPath: true });
@@ -1544,10 +1633,14 @@ worktreeDialog.addEventListener('close', () => {
   }
 
   if (view && terminalViews.has(view.id)) {
+    view.worktreeButton.setAttribute('aria-expanded', 'false');
     setControlsBusy(view, false);
 
     if (refreshAfterAssignment) {
       refreshGitStatus(view);
+      view.terminal.focus();
+    } else {
+      view.worktreeButton.focus();
     }
   }
 });

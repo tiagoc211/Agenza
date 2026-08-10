@@ -172,7 +172,6 @@ body {
 .empty-workspace-action:hover:not(:disabled),
 .empty-workspace-action:focus-visible {
   border-color: #68d5ff;
-  outline: none;
   box-shadow: 0 0 0 2px rgb(104 213 255 / 24%);
 }
 
@@ -196,7 +195,6 @@ body {
 .dialog-button-danger:hover:not(:disabled),
 .dialog-button-danger:focus-visible {
   border-color: #ff8ba0;
-  outline: none;
   box-shadow: 0 0 0 2px rgb(255 139 160 / 24%);
 }
 
@@ -380,7 +378,6 @@ body {
 .pane-action-button:hover:not(:disabled),
 .pane-action-button:focus-visible {
   border-color: #68d5ff;
-  outline: none;
 }
 
 .pane-action-button:focus-visible {
@@ -500,7 +497,6 @@ body {
 .git-refresh-button:hover:not(:disabled),
 .git-refresh-button:focus-visible {
   border-color: #68d5ff;
-  outline: none;
 }
 
 .git-refresh-button:disabled {
@@ -645,7 +641,6 @@ body {
 .workspace-dialog-close:focus-visible {
   border-color: #536177;
   color: #ffffff;
-  outline: none;
 }
 
 .workspace-dialog-close:disabled {
@@ -710,7 +705,6 @@ body {
 .workspace-dialog-fields input:focus,
 .workspace-dialog-fields select:focus {
   border-color: #68d5ff;
-  outline: none;
   box-shadow: 0 0 0 2px rgb(104 213 255 / 20%);
 }
 
@@ -809,8 +803,14 @@ body {
 .dialog-button:hover:not(:disabled),
 .dialog-button:focus-visible {
   border-color: #68d5ff;
-  outline: none;
   box-shadow: 0 0 0 2px rgb(104 213 255 / 22%);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #68d5ff;
+  outline-offset: 2px;
 }
 
 .dialog-button:disabled {

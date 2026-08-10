@@ -250,13 +250,43 @@ test('preserves independent clear, restart, and terminal-local recovery behavior
 test('tracks one active pane and cycles focus across the current dynamic order', () => {
   assert.match(html, /aria-keyshortcuts="F6 Shift\+F6"/);
   assert.ok((html.match(/aria-live="polite"/g) ?? []).length >= 3);
-  assert.match(renderer, /getOrderedViews\(\)/);
+  assert.match(renderer, /terminalGrid\.querySelectorAll\('\[data-pane-id\]'\)/);
   assert.match(renderer, /classList\.toggle\('is-active'/);
-  assert.match(renderer, /event\.key !== 'F6'/);
-  assert.match(renderer, /event\.shiftKey \? -1 : 1/);
+  assert.match(renderer, /const isTerminalFocusShortcut/);
+  assert.match(renderer, /!event\.altKey/);
+  assert.match(renderer, /!event\.ctrlKey/);
+  assert.match(renderer, /!event\.metaKey/);
+  assert.match(renderer, /const focusAdjacentTerminal/);
+  assert.match(renderer, /views\.length === 0/);
+  assert.match(renderer, /document\.activeElement\?\.closest/);
+  assert.match(renderer, /direction: event\.shiftKey \? -1 : 1/);
   assert.match(renderer, /nextView\.terminal\.focus\(\)/);
+  assert.match(renderer, /nextView\.pane\.scrollIntoView/);
+  assert.match(renderer, /worktreeDialog\.open \|\|/);
+  assert.match(renderer, /cleanupDialog\.open/);
   assert.match(styles, /\.terminal-pane:focus-within/);
   assert.match(styles, /\.pane-action-button:focus-visible/);
+});
+
+test('names workspace actions and announces terminal-local state changes accessibly', () => {
+  assert.match(html, /aria-label="Add a new terminal"/);
+  assert.match(html, /aria-label="Clean an Agenza-created worktree"/);
+  assert.match(html, /aria-controls="cleanup-worktree-dialog"/);
+  assert.match(html, /aria-labelledby="git-workspace-dialog-title"/);
+  assert.match(html, /aria-describedby="git-workspace-dialog-intro"/);
+  assert.match(html, /aria-labelledby="cleanup-worktree-dialog-title"/);
+  assert.match(html, /data-workspace-announcement/);
+  assert.match(renderer, /Choose or change the project folder for \$\{label\}/);
+  assert.match(renderer, /Assign or reassign a Git workspace to \$\{label\}/);
+  assert.match(renderer, /without deleting its project folder, worktree, or branch/);
+  assert.match(renderer, /view\.pane\.setAttribute\('aria-busy', String\(isBusy\)\)/);
+  assert.match(renderer, /\$\{view\.label\} status: \$\{label\}/);
+  assert.match(renderer, /aria-expanded', 'true'/);
+  assert.match(renderer, /aria-expanded', 'false'/);
+  assert.match(renderer, /saved workspace was detached\. No Git resources were deleted/);
+  assert.match(renderer, /removed\. Focus moved to/);
+  assert.match(renderer, /Git operation is ready for confirmation/);
+  assert.match(styles, /button:focus-visible,[\s\S]*outline: 2px solid #68d5ff/);
 });
 
 test('supports mouse selection and terminal-safe clipboard shortcuts in every new pane', () => {
@@ -268,5 +298,5 @@ test('supports mouse selection and terminal-safe clipboard shortcuts in every ne
   assert.match(renderer, /attachCustomKeyEventHandler/);
   assert.match(renderer, /event\.shiftKey \|\| view\.terminal\.hasSelection\(\)/);
   assert.ok((renderer.match(/event\.preventDefault\(\)/g) ?? []).length >= 3);
-  assert.equal((renderer.match(/event\.stopPropagation\(\)/g) ?? []).length, 2);
+  assert.ok((renderer.match(/event\.stopPropagation\(\)/g) ?? []).length >= 3);
 });

@@ -170,7 +170,7 @@
       "id": "T214",
       "order": 14,
       "title": "Extend keyboard and accessibility behavior for dynamic panes",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T204", "T210", "T211"],
       "acceptance_criteria": [
         "Keyboard focus cycles predictably through any number of terminals after additions, removals, and reordering.",

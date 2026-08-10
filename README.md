@@ -50,9 +50,15 @@ Each pane provides these controls:
 - **Paste** pastes clipboard text once into that terminal.
 - **Clear** clears the visible screen without stopping Codex.
 - **Restart** replaces only that pane's Codex process.
-- **F6** and **Shift+F6** move keyboard focus between panes.
+- **F6** and **Shift+F6** move keyboard focus forward or backward through the visible pane order,
+  wrapping at either end and also focusing a single remaining terminal from elsewhere in the app.
 - **Ctrl+C** copies when text is selected; without a selection, it interrupts Codex.
 - **Ctrl+V** pastes into the active terminal.
+
+Only unmodified **F6** and **Shift+F6** are Agenza workspace shortcuts. Combinations that also use
+Ctrl, Alt, or the Windows/Meta key stay available to Codex and the terminal. Workspace dialogs keep
+keyboard focus inside the dialog until it closes. Terminal actions expose terminal-specific names,
+visible focus indicators, and live status announcements for assistive technology.
 
 Project folders are selected again whenever Agenza starts; they are not persisted in `0.1.0`.
 

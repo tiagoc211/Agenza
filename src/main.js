@@ -255,6 +255,24 @@ const createMainWindow = async () => {
           const severalLayoutHadThree = getPanes().length === 3;
           const severalHeadersAvoidedOverlap = getPanes().every(paneHeaderHasNoOverlap);
           const addedId = getIds().find((id) => !initialIds.includes(id));
+          const grid = document.querySelector('[data-terminal-grid]');
+          const firstInitialPane = getPane(initialIds[0]);
+          const secondInitialPane = getPane(initialIds[1]);
+          grid?.insertBefore(secondInitialPane, firstInitialPane);
+          secondInitialPane?.querySelector('[data-project-button]')?.focus();
+          document.dispatchEvent(
+            new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'F6' }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          const reorderedFocusFollowedVisualOrder =
+            firstInitialPane?.classList.contains('is-active') &&
+            firstInitialPane.contains(document.activeElement);
+          for (const id of [...initialIds, addedId]) {
+            const pane = getPane(id);
+            if (pane) {
+              grid?.append(pane);
+            }
+          }
           await removeTerminal(addedId);
           const dynamicRemovalRestoredTwo = getPanes().length === 2;
 
@@ -265,6 +283,14 @@ const createMainWindow = async () => {
               .getComputedStyle(document.querySelector('[data-terminal-grid]'))
               .gridTemplateColumns.split(' ').length === 1;
           const onePaneHeaderAvoidedOverlap = getPanes().every(paneHeaderHasNoOverlap);
+          document.querySelector('[data-add-terminal]')?.focus();
+          document.dispatchEvent(
+            new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'F6' }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          const singlePaneFocusShortcutWorked =
+            getPanes()[0]?.classList.contains('is-active') &&
+            getPanes()[0]?.contains(document.activeElement);
           await removeTerminal(initialIds[1]);
           const emptyStateWasUsable =
             getPanes().length === 0 &&
@@ -309,27 +335,44 @@ const createMainWindow = async () => {
 
           const keyboardFirstPane = getPane(firstId);
           const keyboardSecondPane = getPane(secondId);
-          keyboardFirstPane?.querySelector('.xterm-helper-textarea')?.focus();
+          const keyboardFirstInput = keyboardFirstPane?.querySelector('.xterm-helper-textarea');
+          const keyboardSecondInput = keyboardSecondPane?.querySelector('.xterm-helper-textarea');
+          keyboardFirstInput?.focus();
           await new Promise((resolve) => setTimeout(resolve, 50));
-          document.dispatchEvent(
-            new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'F6' }),
-          );
+          const terminalForwardEvent = new KeyboardEvent('keydown', {
+            bubbles: true,
+            cancelable: true,
+            key: 'F6',
+          });
+          keyboardFirstInput?.dispatchEvent(terminalForwardEvent);
           await new Promise((resolve) => setTimeout(resolve, 50));
           const focusMovedForward =
+            terminalForwardEvent.defaultPrevented &&
             keyboardSecondPane?.classList.contains('is-active') &&
             keyboardSecondPane.contains(document.activeElement);
-          document.dispatchEvent(
-            new KeyboardEvent('keydown', {
-              bubbles: true,
-              cancelable: true,
-              key: 'F6',
-              shiftKey: true,
-            }),
-          );
+          const terminalBackwardEvent = new KeyboardEvent('keydown', {
+            bubbles: true,
+            cancelable: true,
+            key: 'F6',
+            shiftKey: true,
+          });
+          keyboardSecondInput?.dispatchEvent(terminalBackwardEvent);
           await new Promise((resolve) => setTimeout(resolve, 50));
           const focusMovedBackward =
+            terminalBackwardEvent.defaultPrevented &&
             keyboardFirstPane?.classList.contains('is-active') &&
             keyboardFirstPane.contains(document.activeElement);
+          const activeBeforeModifiedF6 = document.querySelector('.terminal-pane.is-active');
+          const modifiedF6Event = new KeyboardEvent('keydown', {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+            key: 'F6',
+          });
+          document.dispatchEvent(modifiedF6Event);
+          const modifiedF6WasPreserved =
+            !modifiedF6Event.defaultPrevented &&
+            activeBeforeModifiedF6 === document.querySelector('.terminal-pane.is-active');
           const terminalShortcutEvent = new KeyboardEvent('keydown', {
             bubbles: true,
             cancelable: true,
@@ -379,12 +422,15 @@ const createMainWindow = async () => {
                 stableLabels[index],
             ),
             onePaneUsedOneColumn,
+            reorderedFocusFollowedVisualOrder,
             restartOutputReceived: getTerminalText(firstId).includes(restartMarker),
             restartWasAvailable,
             secondOutputIsIsolated,
             secondTerminalStayedConnected:
               keyboardSecondPane?.dataset.sessionState === 'connected',
             severalLayoutHadThree,
+            singlePaneFocusShortcutWorked,
+            modifiedF6WasPreserved,
             terminalShortcutWasPreserved,
             unexpectedExitWasShown,
           };
@@ -404,11 +450,14 @@ const createMainWindow = async () => {
           !layout.initialLayoutHadTwo ||
           !layout.labelsStayedStable ||
           !layout.onePaneUsedOneColumn ||
+          !layout.reorderedFocusFollowedVisualOrder ||
           !layout.restartOutputReceived ||
           !layout.restartWasAvailable ||
           !layout.secondOutputIsIsolated ||
           !layout.secondTerminalStayedConnected ||
           !layout.severalLayoutHadThree ||
+          !layout.singlePaneFocusShortcutWorked ||
+          !layout.modifiedF6WasPreserved ||
           !layout.terminalShortcutWasPreserved ||
           !layout.unexpectedExitWasShown
         ) {
