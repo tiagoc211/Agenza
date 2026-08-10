@@ -1,5 +1,6 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain } = require('electron');
 const startedByInstaller = require('electron-squirrel-startup');
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -25,6 +26,50 @@ const startupCheckLog = (...values) => {
   if (isStartupCheck) {
     console.log('[startup-check]', ...values);
   }
+};
+
+const runStartupCheckGit = (args, cwd) =>
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: 'pipe',
+    windowsHide: true,
+  });
+
+const createStartupCheckRepository = (workspaceDirectory) => {
+  const repositoryRoot = path.join(workspaceDirectory, 'repository');
+  fs.mkdirSync(repositoryRoot, { recursive: true });
+  runStartupCheckGit(['init', '--quiet', '--initial-branch=main'], repositoryRoot);
+  runStartupCheckGit(['config', 'user.email', 'agenza-smoke@example.invalid'], repositoryRoot);
+  runStartupCheckGit(['config', 'user.name', 'Agenza Smoke'], repositoryRoot);
+  fs.writeFileSync(path.join(repositoryRoot, 'README.md'), 'Agenza startup smoke repository.\n');
+  runStartupCheckGit(['add', 'README.md'], repositoryRoot);
+  runStartupCheckGit(
+    ['-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'Initial commit'],
+    repositoryRoot,
+  );
+
+  return Object.freeze({
+    repositoryRoot,
+    worktreePaths: [
+      path.join(workspaceDirectory, 'terminal-one-worktree'),
+      path.join(workspaceDirectory, 'terminal-two-worktree'),
+      path.join(workspaceDirectory, 'removed-terminal-worktree'),
+    ],
+  });
+};
+
+const waitForProcessesToStop = async (pids, timeoutMs = STARTUP_CHECK_CHILD_TIMEOUT_MS) => {
+  const uniquePids = [...new Set(pids.filter((pid) => Number.isInteger(pid) && pid > 0))];
+  const deadline = Date.now() + timeoutMs;
+  let runningPids = uniquePids.filter((pid) => isProcessRunning(pid));
+
+  while (runningPids.length > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    runningPids = uniquePids.filter((pid) => isProcessRunning(pid));
+  }
+
+  return runningPids;
 };
 
 startupCheckLog('argv', process.argv);
@@ -73,6 +118,9 @@ const createMainWindow = async () => {
   const workspaceDirectory = isStartupCheck
     ? path.join(app.getPath('temp'), 'Agenza', `startup-check-${process.pid}`)
     : app.getPath('userData');
+  const startupCheckRepository = isStartupCheck
+    ? createStartupCheckRepository(workspaceDirectory)
+    : null;
   const workspaceService = new WorkspaceService({
     inspectGitWorkspace: inspectSavedGitWorkspace,
     stateStore: new WorkspaceStateStore({ directory: workspaceDirectory }),
@@ -113,7 +161,7 @@ const createMainWindow = async () => {
     workspaceService,
   });
   const projectFolderIpc = registerProjectFolderIpc({
-    defaultFolder: isStartupCheck ? process.cwd() : null,
+    defaultFolder: startupCheckRepository?.repositoryRoot ?? null,
     dialog,
     isValidFolderId: (id) => workspaceService.has(id),
     initialFolders: isStartupCheck ? {} : workspaceService.getInitialFolders(),
@@ -136,14 +184,6 @@ const createMainWindow = async () => {
     { dispose: disposeGitIpc, label: 'Git discovery IPC' },
     { dispose: disposeClipboardIpc, label: 'clipboard IPC' },
     { dispose: () => terminalManager.dispose(), label: 'terminal process trees' },
-    ...(isStartupCheck
-      ? [
-          {
-            dispose: () => fs.rmSync(workspaceDirectory, { force: true, recursive: true }),
-            label: 'startup-check workspace state',
-          },
-        ]
-      : []),
   ]);
 
   window.once('close', () => {
@@ -464,6 +504,135 @@ const createMainWindow = async () => {
           throw new Error(`Unexpected terminal layout: ${JSON.stringify(layout)}`);
         }
 
+        const workspaceCheck = await window.webContents.executeJavaScript(`(async () => {
+          const waitFor = async (predicate, timeoutMs = 15000) => {
+            const deadline = Date.now() + timeoutMs;
+
+            while (!predicate() && Date.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+
+            return predicate();
+          };
+          const getPanes = () => [...document.querySelectorAll('.terminal-pane')];
+          const getPane = (id) => getPanes().find((pane) => pane.dataset.paneId === id);
+          const createTerminal = async () => {
+            const knownIds = new Set(getPanes().map((pane) => pane.dataset.paneId));
+            document.querySelector('[data-add-terminal]')?.click();
+            await waitFor(() => getPanes().length === knownIds.size + 1);
+            return getPanes().find((pane) => !knownIds.has(pane.dataset.paneId))?.dataset.paneId;
+          };
+          const assignWorktree = async (id, branch, worktreePath) => {
+            const discovery = await window.agenza.git.discover(id);
+
+            if (!discovery.ok) {
+              throw new Error('Unable to discover the startup-check repository for ' + id + '.');
+            }
+
+            const previewResult = await window.agenza.git.planWorkspace(id, {
+              baseBranch: discovery.repository.currentBranch,
+              targetBranch: branch,
+              type: 'create-new-branch-worktree',
+              worktreePath,
+            });
+
+            if (!previewResult.ok) {
+              throw new Error('Unable to preview a startup-check worktree for ' + id + '.');
+            }
+
+            const confirmation = await window.agenza.git.createNewBranch(
+              id,
+              previewResult.preview.operationId,
+            );
+
+            if (!confirmation.ok || confirmation.operation.workspace.projectPath !== worktreePath) {
+              throw new Error('Unable to assign the startup-check worktree for ' + id + '.');
+            }
+
+            return Object.freeze({
+              branch,
+              id,
+              sessionPid: confirmation.session?.pid ?? null,
+              worktreePath: confirmation.operation.workspace.projectPath,
+            });
+          };
+
+          const terminalIds = ${JSON.stringify(layout.terminalIds)};
+          const worktreePaths = ${JSON.stringify(startupCheckRepository.worktreePaths)};
+          const assignments = [];
+
+          assignments.push(
+            await assignWorktree(
+              terminalIds[0],
+              'agenza-smoke-terminal-one',
+              worktreePaths[0],
+            ),
+          );
+          assignments.push(
+            await assignWorktree(
+              terminalIds[1],
+              'agenza-smoke-terminal-two',
+              worktreePaths[1],
+            ),
+          );
+
+          const removedTerminalId = await createTerminal();
+          const removedTerminalPane = getPane(removedTerminalId);
+          removedTerminalPane?.querySelector('[data-project-button]')?.click();
+          await waitFor(
+            () => removedTerminalPane?.dataset.sessionState === 'connected',
+            10000,
+          );
+          const removedAssignment = await assignWorktree(
+            removedTerminalId,
+            'agenza-smoke-removed-terminal',
+            worktreePaths[2],
+          );
+          window.confirm = () => true;
+          removedTerminalPane?.querySelector('[data-remove-button]')?.click();
+          const removedFromInterface = await waitFor(() => !getPane(removedTerminalId));
+
+          return {
+            assignments,
+            removedAssignment,
+            removedFromInterface,
+            removedTerminalId,
+          };
+        })()`);
+        const assignedPaths = workspaceCheck.assignments.map(({ worktreePath }) => worktreePath);
+        const allWorktreePaths = [...assignedPaths, workspaceCheck.removedAssignment.worktreePath];
+        const registeredWorktrees = runStartupCheckGit(
+          ['worktree', 'list', '--porcelain'],
+          startupCheckRepository.repositoryRoot,
+        );
+        const canonicalizeWorktreePath = (worktreePath) =>
+          path.resolve(worktreePath).replaceAll('/', '\\').toLowerCase();
+        const registeredWorktreePaths = registeredWorktrees
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith('worktree '))
+          .map((line) => canonicalizeWorktreePath(line.slice('worktree '.length)));
+        const workspaceAssignmentsAreIsolated =
+          new Set(allWorktreePaths).size === allWorktreePaths.length &&
+          allWorktreePaths.every(
+            (worktreePath) =>
+              fs.existsSync(worktreePath) &&
+              registeredWorktreePaths.includes(canonicalizeWorktreePath(worktreePath)),
+          );
+        startupCheckLog('Git workspace check', {
+          assignments: workspaceCheck.assignments.length,
+          removedFromInterface: workspaceCheck.removedFromInterface,
+          worktreePathsExist: allWorktreePaths.map((worktreePath) => fs.existsSync(worktreePath)),
+          workspaceAssignmentsAreIsolated,
+        });
+
+        if (
+          !workspaceCheck.removedFromInterface ||
+          workspaceCheck.assignments.length !== 2 ||
+          !workspaceAssignmentsAreIsolated
+        ) {
+          throw new Error('The startup check did not preserve isolated Git worktrees safely.');
+        }
+
         await workspaceService.flush();
         const persistedWorkspace = JSON.parse(
           fs.readFileSync(path.join(workspaceDirectory, WORKSPACE_STATE_FILENAME), 'utf8'),
@@ -481,8 +650,13 @@ const createMainWindow = async () => {
               definition?.id === id &&
               definition.label === layout.terminalLabels[index] &&
               definition.order === index &&
-              definition.workspace.kind === 'folder' &&
-              definition.workspace.projectPath === process.cwd()
+              definition.workspace.kind === 'git-worktree' &&
+              definition.workspace.projectPath === workspaceCheck.assignments[index].worktreePath &&
+              definition.workspace.repository.root === startupCheckRepository.repositoryRoot &&
+              definition.workspace.repository.branch ===
+                `refs/heads/${workspaceCheck.assignments[index].branch}` &&
+              definition.workspace.repository.worktree.path ===
+                workspaceCheck.assignments[index].worktreePath
             );
           });
         const workspaceWasPersisted =
@@ -512,10 +686,14 @@ const createMainWindow = async () => {
           startLifecycleChild(terminalManager, layout.terminalIds[0], 'AGENZA_T010_CHILD_ONE='),
           startLifecycleChild(terminalManager, layout.terminalIds[1], 'AGENZA_T010_CHILD_TWO='),
         ]);
+        const terminalPids = [
+          ...workspaceCheck.assignments.map(({ sessionPid }) => sessionPid),
+          workspaceCheck.removedAssignment.sessionPid,
+        ];
         startupCheckLog('lifecycle child pids', lifecycleChildPids);
         window.close();
 
-        const orphanedPids = lifecycleChildPids.filter((pid) => isProcessRunning(pid));
+        const orphanedPids = await waitForProcessesToStop([...lifecycleChildPids, ...terminalPids]);
 
         if (orphanedPids.length > 0) {
           console.error(`Agenza startup check left orphaned processes: ${orphanedPids.join(', ')}`);
@@ -582,6 +760,10 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
+  if (isStartupCheck) {
+    return;
+  }
+
   if (process.platform !== 'darwin') {
     app.quit();
   }

@@ -194,7 +194,7 @@
       "id": "T216",
       "order": 16,
       "title": "Add automated tests for dynamic terminals and Git workspaces",
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T203",
         "T204",

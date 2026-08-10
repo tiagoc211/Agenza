@@ -221,7 +221,8 @@ and a 60-second timeout. `npm run test:all` runs the unit suite, packages the ap
 runs the smoke test sequentially. The smoke check exercises three-, two-, one-, and zero-pane
 layouts before recreating two real ConPTY sessions. It verifies dynamic addition and removal,
 versioned state persistence and reload, stable labels, isolated markers, restart behavior, renderer
-controls, keyboard focus, and that persistent descendant processes do not survive window closure.
+controls, keyboard focus, isolated temporary Git worktree assignment and removal, and that persistent
+descendant processes do not survive window closure.
 After `npm run make`, `npm run test:release` validates the Squirrel installer and package metadata
 plus the packaged application archive, executable, and native ConPTY runtime.
 

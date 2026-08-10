@@ -17,11 +17,17 @@ test('provides separate unit, smoke, and complete automated test commands', () =
   assert.match(allTestsRunner, /run-smoke-test\.js/);
 });
 
-test('runs the packaged two-terminal startup check with a bounded timeout', () => {
+test('runs the packaged dynamic terminal and Git workspace startup check with a bounded timeout', () => {
   assert.match(smokeRunner, /Agenza-win32-x64/);
   assert.match(smokeRunner, /--startup-check/);
   assert.match(smokeRunner, /SMOKE_TIMEOUT_MS = 60000/);
   assert.match(smokeRunner, /killProcessTree\(child\.pid\)/);
+  assert.match(smokeRunner, /temporaryWorkspacePath/);
+  assert.match(smokeRunner, /removeTemporaryWorkspace/);
+  assert.match(main, /createStartupCheckRepository/);
+  assert.match(main, /create-new-branch-worktree/);
+  assert.match(main, /workspaceAssignmentsAreIsolated/);
+  assert.match(main, /removedFromInterface/);
 });
 
 test('provides a repeatable manual check for missing Codex', () => {

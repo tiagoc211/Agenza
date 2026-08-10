@@ -103,8 +103,8 @@ conda run -n agenza npm run test:release
 ```
 
 - `npm test` runs the fast unit and integration tests.
-- `npm run test:smoke` exercises two packaged ConPTY sessions, isolation, controls, restart, focus,
-  shutdown, and orphan detection.
+- `npm run test:smoke` exercises packaged ConPTY sessions, dynamic terminal add/remove behavior,
+  isolated Git worktree assignment, controls, restart, focus, shutdown, and orphan detection.
 - `npm run test:all` runs the unit suite, creates a fresh package, and runs the smoke test.
 - `npm run build` creates an unpacked application under `out/Agenza-win32-x64`.
 - `npm run make` creates the Windows Squirrel installer and package under
