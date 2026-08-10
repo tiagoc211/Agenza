@@ -117,6 +117,11 @@ changing its assignment leaves this record intact. Cleanup is therefore availabl
 worktree is no longer assigned, even across application restarts. Successful verified cleanup
 removes the catalog record; it never removes the branch.
 
+If Git independently confirms that a recorded Agenza worktree is no longer registered, the user can
+explicitly forget the stale catalog record. This changes only Agenza's persisted ownership metadata;
+it does not remove files, modify Git metadata, or delete a branch. Agenza refuses to forget a record
+while its worktree is still registered or assigned.
+
 ## Terminal process lifecycle
 
 Process state exists only in the Electron main process and is never persisted.

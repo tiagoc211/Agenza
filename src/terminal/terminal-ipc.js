@@ -68,6 +68,18 @@ const registerTerminalIpc = ({
     }
   };
 
+  const restoreWindowFocus = () => {
+    if (window.isDestroyed() || typeof window.focus !== 'function') {
+      return;
+    }
+
+    try {
+      window.focus();
+    } catch {
+      // Focus recovery must not turn a completed terminal action into a failure.
+    }
+  };
+
   const handleActivate = async (event, payload) => {
     requireTrustedEvent(event, 'activate');
     const { id } = payload ?? {};
@@ -109,6 +121,8 @@ const registerTerminalIpc = ({
     } catch (error) {
       writeLog(logger, 'error', 'workspace.detach_failed', { error, terminalId: id });
       throw error;
+    } finally {
+      restoreWindowFocus();
     }
   };
 
@@ -125,6 +139,8 @@ const registerTerminalIpc = ({
     } catch (error) {
       writeLog(logger, 'error', 'terminal.remove_failed', { error, terminalId: id });
       throw error;
+    } finally {
+      restoreWindowFocus();
     }
   };
 

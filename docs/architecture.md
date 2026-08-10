@@ -70,6 +70,9 @@ unlocked, and has no tracked, untracked, or conflicted changes. Confirmation rep
 inside the same per-repository mutation queue used by creation, then runs normal
 `git worktree remove` without force. Agenza verifies that the directory and registration are gone,
 verifies that the local branch still exists, and only then removes the ownership record.
+If that local record remains after Git has independently removed a worktree, the cleanup dialog can
+forget it only after rediscovery proves the path is no longer registered and no terminal owns it.
+This recovery changes only persisted Agenza metadata, never Git data, files, or branches.
 
 `WorkspaceStateStore` validates schema v1 and cross-record invariants before every read and write.
 It writes `workspace-state.json` through a validated temporary file and atomic rename, retaining the

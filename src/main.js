@@ -280,8 +280,11 @@ const createMainWindow = async () => {
             return waitFor(() => getPanes().length === previousCount + 1);
           };
           const removeTerminal = async (id) => {
-            window.confirm = () => true;
             getPane(id)?.querySelector('[data-remove-button]')?.click();
+            await waitFor(
+              () => document.querySelector('[data-remove-terminal-dialog]')?.open === true,
+            );
+            document.querySelector('[data-confirm-terminal-removal]')?.click();
             return waitFor(() => !getPane(id));
           };
 
@@ -588,8 +591,11 @@ const createMainWindow = async () => {
             'agenza-smoke-removed-terminal',
             worktreePaths[2],
           );
-          window.confirm = () => true;
           removedTerminalPane?.querySelector('[data-remove-button]')?.click();
+          await waitFor(
+            () => document.querySelector('[data-remove-terminal-dialog]')?.open === true,
+          );
+          document.querySelector('[data-confirm-terminal-removal]')?.click();
           const removedFromInterface = await waitFor(() => !getPane(removedTerminalId));
 
           return {

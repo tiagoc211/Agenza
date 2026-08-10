@@ -184,3 +184,83 @@ test('revalidates immediately before cleanup and refuses newly created files', a
     fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
   }
 });
+
+test('forgets only a verified stale local cleanup record without changing its branch', async () => {
+  const fixture = createOwnedWorktree();
+  const callbacks = createCallbacks(fixture.record);
+
+  try {
+    git(fixture.repositoryRoot, ['worktree', 'remove', fixture.worktreePath]);
+    const cleanup = new GitWorktreeCleanup();
+    const result = await cleanup.forgetStaleRecord({
+      creationId: CREATION_ID,
+      forgetManagedWorktree: callbacks.forgetManagedWorktree,
+      getAssignedWorktrees: () => [],
+      getManagedWorktree: callbacks.getManagedWorktree,
+    });
+
+    assert.equal(result.state, 'stale-record-forgotten');
+    assert.equal(callbacks.wasForgotten(), true);
+    assert.equal(
+      git(fixture.repositoryRoot, ['branch', '--list', 'agent-work']).trim(),
+      'agent-work',
+    );
+    assert.equal(
+      git(fixture.repositoryRoot, ['worktree', 'list', '--porcelain']).includes('agent-worktree'),
+      false,
+    );
+  } finally {
+    fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('reports local catalog sync failure after Git removes the worktree and keeps its branch', async () => {
+  const fixture = createOwnedWorktree();
+  const cleanup = new GitWorktreeCleanup({ operationIdFactory: () => 'cleanup-catalog-failure' });
+
+  try {
+    const preview = await cleanup.preview({
+      creationId: CREATION_ID,
+      getManagedWorktree: () => fixture.record,
+    });
+    await assert.rejects(
+      cleanup.confirm({
+        forgetManagedWorktree: async () => {
+          throw new Error('workspace state write failed');
+        },
+        getAssignedWorktrees: () => [],
+        getManagedWorktree: () => fixture.record,
+        operationId: preview.operationId,
+      }),
+      (error) => error.code === GIT_CLEANUP_ERROR_CODES.catalogSyncFailed,
+    );
+    assert.equal(fs.existsSync(fixture.worktreePath), false);
+    assert.equal(
+      git(fixture.repositoryRoot, ['branch', '--list', 'agent-work']).trim(),
+      'agent-work',
+    );
+  } finally {
+    fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('keeps the local record when the worktree remains registered', async () => {
+  const fixture = createOwnedWorktree();
+  const callbacks = createCallbacks(fixture.record);
+
+  try {
+    const cleanup = new GitWorktreeCleanup();
+    await assert.rejects(
+      cleanup.forgetStaleRecord({
+        creationId: CREATION_ID,
+        forgetManagedWorktree: callbacks.forgetManagedWorktree,
+        getAssignedWorktrees: () => [],
+        getManagedWorktree: callbacks.getManagedWorktree,
+      }),
+      (error) => error.code === GIT_CLEANUP_ERROR_CODES.staleRecordNotConfirmed,
+    );
+    assert.equal(callbacks.wasForgotten(), false);
+  } finally {
+    fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
+  }
+});

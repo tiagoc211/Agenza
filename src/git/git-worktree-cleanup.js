@@ -9,6 +9,7 @@ const CLEANUP_PREVIEW_TTL_MS = 5 * 60 * 1000;
 
 const GIT_CLEANUP_ERROR_CODES = Object.freeze({
   assigned: 'WORKTREE_CLEANUP_ASSIGNED',
+  catalogSyncFailed: 'WORKTREE_CLEANUP_CATALOG_SYNC_FAILED',
   conflicted: 'WORKTREE_CLEANUP_CONFLICTED',
   dirty: 'WORKTREE_CLEANUP_DIRTY',
   invalidRequest: 'INVALID_WORKTREE_CLEANUP_REQUEST',
@@ -19,6 +20,7 @@ const GIT_CLEANUP_ERROR_CODES = Object.freeze({
   previewStale: 'WORKTREE_CLEANUP_PREVIEW_STALE',
   prunable: 'WORKTREE_CLEANUP_PRUNABLE',
   removeFailed: 'WORKTREE_CLEANUP_REMOVE_FAILED',
+  staleRecordNotConfirmed: 'WORKTREE_CLEANUP_STALE_RECORD_NOT_CONFIRMED',
   untracked: 'WORKTREE_CLEANUP_UNTRACKED',
   verificationFailed: 'WORKTREE_CLEANUP_VERIFICATION_FAILED',
 });
@@ -26,6 +28,8 @@ const GIT_CLEANUP_ERROR_CODES = Object.freeze({
 const GIT_CLEANUP_ERROR_MESSAGES = Object.freeze({
   [GIT_CLEANUP_ERROR_CODES.assigned]:
     'Remove or reassign the terminal using this worktree before cleaning it up.',
+  [GIT_CLEANUP_ERROR_CODES.catalogSyncFailed]:
+    'Git removed the worktree and kept its branch, but Agenza could not update its local cleanup record.',
   [GIT_CLEANUP_ERROR_CODES.conflicted]:
     'This worktree has conflicted files. Resolve and preserve the work in a normal terminal first.',
   [GIT_CLEANUP_ERROR_CODES.dirty]:
@@ -45,6 +49,8 @@ const GIT_CLEANUP_ERROR_MESSAGES = Object.freeze({
     'This worktree registration is stale or prunable. Inspect it with Git outside Agenza first.',
   [GIT_CLEANUP_ERROR_CODES.removeFailed]:
     'Git refused to remove this worktree safely. No force option was used; inspect it outside Agenza.',
+  [GIT_CLEANUP_ERROR_CODES.staleRecordNotConfirmed]:
+    'This worktree is still registered, so Agenza will keep its cleanup record.',
   [GIT_CLEANUP_ERROR_CODES.untracked]:
     'This worktree has untracked files. Move, commit, or remove them outside Agenza first.',
   [GIT_CLEANUP_ERROR_CODES.verificationFailed]:
@@ -165,7 +171,15 @@ class GitWorktreeCleanup {
       }
 
       await this._verifyRemoval(record, operationId);
-      await forgetManagedWorktree(record.creationId);
+
+      try {
+        await forgetManagedWorktree(record.creationId);
+      } catch (error) {
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.catalogSyncFailed, {
+          cause: error,
+          operationId,
+        });
+      }
       return Object.freeze({
         branchPreserved: true,
         branchRef: record.branchRef,
@@ -173,6 +187,79 @@ class GitWorktreeCleanup {
         operationId,
         repositoryRoot: record.repositoryRoot,
         state: 'succeeded',
+        worktreePath: record.path,
+      });
+    });
+  }
+
+  forgetStaleRecord({
+    creationId,
+    forgetManagedWorktree,
+    getAssignedWorktrees,
+    getManagedWorktree,
+  } = {}) {
+    const record = this._getOwnedRecord(creationId, getManagedWorktree);
+
+    if (typeof forgetManagedWorktree !== 'function') {
+      throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.invalidRequest);
+    }
+
+    return this._enqueue(record.repositoryRoot, async () => {
+      const currentRecord = this._getOwnedRecord(creationId, getManagedWorktree);
+      const assignedWorktrees =
+        typeof getAssignedWorktrees === 'function' ? await getAssignedWorktrees() : [];
+
+      if (
+        currentRecord.branchRef !== record.branchRef ||
+        !pathsEqual(currentRecord.path, record.path, this._platform) ||
+        !pathsEqual(currentRecord.repositoryRoot, record.repositoryRoot, this._platform)
+      ) {
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.previewStale);
+      }
+
+      if (
+        assignedWorktrees.some(({ path: assignedPath }) =>
+          pathsEqual(assignedPath, record.path, this._platform),
+        )
+      ) {
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.assigned);
+      }
+
+      let discovery;
+
+      try {
+        discovery = await this._discover(record.repositoryRoot);
+      } catch (error) {
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.missing, { cause: error });
+      }
+
+      const isStillRegistered = discovery.worktrees.some(({ path: registeredPath }) =>
+        pathsEqual(registeredPath, record.path, this._platform),
+      );
+
+      if (isStillRegistered) {
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.staleRecordNotConfirmed);
+      }
+
+      try {
+        await forgetManagedWorktree(record.creationId);
+      } catch (error) {
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.catalogSyncFailed, {
+          cause: error,
+        });
+      }
+
+      for (const [operationId, cached] of this._previews) {
+        if (cached.preview.creationId === record.creationId) {
+          this._previews.delete(operationId);
+        }
+      }
+
+      return Object.freeze({
+        branchRef: record.branchRef,
+        creationId: record.creationId,
+        repositoryRoot: record.repositoryRoot,
+        state: 'stale-record-forgotten',
         worktreePath: record.path,
       });
     });

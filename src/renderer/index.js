@@ -49,8 +49,13 @@ const cleanupRepository = document.querySelector('[data-cleanup-repository]');
 const cleanupBranch = document.querySelector('[data-cleanup-branch]');
 const cleanupPath = document.querySelector('[data-cleanup-path]');
 const previewCleanupButton = document.querySelector('[data-preview-cleanup]');
+const forgetStaleCleanupRecordButton = document.querySelector('[data-forget-stale-cleanup-record]');
 const confirmCleanupButton = document.querySelector('[data-confirm-cleanup]');
 const cancelCleanupButtons = document.querySelectorAll('[data-cancel-cleanup]');
+const terminalRemovalDialog = document.querySelector('[data-remove-terminal-dialog]');
+const terminalRemovalMessage = document.querySelector('[data-remove-terminal-message]');
+const confirmTerminalRemovalButton = document.querySelector('[data-confirm-terminal-removal]');
+const cancelTerminalRemovalButtons = document.querySelectorAll('[data-cancel-terminal-removal]');
 
 const terminalTheme = {
   background: '#090c12',
@@ -83,6 +88,7 @@ let activeTerminalId = null;
 let workspaceRecoveryIssue = null;
 let worktreeDialogState = null;
 let cleanupDialogState = null;
+let terminalRemovalDialogState = null;
 let managedWorktrees = [];
 
 const workspaceOperationTypes = Object.freeze({
@@ -98,6 +104,17 @@ const getOrderedViews = () =>
 
 const announceWorkspace = (message) => {
   workspaceAnnouncement.textContent = message;
+};
+
+const focusModalControl = (dialog, control) => {
+  window.requestAnimationFrame(() => {
+    if (!dialog.open) {
+      return;
+    }
+
+    window.focus();
+    control.focus({ preventScroll: true });
+  });
 };
 
 const isTerminalFocusShortcut = (event) =>
@@ -288,6 +305,8 @@ const resetCleanupPreview = () => {
   }
   cleanupPreview.hidden = true;
   confirmCleanupButton.disabled = true;
+  forgetStaleCleanupRecordButton.disabled = true;
+  forgetStaleCleanupRecordButton.hidden = true;
   setCleanupError();
 };
 
@@ -338,7 +357,7 @@ const openCleanupDialog = async () => {
   cleanupDialog.showModal();
   cleanupButton.setAttribute('aria-expanded', 'true');
   announceWorkspace('Worktree cleanup dialog opened.');
-  (eligibleOption ? cleanupSelect : cancelCleanupButtons[0]).focus();
+  focusModalControl(cleanupDialog, eligibleOption ? cleanupSelect : cancelCleanupButtons[0]);
 };
 
 const previewWorktreeCleanup = async () => {
@@ -375,11 +394,72 @@ const previewWorktreeCleanup = async () => {
   } catch (error) {
     if (cleanupDialogState === state) {
       setCleanupError(error, 'This worktree cannot be cleaned up safely.');
+      if (error?.code === 'WORKTREE_CLEANUP_MISSING') {
+        forgetStaleCleanupRecordButton.disabled = false;
+        forgetStaleCleanupRecordButton.hidden = false;
+      }
     }
   } finally {
     if (cleanupDialogState === state) {
       previewCleanupButton.disabled = false;
       previewCleanupButton.textContent = 'Check safety';
+    }
+  }
+};
+
+const forgetStaleCleanupRecord = async () => {
+  const state = cleanupDialogState;
+
+  if (!state || !cleanupSelect.value || forgetStaleCleanupRecordButton.disabled) {
+    return;
+  }
+
+  const selectedOption = cleanupSelect.selectedOptions[0];
+  const description = selectedOption?.textContent ?? 'this worktree';
+  const confirmed = window.confirm(
+    `Forget Agenza's stale local record for ${description}? This does not delete files, Git worktrees, or branches.`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  forgetStaleCleanupRecordButton.disabled = true;
+  forgetStaleCleanupRecordButton.textContent = 'Verifying...';
+  previewCleanupButton.disabled = true;
+  cleanupSelect.disabled = true;
+  setCleanupError();
+
+  try {
+    const result = await window.agenza.git.forgetStaleCleanupRecord(cleanupSelect.value);
+
+    if (cleanupDialogState !== state) {
+      return;
+    }
+    if (!result.ok) {
+      throw result.error;
+    }
+
+    cleanupStatus.textContent = `Forgot stale local record for ${displayBranchName(result.operation.branchRef)}. No Git files, worktrees, or branches were changed.`;
+    announceWorkspace(
+      `Forgot the stale local cleanup record for ${displayBranchName(result.operation.branchRef)}. No Git resources were changed.`,
+    );
+    cleanupDialog.close();
+    await refreshManagedWorktrees();
+  } catch (error) {
+    if (cleanupDialogState === state) {
+      setCleanupError(error, 'Agenza could not verify that this local record is stale.');
+      if (error?.code !== 'WORKTREE_CLEANUP_MISSING') {
+        forgetStaleCleanupRecordButton.disabled = true;
+        forgetStaleCleanupRecordButton.hidden = true;
+      }
+    }
+  } finally {
+    if (cleanupDialogState === state) {
+      forgetStaleCleanupRecordButton.textContent = 'Verify and forget stale local record';
+      forgetStaleCleanupRecordButton.disabled = forgetStaleCleanupRecordButton.hidden;
+      previewCleanupButton.disabled = false;
+      cleanupSelect.disabled = false;
     }
   }
 };
@@ -1105,6 +1185,32 @@ const buildTerminalRemovalMessage = (view) => {
   return lines.join('\n');
 };
 
+const settleTerminalRemovalDialog = (confirmed) => {
+  const state = terminalRemovalDialogState;
+
+  if (!state) {
+    return;
+  }
+
+  terminalRemovalDialogState = null;
+  terminalRemovalDialog.close();
+  state.resolve(confirmed);
+};
+
+const confirmTerminalRemoval = (view) => {
+  if (terminalRemovalDialog.open || terminalRemovalDialogState) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    terminalRemovalDialogState = { resolve, view };
+    terminalRemovalMessage.textContent = buildTerminalRemovalMessage(view);
+    terminalRemovalDialog.showModal();
+    announceWorkspace(`Terminal removal confirmation opened for ${view.label}.`);
+    focusModalControl(terminalRemovalDialog, confirmTerminalRemovalButton);
+  });
+};
+
 const detachStaleWorkspace = async (view) => {
   if (
     view.isBusy ||
@@ -1175,7 +1281,7 @@ const removeTerminalView = async (view) => {
     return;
   }
 
-  const confirmed = window.confirm(buildTerminalRemovalMessage(view));
+  const confirmed = await confirmTerminalRemoval(view);
 
   if (!confirmed) {
     return;
@@ -1543,7 +1649,7 @@ const handleTerminalFocusShortcut = (event) => {
     return;
   }
 
-  if (worktreeDialog.open || cleanupDialog.open) {
+  if (worktreeDialog.open || cleanupDialog.open || terminalRemovalDialog.open) {
     event.preventDefault();
     return;
   }
@@ -1560,6 +1666,7 @@ cleanupButton.addEventListener('click', () => openCleanupDialog());
 cleanupSelect.addEventListener('change', resetCleanupPreview);
 previewCleanupButton.addEventListener('click', () => previewWorktreeCleanup());
 confirmCleanupButton.addEventListener('click', () => confirmWorktreeCleanup());
+forgetStaleCleanupRecordButton.addEventListener('click', () => forgetStaleCleanupRecord());
 for (const button of cancelCleanupButtons) {
   button.addEventListener('click', closeCleanupDialog);
 }
@@ -1581,12 +1688,31 @@ cleanupDialog.addEventListener('close', () => {
   cleanupSelect.disabled = false;
   previewCleanupButton.disabled = false;
   previewCleanupButton.textContent = 'Check safety';
+  forgetStaleCleanupRecordButton.disabled = true;
+  forgetStaleCleanupRecordButton.hidden = true;
+  forgetStaleCleanupRecordButton.textContent = 'Verify and forget stale local record';
   confirmCleanupButton.disabled = true;
   confirmCleanupButton.textContent = 'Remove worktree, keep branch';
   for (const button of cancelCleanupButtons) {
     button.disabled = false;
   }
   cleanupButton.focus();
+});
+for (const button of cancelTerminalRemovalButtons) {
+  button.addEventListener('click', () => settleTerminalRemovalDialog(false));
+}
+confirmTerminalRemovalButton.addEventListener('click', () => settleTerminalRemovalDialog(true));
+terminalRemovalDialog.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  settleTerminalRemovalDialog(false);
+});
+terminalRemovalDialog.addEventListener('close', () => {
+  if (terminalRemovalDialogState) {
+    const { resolve, view } = terminalRemovalDialogState;
+    terminalRemovalDialogState = null;
+    resolve(false);
+    view.removeButton.focus();
+  }
 });
 workspaceOperation.addEventListener('change', () => {
   configureWorkspaceOperation({ resetPath: true });

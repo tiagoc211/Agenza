@@ -115,6 +115,14 @@ const createHarness = ({
           worktreePath: managedWorktree.path,
         };
       },
+      forgetStaleRecord: async (request) => {
+        cleanupRequests.push({ method: 'forget-stale-record', ...request });
+        await request.forgetManagedWorktree(managedWorktree.creationId);
+        return {
+          ...managedWorktree,
+          state: 'stale-record-forgotten',
+        };
+      },
       preview: async (request) => {
         cleanupRequests.push({ method: 'preview', ...request });
         return {
@@ -208,6 +216,7 @@ const createHarness = ({
     discover: ipcMain.handlers.get(GIT_CHANNELS.discover),
     dispose,
     executionRequests,
+    forgetStaleCleanupRecord: ipcMain.handlers.get(GIT_CHANNELS.forgetStaleCleanupRecord),
     forgottenWorktrees,
     ipcMain,
     logs,
@@ -369,6 +378,32 @@ test('lists, previews, and confirms only the recorded managed worktree cleanup',
       {
         creationId: harness.managedWorktree.creationId,
       },
+    ),
+    /Untrusted/,
+  );
+
+  harness.dispose();
+});
+
+test('forgets only a verified stale managed-worktree record through the trusted cleanup bridge', async () => {
+  const harness = createHarness();
+  const result = await harness.forgetStaleCleanupRecord(harness.trustedEvent, {
+    creationId: harness.managedWorktree.creationId,
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    operation: {
+      ...harness.managedWorktree,
+      state: 'stale-record-forgotten',
+    },
+  });
+  assert.equal(harness.cleanupRequests[0].method, 'forget-stale-record');
+  assert.deepEqual(harness.forgottenWorktrees, [harness.managedWorktree.creationId]);
+  await assert.rejects(
+    harness.forgetStaleCleanupRecord(
+      { sender: {}, senderFrame: {} },
+      { creationId: harness.managedWorktree.creationId },
     ),
     /Untrusted/,
   );

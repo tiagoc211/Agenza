@@ -394,12 +394,63 @@
               Check safety
             </button>
             <button
+              class="dialog-button dialog-button-secondary"
+              type="button"
+              data-forget-stale-cleanup-record
+              disabled
+              hidden
+            >
+              Verify and forget stale local record
+            </button>
+            <button
               class="dialog-button dialog-button-danger"
               type="button"
               data-confirm-cleanup
               disabled
             >
               Remove worktree, keep branch
+            </button>
+          </footer>
+        </form>
+      </dialog>
+
+      <dialog
+        class="workspace-dialog confirmation-dialog"
+        id="remove-terminal-dialog"
+        aria-labelledby="remove-terminal-dialog-title"
+        aria-describedby="remove-terminal-dialog-message"
+        data-remove-terminal-dialog
+      >
+        <form class="workspace-dialog-form" method="dialog" data-remove-terminal-form>
+          <header class="workspace-dialog-header">
+            <div>
+              <p class="workspace-dialog-eyebrow">Terminal removal</p>
+              <h2 id="remove-terminal-dialog-title">Remove this terminal?</h2>
+            </div>
+            <button
+              class="workspace-dialog-close"
+              type="button"
+              data-cancel-terminal-removal
+              aria-label="Cancel terminal removal"
+            >
+              &times;
+            </button>
+          </header>
+
+          <p
+            class="workspace-dialog-intro confirmation-dialog-message"
+            id="remove-terminal-dialog-message"
+            data-remove-terminal-message
+          ></p>
+
+          <footer class="workspace-dialog-actions">
+            <button class="dialog-button" type="button" data-cancel-terminal-removal>Cancel</button>
+            <button
+              class="dialog-button dialog-button-danger"
+              type="button"
+              data-confirm-terminal-removal
+            >
+              Remove terminal only
             </button>
           </footer>
         </form>
