@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agenza.local/schemas/workspace-state-v1.json",
   "title": "Agenza workspace state v1",
-  "description": "Persisted terminal definitions and workspace assignments for Agenza 0.2.0.",
+  "description": "Persisted terminal definitions, workspace assignments, and Agenza-created worktree records for Agenza 0.2.0.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "revision", "activeTerminalId", "terminals"],
@@ -24,6 +24,12 @@
         }
       ]
     },
+    "managedWorktrees": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/managedWorktree"
+      }
+    },
     "terminals": {
       "type": "array",
       "items": {
@@ -32,6 +38,28 @@
     }
   },
   "$defs": {
+    "managedWorktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["creationId", "repositoryRoot", "branchRef", "path"],
+      "properties": {
+        "creationId": {
+          "type": "string",
+          "pattern": "^worktree-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "repositoryRoot": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "branchRef": {
+          "type": "string",
+          "pattern": "^refs/heads/.+",
+          "maxLength": 1024
+        },
+        "path": {
+          "$ref": "#/$defs/absolutePath"
+        }
+      }
+    },
     "terminalId": {
       "type": "string",
       "pattern": "^terminal-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"

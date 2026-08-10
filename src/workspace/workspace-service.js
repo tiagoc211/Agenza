@@ -1,5 +1,10 @@
 const { validateProjectFolder } = require('../project/project-folder');
-const { createUnassignedWorkspace, validateWorkspaceState } = require('./workspace-state');
+const {
+  createManagedWorktreeRecord,
+  createUnassignedWorkspace,
+  normalizeWorkspaceState,
+  validateWorkspaceState,
+} = require('./workspace-state');
 
 const copyValue = (value) => JSON.parse(JSON.stringify(value));
 
@@ -41,7 +46,7 @@ class WorkspaceService {
     }
 
     const loaded = await this._stateStore.load();
-    this._state = copyValue(loaded.state);
+    this._state = normalizeWorkspaceState(loaded.state);
     this._recoveryIssue = loaded.issue;
 
     for (const definition of [...this._state.terminals].sort((a, b) => a.order - b.order)) {
@@ -214,9 +219,22 @@ class WorkspaceService {
         updatedAt: this._now(),
         workspace: committedWorkspace,
       };
+      const managedRecord =
+        committedWorkspace.repository.worktree.ownership.kind === 'agenza'
+          ? createManagedWorktreeRecord(committedWorkspace)
+          : null;
+      const existingManagedRecord = managedRecord
+        ? this._state.managedWorktrees.find(
+            ({ creationId }) => creationId === managedRecord.creationId,
+          )
+        : null;
+      const managedWorktrees = existingManagedRecord
+        ? copyValue(this._state.managedWorktrees)
+        : [...copyValue(this._state.managedWorktrees), ...(managedRecord ? [managedRecord] : [])];
       const nextState = {
         ...copyValue(this._state),
         revision: this._state.revision + 1,
+        managedWorktrees,
         terminals: this._state.terminals.map((terminal) =>
           terminal.id === id ? nextDefinition : copyValue(terminal),
         ),
@@ -254,6 +272,59 @@ class WorkspaceService {
         path: definition.workspace.repository.worktree.path,
         terminalId: definition.id,
       }));
+  }
+
+  getManagedWorktrees() {
+    this._requireInitialized();
+    const assignments = new Map(
+      this.getAssignedGitWorktrees().map(({ path: worktreePath, terminalId }) => [
+        worktreePath.toLowerCase(),
+        terminalId,
+      ]),
+    );
+
+    return copyValue(this._state.managedWorktrees).map((worktree) => ({
+      ...worktree,
+      assignedTerminalId: assignments.get(worktree.path.toLowerCase()) ?? null,
+    }));
+  }
+
+  getManagedWorktree(creationId) {
+    this._requireInitialized();
+    const worktree = this._state.managedWorktrees.find(
+      (candidate) => candidate.creationId === creationId,
+    );
+    return worktree ? copyValue(worktree) : null;
+  }
+
+  forgetManagedWorktree(creationId) {
+    return this._enqueueMutation(async () => {
+      const worktree = this._state.managedWorktrees.find(
+        (candidate) => candidate.creationId === creationId,
+      );
+
+      if (!worktree) {
+        throw new Error('Agenza does not own that worktree.');
+      }
+
+      const isAssigned = this.getAssignedGitWorktrees().some(
+        ({ path: assignedPath }) => assignedPath.toLowerCase() === worktree.path.toLowerCase(),
+      );
+
+      if (isAssigned) {
+        throw new Error('An assigned worktree cannot be removed from the managed catalog.');
+      }
+
+      const nextState = {
+        ...copyValue(this._state),
+        revision: this._state.revision + 1,
+        managedWorktrees: this._state.managedWorktrees
+          .filter((candidate) => candidate.creationId !== creationId)
+          .map(copyValue),
+      };
+      await this._commit(nextState);
+      return { creationId, removed: true };
+    });
   }
 
   flush() {

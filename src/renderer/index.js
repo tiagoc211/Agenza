@@ -37,6 +37,19 @@ const previewExplanation = document.querySelector('[data-preview-explanation]');
 const previewButton = document.querySelector('[data-preview-button]');
 const confirmWorktreeButton = document.querySelector('[data-confirm-worktree]');
 const cancelWorktreeButtons = document.querySelectorAll('[data-cancel-worktree]');
+const cleanupButton = document.querySelector('[data-cleanup-worktree]');
+const cleanupStatus = document.querySelector('[data-cleanup-status]');
+const cleanupDialog = document.querySelector('[data-cleanup-dialog]');
+const cleanupForm = document.querySelector('[data-cleanup-form]');
+const cleanupSelect = document.querySelector('[data-cleanup-worktree-select]');
+const cleanupError = document.querySelector('[data-cleanup-error]');
+const cleanupPreview = document.querySelector('[data-cleanup-preview]');
+const cleanupRepository = document.querySelector('[data-cleanup-repository]');
+const cleanupBranch = document.querySelector('[data-cleanup-branch]');
+const cleanupPath = document.querySelector('[data-cleanup-path]');
+const previewCleanupButton = document.querySelector('[data-preview-cleanup]');
+const confirmCleanupButton = document.querySelector('[data-confirm-cleanup]');
+const cancelCleanupButtons = document.querySelectorAll('[data-cancel-cleanup]');
 
 const terminalTheme = {
   background: '#090c12',
@@ -68,6 +81,8 @@ let resizeFrame;
 let activeTerminalId = null;
 let workspaceRecoveryIssue = null;
 let worktreeDialogState = null;
+let cleanupDialogState = null;
+let managedWorktrees = [];
 
 const workspaceOperationTypes = Object.freeze({
   attachWorktree: 'attach-existing-worktree',
@@ -166,6 +181,179 @@ const displayBranchName = (branch) => {
   }
 
   return branch.startsWith('refs/heads/') ? branch.slice('refs/heads/'.length) : branch;
+};
+
+const setCleanupError = (error, fallback = 'Unable to inspect this worktree.') => {
+  cleanupError.textContent = error ? formatUserFacingError(error, fallback) : '';
+  cleanupError.hidden = !error;
+};
+
+const refreshManagedWorktrees = async () => {
+  try {
+    const result = await window.agenza.git.listManagedWorktrees();
+
+    if (!result.ok) {
+      throw result.error;
+    }
+
+    managedWorktrees = result.worktrees;
+    cleanupButton.disabled = managedWorktrees.length === 0;
+    cleanupButton.title =
+      managedWorktrees.length === 0
+        ? 'No Agenza-created worktrees are recorded.'
+        : `${managedWorktrees.length} Agenza-created ${managedWorktrees.length === 1 ? 'worktree' : 'worktrees'} recorded.`;
+  } catch (error) {
+    managedWorktrees = [];
+    cleanupButton.disabled = true;
+    cleanupButton.title = formatUserFacingError(error, 'Unable to list managed worktrees.');
+  }
+};
+
+const resetCleanupPreview = () => {
+  if (cleanupDialogState) {
+    cleanupDialogState.preview = null;
+  }
+  cleanupPreview.hidden = true;
+  confirmCleanupButton.disabled = true;
+  setCleanupError();
+};
+
+const closeCleanupDialog = () => {
+  if (cleanupDialogState?.isRemoving) {
+    return;
+  }
+  cleanupDialog.close();
+};
+
+const openCleanupDialog = async () => {
+  if (cleanupDialog.open) {
+    return;
+  }
+
+  await refreshManagedWorktrees();
+  cleanupDialogState = { isRemoving: false, preview: null };
+  cleanupForm.reset();
+  cleanupSelect.replaceChildren();
+  cleanupPreview.hidden = true;
+  setCleanupError();
+
+  for (const worktree of managedWorktrees) {
+    const option = document.createElement('option');
+    option.value = worktree.creationId;
+    option.textContent = `${displayBranchName(worktree.branchRef)} — ${worktree.path}${
+      worktree.assignedTerminalId ? ' (assigned to a terminal)' : ''
+    }`;
+    option.disabled = Boolean(worktree.assignedTerminalId);
+    cleanupSelect.append(option);
+  }
+
+  const eligibleOption = [...cleanupSelect.options].find((option) => !option.disabled);
+  cleanupSelect.value = eligibleOption?.value ?? '';
+  previewCleanupButton.disabled = !eligibleOption;
+  confirmCleanupButton.disabled = true;
+
+  if (!eligibleOption) {
+    setCleanupError(
+      {
+        message:
+          'Every recorded worktree is assigned to a terminal. Remove or reassign that terminal first.',
+      },
+      'No worktree can be cleaned up safely.',
+    );
+  }
+
+  cleanupDialog.showModal();
+  (eligibleOption ? cleanupSelect : cancelCleanupButtons[0]).focus();
+};
+
+const previewWorktreeCleanup = async () => {
+  const state = cleanupDialogState;
+
+  if (!state || !cleanupSelect.value || previewCleanupButton.disabled) {
+    return;
+  }
+
+  resetCleanupPreview();
+  previewCleanupButton.disabled = true;
+  previewCleanupButton.textContent = 'Checking...';
+
+  try {
+    const result = await window.agenza.git.previewCleanup(cleanupSelect.value);
+
+    if (cleanupDialogState !== state) {
+      return;
+    }
+    if (!result.ok) {
+      throw result.error;
+    }
+
+    state.preview = result.preview;
+    cleanupRepository.textContent = result.preview.repositoryRoot;
+    cleanupBranch.textContent = displayBranchName(result.preview.branchRef);
+    cleanupPath.textContent = result.preview.worktreePath;
+    cleanupPreview.hidden = false;
+    confirmCleanupButton.disabled = false;
+    confirmCleanupButton.focus();
+  } catch (error) {
+    if (cleanupDialogState === state) {
+      setCleanupError(error, 'This worktree cannot be cleaned up safely.');
+    }
+  } finally {
+    if (cleanupDialogState === state) {
+      previewCleanupButton.disabled = false;
+      previewCleanupButton.textContent = 'Check safety';
+    }
+  }
+};
+
+const confirmWorktreeCleanup = async () => {
+  const state = cleanupDialogState;
+
+  if (!state?.preview || confirmCleanupButton.disabled) {
+    return;
+  }
+
+  state.isRemoving = true;
+  confirmCleanupButton.disabled = true;
+  confirmCleanupButton.textContent = 'Removing safely...';
+  previewCleanupButton.disabled = true;
+  cleanupSelect.disabled = true;
+  for (const button of cancelCleanupButtons) {
+    button.disabled = true;
+  }
+  setCleanupError();
+
+  try {
+    const result = await window.agenza.git.confirmCleanup(state.preview.operationId);
+
+    if (cleanupDialogState !== state) {
+      return;
+    }
+    if (!result.ok) {
+      throw result.error;
+    }
+
+    cleanupStatus.textContent = `Removed worktree ${result.operation.worktreePath}. Branch ${displayBranchName(result.operation.branchRef)} was kept.`;
+    state.isRemoving = false;
+    cleanupDialog.close();
+    await refreshManagedWorktrees();
+  } catch (error) {
+    if (cleanupDialogState === state) {
+      state.preview = null;
+      cleanupPreview.hidden = true;
+      setCleanupError(error, 'Git did not remove this worktree.');
+    }
+  } finally {
+    if (cleanupDialogState === state) {
+      state.isRemoving = false;
+      confirmCleanupButton.textContent = 'Remove worktree, keep branch';
+      previewCleanupButton.disabled = false;
+      cleanupSelect.disabled = false;
+      for (const button of cancelCleanupButtons) {
+        button.disabled = false;
+      }
+    }
+  }
 };
 
 const setGitSummaryValue = (element, value) => {
@@ -613,6 +801,7 @@ const confirmGitWorkspace = async () => {
     }
 
     closeWorktreeDialog();
+    refreshManagedWorktrees();
   } catch (error) {
     if (worktreeDialogState === state) {
       setWorktreeDialogError(error, 'Unable to assign this Git workspace.');
@@ -833,6 +1022,7 @@ const removeTerminalView = async (view) => {
   }
 
   fitTerminals();
+  refreshManagedWorktrees();
 };
 
 const configureTerminalShortcuts = (view) => {
@@ -1132,6 +1322,36 @@ const handleTerminalFocusShortcut = (event) => {
 document.addEventListener('keydown', handleTerminalFocusShortcut);
 addTerminalButton.addEventListener('click', () => addTerminal());
 emptyAddTerminalButton.addEventListener('click', () => addTerminal());
+cleanupButton.addEventListener('click', () => openCleanupDialog());
+cleanupSelect.addEventListener('change', resetCleanupPreview);
+previewCleanupButton.addEventListener('click', () => previewWorktreeCleanup());
+confirmCleanupButton.addEventListener('click', () => confirmWorktreeCleanup());
+for (const button of cancelCleanupButtons) {
+  button.addEventListener('click', closeCleanupDialog);
+}
+cleanupForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  previewWorktreeCleanup();
+});
+cleanupDialog.addEventListener('cancel', (event) => {
+  if (cleanupDialogState?.isRemoving) {
+    event.preventDefault();
+  }
+});
+cleanupDialog.addEventListener('close', () => {
+  cleanupDialogState = null;
+  cleanupForm.reset();
+  cleanupPreview.hidden = true;
+  setCleanupError();
+  cleanupSelect.disabled = false;
+  previewCleanupButton.disabled = false;
+  previewCleanupButton.textContent = 'Check safety';
+  confirmCleanupButton.disabled = true;
+  confirmCleanupButton.textContent = 'Remove worktree, keep branch';
+  for (const button of cancelCleanupButtons) {
+    button.disabled = false;
+  }
+});
 workspaceOperation.addEventListener('change', () => {
   configureWorkspaceOperation({ resetPath: true });
 });
@@ -1225,6 +1445,8 @@ const initializeWorkspace = async () => {
     if (workspaceRecoveryIssue) {
       terminalCount.title = workspaceRecoveryIssue;
     }
+
+    await refreshManagedWorktrees();
   } catch (error) {
     emptyWorkspace.querySelector('p').textContent = formatUserFacingError(
       error,

@@ -77,6 +77,37 @@ const validateOwnership = (ownership) => {
   throw new WorkspaceStateError('Worktree ownership metadata is invalid.');
 };
 
+const createManagedWorktreeRecord = (workspace) => {
+  const { ownership, path: worktreePath } = workspace.repository.worktree;
+
+  return {
+    branchRef: workspace.repository.branch,
+    creationId: ownership.creationId,
+    path: worktreePath,
+    repositoryRoot: workspace.repository.root,
+  };
+};
+
+const validateManagedWorktree = (worktree, pathModule) => {
+  assertExactKeys(
+    worktree,
+    ['branchRef', 'creationId', 'path', 'repositoryRoot'],
+    'Managed worktree',
+  );
+  validateOwnership({ creationId: worktree.creationId, kind: 'agenza' });
+  assertAbsolutePath(worktree.path, 'Managed worktree path', pathModule);
+  assertAbsolutePath(worktree.repositoryRoot, 'Managed worktree repository root', pathModule);
+
+  if (
+    typeof worktree.branchRef !== 'string' ||
+    worktree.branchRef.length < 1 ||
+    worktree.branchRef.length > 1024 ||
+    !worktree.branchRef.startsWith('refs/heads/')
+  ) {
+    throw new WorkspaceStateError('Managed worktree branch is invalid.');
+  }
+};
+
 const validateWorkspace = (workspace, pathModule) => {
   assertExactKeys(workspace, ['kind', 'projectPath', 'repository'], 'Workspace assignment');
 
@@ -128,7 +159,9 @@ const validateWorkspace = (workspace, pathModule) => {
 const validateWorkspaceState = (state, { pathModule = path.win32 } = {}) => {
   assertExactKeys(
     state,
-    ['schemaVersion', 'revision', 'activeTerminalId', 'terminals'],
+    Object.hasOwn(state ?? {}, 'managedWorktrees')
+      ? ['schemaVersion', 'revision', 'activeTerminalId', 'terminals', 'managedWorktrees']
+      : ['schemaVersion', 'revision', 'activeTerminalId', 'terminals'],
     'Workspace state',
   );
 
@@ -142,6 +175,27 @@ const validateWorkspaceState = (state, { pathModule = path.win32 } = {}) => {
 
   if (!Array.isArray(state.terminals)) {
     throw new WorkspaceStateError('Workspace terminals must be an array.');
+  }
+
+  const managedWorktrees = state.managedWorktrees ?? [];
+
+  if (!Array.isArray(managedWorktrees)) {
+    throw new WorkspaceStateError('Managed worktrees must be an array.');
+  }
+
+  const managedCreationIds = new Set();
+  const managedPaths = new Map();
+
+  for (const worktree of managedWorktrees) {
+    validateManagedWorktree(worktree, pathModule);
+    const canonicalPath = pathModule.normalize(worktree.path).toLowerCase();
+
+    if (managedCreationIds.has(worktree.creationId) || managedPaths.has(canonicalPath)) {
+      throw new WorkspaceStateError('Managed worktree ids and paths must be unique.');
+    }
+
+    managedCreationIds.add(worktree.creationId);
+    managedPaths.set(canonicalPath, worktree);
   }
 
   const terminalIds = new Set();
@@ -189,6 +243,23 @@ const validateWorkspaceState = (state, { pathModule = path.win32 } = {}) => {
         throw new WorkspaceStateError('One Git worktree cannot be assigned to multiple terminals.');
       }
       worktreePaths.add(canonicalPath);
+
+      const ownership = terminal.workspace.repository.worktree.ownership;
+      const managedRecord = managedPaths.get(canonicalPath);
+
+      if (
+        state.managedWorktrees &&
+        ownership.kind === 'agenza' &&
+        (!managedRecord ||
+          managedRecord.creationId !== ownership.creationId ||
+          managedRecord.branchRef !== terminal.workspace.repository.branch ||
+          pathModule.normalize(managedRecord.repositoryRoot).toLowerCase() !==
+            pathModule.normalize(terminal.workspace.repository.root).toLowerCase())
+      ) {
+        throw new WorkspaceStateError(
+          'An Agenza-owned assignment must match its managed worktree record.',
+        );
+      }
     }
   }
 
@@ -204,6 +275,27 @@ const validateWorkspaceState = (state, { pathModule = path.win32 } = {}) => {
   }
 
   return state;
+};
+
+const normalizeWorkspaceState = (state) => {
+  const normalized = JSON.parse(JSON.stringify(state));
+
+  if (!Object.hasOwn(normalized, 'managedWorktrees')) {
+    normalized.managedWorktrees = [];
+
+    for (const terminal of normalized.terminals ?? []) {
+      const workspace = terminal.workspace;
+
+      if (
+        workspace?.kind === 'git-worktree' &&
+        workspace.repository?.worktree?.ownership?.kind === 'agenza'
+      ) {
+        normalized.managedWorktrees.push(createManagedWorktreeRecord(workspace));
+      }
+    }
+  }
+
+  return normalized;
 };
 
 const createUnassignedWorkspace = () => ({
@@ -230,6 +322,7 @@ const createDefaultWorkspaceState = ({
     schemaVersion: WORKSPACE_SCHEMA_VERSION,
     revision: 0,
     activeTerminalId: terminals[0].id,
+    managedWorktrees: [],
     terminals,
   };
 };
@@ -270,7 +363,7 @@ class WorkspaceStateStore {
     }
 
     try {
-      const state = JSON.parse(source);
+      const state = normalizeWorkspaceState(JSON.parse(source));
       validateWorkspaceState(state);
       return { canPersist: true, issue: null, source: 'saved', state };
     } catch {
@@ -348,6 +441,8 @@ module.exports = {
   WorkspaceStateError,
   WorkspaceStateStore,
   createDefaultWorkspaceState,
+  createManagedWorktreeRecord,
   createUnassignedWorkspace,
+  normalizeWorkspaceState,
   validateWorkspaceState,
 };

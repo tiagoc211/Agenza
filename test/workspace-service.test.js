@@ -236,6 +236,15 @@ test('removes only the terminal definition and process while preserving its real
       savedStates.at(-1).terminals.map(({ id }) => id),
       [SECOND_ID],
     );
+    assert.deepEqual(service.getManagedWorktrees(), [
+      {
+        assignedTerminalId: null,
+        branchRef: 'refs/heads/agent-work',
+        creationId: 'worktree-33333333-3333-4333-8333-333333333333',
+        path: worktreePath,
+        repositoryRoot: repositoryPath,
+      },
+    ]);
     assert.equal(fs.existsSync(worktreePath), true);
     assert.equal(
       fs.readFileSync(path.join(worktreePath, 'agent-output.txt'), 'utf8'),
@@ -358,6 +367,23 @@ test('persists an Agenza-owned Git worktree only for the selected terminal', asy
     status: 'available',
   });
   assert.deepEqual(savedStates.at(-1).terminals[0].workspace, workspace);
+  assert.deepEqual(savedStates.at(-1).managedWorktrees, [
+    {
+      branchRef: workspace.repository.branch,
+      creationId: workspace.repository.worktree.ownership.creationId,
+      path: workspace.projectPath,
+      repositoryRoot: workspace.repository.root,
+    },
+  ]);
+  assert.equal(service.getManagedWorktrees()[0].assignedTerminalId, FIRST_ID);
+  await assert.rejects(
+    service.forgetManagedWorktree(workspace.repository.worktree.ownership.creationId),
+    /assigned worktree/,
+  );
+  await service.assignFolder(FIRST_ID, 'C:\\Projects\\Replacement');
+  assert.equal(service.getManagedWorktrees()[0].assignedTerminalId, null);
+  await service.forgetManagedWorktree(workspace.repository.worktree.ownership.creationId);
+  assert.deepEqual(service.getManagedWorktrees(), []);
   assert.deepEqual(secondAfter, secondBefore);
 
   terminalManager.dispose();

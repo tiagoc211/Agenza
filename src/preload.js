@@ -39,8 +39,11 @@ const gitApi = Object.freeze({
     ipcRenderer.invoke(GIT_CHANNELS.createExistingBranch, { id, operationId }),
   createNewBranch: (id, operationId) =>
     ipcRenderer.invoke(GIT_CHANNELS.createNewBranch, { id, operationId }),
+  confirmCleanup: (operationId) => ipcRenderer.invoke(GIT_CHANNELS.confirmCleanup, { operationId }),
   discover: (id) => ipcRenderer.invoke(GIT_CHANNELS.discover, { id }),
+  listManagedWorktrees: () => ipcRenderer.invoke(GIT_CHANNELS.listManagedWorktrees),
   planWorkspace: (id, request) => ipcRenderer.invoke(GIT_CHANNELS.planWorkspace, { id, request }),
+  previewCleanup: (creationId) => ipcRenderer.invoke(GIT_CHANNELS.previewCleanup, { creationId }),
   status: (id) => ipcRenderer.invoke(GIT_CHANNELS.status, { id }),
 });
 

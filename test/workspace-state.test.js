@@ -47,6 +47,7 @@ test('creates and persists a useful versioned default layout on first launch', a
   assert.equal(loaded.state.schemaVersion, 1);
   assert.equal(loaded.state.revision, 0);
   assert.equal(loaded.state.activeTerminalId, TERMINAL_IDS[0]);
+  assert.deepEqual(loaded.state.managedWorktrees, []);
   assert.deepEqual(
     loaded.state.terminals.map(({ id, label, order, workspace }) => ({
       id,
@@ -97,6 +98,49 @@ test('atomically replaces valid state and retains the previous valid backup', as
   assert.deepEqual(persisted, nextState);
   assert.deepEqual(backup, initialState);
   assert.deepEqual((await createDeterministicStore(directory).load()).state, nextState);
+});
+
+test('imports Agenza ownership from an early schema-v1 assignment into the managed catalog', async (context) => {
+  const directory = await createTemporaryDirectory(context);
+  const state = createDefaultWorkspaceState({
+    idFactory: (() => {
+      let index = 0;
+      return () => TERMINAL_IDS[index++];
+    })(),
+    now: () => NOW,
+  });
+  delete state.managedWorktrees;
+  state.terminals[0].workspace = {
+    kind: 'git-worktree',
+    projectPath: 'C:\\Projects\\AgentOne',
+    repository: {
+      branch: 'refs/heads/agent-one',
+      root: 'C:\\Projects\\Repository',
+      worktree: {
+        ownership: {
+          creationId: 'worktree-33333333-3333-4333-8333-333333333333',
+          kind: 'agenza',
+        },
+        path: 'C:\\Projects\\AgentOne',
+      },
+    },
+  };
+  await fs.writeFile(
+    path.join(directory, WORKSPACE_STATE_FILENAME),
+    `${JSON.stringify(state)}\n`,
+    'utf8',
+  );
+
+  const loaded = await createDeterministicStore(directory).load();
+
+  assert.deepEqual(loaded.state.managedWorktrees, [
+    {
+      branchRef: 'refs/heads/agent-one',
+      creationId: 'worktree-33333333-3333-4333-8333-333333333333',
+      path: 'C:\\Projects\\AgentOne',
+      repositoryRoot: 'C:\\Projects\\Repository',
+    },
+  ]);
 });
 
 test('preserves invalid or newer source state and refuses to overwrite it', async (context) => {

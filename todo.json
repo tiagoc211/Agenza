@@ -146,7 +146,7 @@
       "id": "T212",
       "order": 12,
       "title": "Add explicit safe cleanup for Agenza-created worktrees",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T207", "T208", "T211"],
       "acceptance_criteria": [
         "Worktree cleanup is a separate confirmed action available only for worktrees recorded as created by Agenza.",

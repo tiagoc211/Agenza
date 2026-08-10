@@ -159,6 +159,44 @@ test('offers existing branches and registered worktrees as separate assignment f
   assert.match(styles, /\.workspace-dialog-field\[hidden\]/);
 });
 
+test('offers a separate confirmed cleanup that keeps the Git branch', () => {
+  for (const control of [
+    'data-cleanup-worktree',
+    'data-cleanup-dialog',
+    'data-cleanup-worktree-select',
+    'data-preview-cleanup',
+    'data-confirm-cleanup',
+    'data-cleanup-repository',
+    'data-cleanup-branch',
+    'data-cleanup-path',
+  ]) {
+    assert.match(html, new RegExp(control));
+  }
+
+  assert.match(html, /This is separate from terminal removal/);
+  assert.match(html, /without force/);
+  assert.match(html, /local\s+branch and its commits will remain/);
+  assert.match(renderer, /window\.agenza\.git\.listManagedWorktrees\(\)/);
+  assert.match(renderer, /window\.agenza\.git\.previewCleanup\(cleanupSelect\.value\)/);
+  assert.match(renderer, /window\.agenza\.git\.confirmCleanup\(state\.preview\.operationId\)/);
+  assert.match(renderer, /worktree\.assignedTerminalId \? ' \(assigned to a terminal\)'/);
+  assert.match(renderer, /Remove or reassign that terminal first/);
+  assert.match(renderer, /Branch \$\{displayBranchName\(result\.operation\.branchRef\)\} was kept/);
+  assert.match(styles, /\.dialog-button-danger/);
+  assert.match(styles, /\.cleanup-worktree-button:disabled \{[\s\S]*cursor: not-allowed/);
+  assert.match(styles, /\.workspace-dialog \{[\s\S]*max-height: calc\(100dvh - 2rem\)/);
+  assert.match(styles, /\.workspace-dialog-form \{[\s\S]*overflow-y: auto/);
+  assert.match(styles, /\.workspace-dialog-actions \{[\s\S]*position: sticky/);
+  assert.match(
+    styles,
+    /\.workspace-dialog-form > \.workspace-dialog-field select \{[\s\S]*max-width: 100%/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 720px\) \{[\s\S]*\.workspace-actions \{[\s\S]*width: 100%/,
+  );
+});
+
 test('restores persisted labels, active state, and available or missing project paths safely', () => {
   assert.match(
     renderer,

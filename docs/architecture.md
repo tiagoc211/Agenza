@@ -61,6 +61,16 @@ the matching process tree. It invokes no Git command and never removes a project
 worktree registration, or branch. If process-tree disposal fails, the previous terminal definition
 and its workspace assignment are written back so the pane can be recovered and removal retried.
 
+A separate persisted managed-worktree catalog retains the creation ID, repository root, branch ref,
+and canonical path for every worktree created by Agenza. Its record survives terminal removal and
+workspace reassignment, so ownership is not inferred from arbitrary Git directories. The global
+cleanup dialog lists only these recorded resources and disables assigned ones. Its first step
+creates a short-lived preview after checking that the directory exists, remains registered and
+unlocked, and has no tracked, untracked, or conflicted changes. Confirmation repeats every check
+inside the same per-repository mutation queue used by creation, then runs normal
+`git worktree remove` without force. Agenza verifies that the directory and registration are gone,
+verifies that the local branch still exists, and only then removes the ownership record.
+
 `WorkspaceStateStore` validates schema v1 and cross-record invariants before every read and write.
 It writes `workspace-state.json` through a validated temporary file and atomic rename, retaining the
 previous valid state as `workspace-state.backup.json`. Every saved mutation increments `revision`.

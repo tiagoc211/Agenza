@@ -19,8 +19,10 @@ Runtime WorkspaceRuntime
   └─ validation state, discovered Git status, active operation and recovery information
 ```
 
-Only `TerminalDefinition` and its committed `WorkspaceAssignment` are written to disk. Runtime
-objects are recreated after every app start.
+Only terminal definitions, their committed assignments, and the separate managed-worktree catalog
+are written to disk. The catalog records the Agenza creation ID, repository root, branch ref, and
+worktree path independently from any terminal. Runtime objects and cleanup previews are recreated
+after every app start.
 
 ## Stable terminal identity
 
@@ -43,6 +45,7 @@ top-level object contains:
 - `schemaVersion`: the integer `1`.
 - `revision`: a monotonically increasing local write revision.
 - `activeTerminalId`: a current terminal ID or `null` when no pane is active.
+- `managedWorktrees`: Agenza-created worktrees retained independently from terminal assignments.
 - `terminals`: the ordered terminal definitions.
 
 Each terminal definition contains:
@@ -107,6 +110,12 @@ Ownership grants permission only to offer the guarded worktree-cleanup workflow.
 ownership of the repository, branch, commits, or user files. Attaching an existing worktree never
 changes its ownership to `agenza`. Branches have no ownership flag because Agenza never deletes
 branches in `0.2.0`.
+
+Each successfully created worktree is also recorded in the top-level managed-worktree catalog by
+creation ID, repository root, full local branch ref, and canonical path. Removing a terminal or
+changing its assignment leaves this record intact. Cleanup is therefore available only after the
+worktree is no longer assigned, even across application restarts. Successful verified cleanup
+removes the catalog record; it never removes the branch.
 
 ## Terminal process lifecycle
 
@@ -174,6 +183,10 @@ two unassigned terminal definitions with new IDs, labels `Terminal 1` and `Termi
 terminal active. This preserves a familiar first-run layout while allowing the user to remove every
 pane or add more.
 
+Early development schema-v1 files may omit `managedWorktrees`. They load as an empty catalog, while
+any still-assigned Agenza-owned worktrees are imported from their existing ownership metadata. The
+normalized catalog is persisted with the next ordinary state mutation, without changing Git.
+
 For invalid JSON, invalid cross-record invariants, or an unknown higher `schemaVersion`, Agenza must
 not overwrite the source file. It starts a recoverable empty/default view, reports the problem, and
 preserves the unread state for manual recovery. Future migrations must be explicit, sequential, and
@@ -198,6 +211,9 @@ secret-bearing Git arguments.
 
 - The Electron main process owns terminal definitions, runtime state, persistence, path
   canonicalization, Git discovery/mutations, and process cleanup.
+- Managed-worktree cleanup uses a short-lived main-process preview, repeats ownership, assignment,
+  registration, filesystem, lock, and clean-status checks inside the repository mutation queue,
+  and invokes only normal `git worktree remove` without `--force`.
 - The preload bridge exposes narrow commands and immutable snapshots; it never exposes filesystem,
   shell, unrestricted Git, or persistence APIs.
 - The renderer displays snapshots and submits user intent. It cannot declare a worktree owned,

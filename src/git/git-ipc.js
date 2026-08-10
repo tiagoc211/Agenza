@@ -7,6 +7,7 @@ const {
 } = require('./git-workspace-executor');
 const { GitWorkspacePlanner, toGitWorkspacePlanErrorPayload } = require('./git-workspace-planner');
 const { readGitWorkspaceStatus } = require('./git-status');
+const { GitWorktreeCleanup, toGitWorktreeCleanupErrorPayload } = require('./git-worktree-cleanup');
 const { GIT_CHANNELS } = require('./ipc-channels');
 
 const isTrustedEvent = (event, window) =>
@@ -22,6 +23,7 @@ const writeLog = (logger, level, event, details) => {
 
 const registerGitIpc = ({
   discover = discoverGitRepository,
+  cleanup,
   ipcMain,
   logger,
   executor,
@@ -46,6 +48,13 @@ const registerGitIpc = ({
   const workspacePlanner = planner ?? new GitWorkspacePlanner({ discover });
   const workspaceExecutor =
     executor ?? new GitWorkspaceExecutor({ discover, planner: workspacePlanner });
+  const worktreeCleanup =
+    cleanup ??
+    new GitWorktreeCleanup({
+      discover,
+      enqueueRepository: (repositoryRoot, operation) =>
+        workspaceExecutor.enqueueRepository(repositoryRoot, operation),
+    });
   const statusReader =
     readStatus ?? ((projectPath) => readGitWorkspaceStatus(projectPath, { discover }));
 
@@ -64,6 +73,14 @@ const registerGitIpc = ({
     typeof workspaceExecutor.createNewBranch !== 'function'
   ) {
     throw new TypeError('Git IPC workspace executor must provide all assignment functions.');
+  }
+
+  if (
+    !worktreeCleanup ||
+    typeof worktreeCleanup.preview !== 'function' ||
+    typeof worktreeCleanup.confirm !== 'function'
+  ) {
+    throw new TypeError('Git IPC worktree cleanup must provide preview and confirm functions.');
   }
 
   const getTerminalProjectPath = (id) => {
@@ -188,6 +205,74 @@ const registerGitIpc = ({
     }
   };
 
+  const handleListManagedWorktrees = async (event) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error('Untrusted managed worktree request.');
+    }
+
+    return { ok: true, worktrees: workspaceService.getManagedWorktrees?.() ?? [] };
+  };
+
+  const handlePreviewCleanup = async (event, payload) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error('Untrusted worktree cleanup preview request.');
+    }
+
+    const { creationId } = payload ?? {};
+    writeLog(logger, 'info', 'git.worktree_cleanup_preview_requested', { creationId });
+
+    try {
+      const preview = await worktreeCleanup.preview({
+        assignedWorktrees: workspaceService.getAssignedGitWorktrees?.() ?? [],
+        creationId,
+        getManagedWorktree: (id) => workspaceService.getManagedWorktree?.(id) ?? null,
+      });
+      writeLog(logger, 'info', 'git.worktree_cleanup_preview_succeeded', {
+        creationId,
+        operationId: preview.operationId,
+      });
+      return { ok: true, preview };
+    } catch (error) {
+      const errorPayload = toGitWorktreeCleanupErrorPayload(error);
+      writeLog(logger, 'warn', 'git.worktree_cleanup_preview_failed', {
+        creationId,
+        error: { code: errorPayload.code },
+      });
+      return { error: errorPayload, ok: false };
+    }
+  };
+
+  const handleConfirmCleanup = async (event, payload) => {
+    if (!isTrustedEvent(event, window)) {
+      throw new Error('Untrusted worktree cleanup confirmation request.');
+    }
+
+    const { operationId } = payload ?? {};
+    writeLog(logger, 'info', 'git.worktree_cleanup_requested', { operationId });
+
+    try {
+      const operation = await worktreeCleanup.confirm({
+        forgetManagedWorktree: (creationId) => workspaceService.forgetManagedWorktree(creationId),
+        getAssignedWorktrees: () => workspaceService.getAssignedGitWorktrees?.() ?? [],
+        getManagedWorktree: (creationId) =>
+          workspaceService.getManagedWorktree?.(creationId) ?? null,
+        operationId,
+      });
+      writeLog(logger, 'info', 'git.worktree_cleanup_succeeded', {
+        creationId: operation.creationId,
+        operationId,
+      });
+      return { ok: true, operation };
+    } catch (error) {
+      const errorPayload = toGitWorktreeCleanupErrorPayload(error);
+      writeLog(logger, 'warn', 'git.worktree_cleanup_failed', {
+        error: { code: errorPayload.code },
+        operationId,
+      });
+      return { error: errorPayload, ok: false };
+    }
+  };
+
   const createConfirmationHandler = (executorMethod, operationName) => async (event, payload) => {
     if (!isTrustedEvent(event, window)) {
       throw new Error('Untrusted Git workspace confirmation request.');
@@ -259,19 +344,26 @@ const registerGitIpc = ({
   const handleCreateNewBranch = createConfirmationHandler('createNewBranch', 'create_new');
 
   ipcMain.handle(GIT_CHANNELS.attachWorktree, handleAttachWorktree);
+  ipcMain.handle(GIT_CHANNELS.confirmCleanup, handleConfirmCleanup);
   ipcMain.handle(GIT_CHANNELS.createExistingBranch, handleCreateExistingBranch);
   ipcMain.handle(GIT_CHANNELS.createNewBranch, handleCreateNewBranch);
   ipcMain.handle(GIT_CHANNELS.discover, handleDiscover);
+  ipcMain.handle(GIT_CHANNELS.listManagedWorktrees, handleListManagedWorktrees);
   ipcMain.handle(GIT_CHANNELS.planWorkspace, handlePlanWorkspace);
+  ipcMain.handle(GIT_CHANNELS.previewCleanup, handlePreviewCleanup);
   ipcMain.handle(GIT_CHANNELS.status, handleStatus);
 
   return () => {
     workspacePlanner.clearPreviews?.();
+    worktreeCleanup.clearPreviews?.();
     ipcMain.removeHandler(GIT_CHANNELS.attachWorktree);
+    ipcMain.removeHandler(GIT_CHANNELS.confirmCleanup);
     ipcMain.removeHandler(GIT_CHANNELS.createExistingBranch);
     ipcMain.removeHandler(GIT_CHANNELS.createNewBranch);
     ipcMain.removeHandler(GIT_CHANNELS.discover);
+    ipcMain.removeHandler(GIT_CHANNELS.listManagedWorktrees);
     ipcMain.removeHandler(GIT_CHANNELS.planWorkspace);
+    ipcMain.removeHandler(GIT_CHANNELS.previewCleanup);
     ipcMain.removeHandler(GIT_CHANNELS.status);
   };
 };

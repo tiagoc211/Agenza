@@ -56,6 +56,15 @@ test('records explicit worktree ownership without branch ownership', () => {
   assert.deepEqual(ownershipKinds, ['external', 'agenza']);
   assert.equal(schema.$defs.externalOwnership.properties.creationId.type, 'null');
   assert.match(schema.$defs.agenzaOwnership.properties.creationId.pattern, /worktree-/);
+  assert.equal(schema.properties.managedWorktrees.items.$ref, '#/$defs/managedWorktree');
+  assert.deepEqual(schema.$defs.managedWorktree.required, [
+    'creationId',
+    'repositoryRoot',
+    'branchRef',
+    'path',
+  ]);
+  assert.match(model, /managed-worktree catalog/);
+  assert.match(model, /removes the catalog record; it never removes the branch/);
   assert.match(model, /Branches have no ownership flag/);
 });
 

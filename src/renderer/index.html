@@ -24,6 +24,10 @@
             <span class="status-dot" aria-hidden="true"></span>
             <span data-terminal-count>No terminals</span>
           </div>
+          <button class="cleanup-worktree-button" type="button" data-cleanup-worktree disabled>
+            Clean worktree
+          </button>
+          <span class="visually-hidden" role="status" aria-live="polite" data-cleanup-status></span>
           <button class="add-terminal-button" type="button" data-add-terminal>
             <span aria-hidden="true">+</span>
             Add terminal
@@ -266,6 +270,77 @@
               disabled
             >
               Create branch and worktree
+            </button>
+          </footer>
+        </form>
+      </dialog>
+
+      <dialog class="workspace-dialog cleanup-dialog" data-cleanup-dialog>
+        <form class="workspace-dialog-form" method="dialog" data-cleanup-form>
+          <header class="workspace-dialog-header">
+            <div>
+              <p class="workspace-dialog-eyebrow">Git cleanup</p>
+              <h2>Remove an Agenza-created worktree</h2>
+            </div>
+            <button
+              class="workspace-dialog-close"
+              type="button"
+              data-cancel-cleanup
+              aria-label="Close worktree cleanup dialog"
+            >
+              &times;
+            </button>
+          </header>
+
+          <p class="workspace-dialog-intro">
+            This is separate from terminal removal. Agenza will never delete the Git branch.
+          </p>
+
+          <label class="workspace-dialog-field workspace-dialog-field-wide">
+            <span>Agenza-created worktree</span>
+            <select data-cleanup-worktree-select required></select>
+          </label>
+
+          <p class="workspace-dialog-error" role="alert" data-cleanup-error hidden></p>
+
+          <section class="workspace-preview cleanup-preview" data-cleanup-preview hidden>
+            <h3>Confirm worktree removal</h3>
+            <dl>
+              <div>
+                <dt>Repository</dt>
+                <dd data-cleanup-repository></dd>
+              </div>
+              <div>
+                <dt>Branch kept</dt>
+                <dd data-cleanup-branch></dd>
+              </div>
+              <div>
+                <dt>Worktree removed</dt>
+                <dd data-cleanup-path></dd>
+              </div>
+            </dl>
+            <p>
+              Git will remove this clean, unassigned worktree normally, without force. The local
+              branch and its commits will remain.
+            </p>
+          </section>
+
+          <footer class="workspace-dialog-actions">
+            <button class="dialog-button" type="button" data-cancel-cleanup>Cancel</button>
+            <button
+              class="dialog-button dialog-button-secondary"
+              type="button"
+              data-preview-cleanup
+            >
+              Check safety
+            </button>
+            <button
+              class="dialog-button dialog-button-danger"
+              type="button"
+              data-confirm-cleanup
+              disabled
+            >
+              Remove worktree, keep branch
             </button>
           </footer>
         </form>

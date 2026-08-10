@@ -46,6 +46,15 @@ const createHarness = ({
   const startedIds = [];
   const statusRequests = [];
   const assignedWorkspaces = [];
+  const cleanupRequests = [];
+  const forgottenWorktrees = [];
+  const managedWorktree = {
+    assignedTerminalId: null,
+    branchRef: 'refs/heads/agent-one',
+    creationId: 'worktree-one',
+    path: 'C:\\repo-agent-one',
+    repositoryRoot: 'C:\\repo',
+  };
   const preview = {
     baseBranch: 'main',
     operationId: 'operation-one',
@@ -89,6 +98,30 @@ const createHarness = ({
     };
   };
   const dispose = registerGitIpc({
+    cleanup: {
+      clearPreviews: () => {},
+      confirm: async (request) => {
+        cleanupRequests.push({ method: 'confirm', ...request });
+        await request.forgetManagedWorktree(managedWorktree.creationId);
+        return {
+          branchPreserved: true,
+          ...managedWorktree,
+          operationId: request.operationId,
+          state: 'succeeded',
+          worktreePath: managedWorktree.path,
+        };
+      },
+      preview: async (request) => {
+        cleanupRequests.push({ method: 'preview', ...request });
+        return {
+          branchRef: managedWorktree.branchRef,
+          creationId: request.creationId,
+          operationId: 'cleanup-one',
+          repositoryRoot: managedWorktree.repositoryRoot,
+          worktreePath: managedWorktree.path,
+        };
+      },
+    },
     discover: async () => {
       if (discoveryError) {
         throw discoveryError;
@@ -148,6 +181,10 @@ const createHarness = ({
           terminalId: id === 'terminal-one' ? 'terminal-two' : 'terminal-one',
         },
       ],
+      forgetManagedWorktree: async (creationId) => forgottenWorktrees.push(creationId),
+      getManagedWorktree: (creationId) =>
+        creationId === managedWorktree.creationId ? managedWorktree : null,
+      getManagedWorktrees: () => [managedWorktree],
       getCurrentFolder: (id) =>
         typeof currentFolder === 'function' ? currentFolder(id) : currentFolder,
       has: (id) => id === 'terminal-one' || id === 'terminal-two',
@@ -156,11 +193,14 @@ const createHarness = ({
 
   return {
     assignedWorkspaces,
+    cleanupRequests,
     discover: ipcMain.handlers.get(GIT_CHANNELS.discover),
     dispose,
     executionRequests,
+    forgottenWorktrees,
     ipcMain,
     logs,
+    managedWorktree,
     planRequests,
     preview,
     repository,
@@ -241,6 +281,45 @@ test('keeps a Git status failure local while another terminal can refresh', asyn
   assert.equal(second.ok, true);
   assert.equal(second.id, 'terminal-two');
   assert.deepEqual(harness.statusRequests, ['C:\\terminal-one', 'C:\\terminal-two']);
+
+  harness.dispose();
+});
+
+test('lists, previews, and confirms only the recorded managed worktree cleanup', async () => {
+  const harness = createHarness();
+  const listManaged = harness.ipcMain.handlers.get(GIT_CHANNELS.listManagedWorktrees);
+  const previewCleanup = harness.ipcMain.handlers.get(GIT_CHANNELS.previewCleanup);
+  const confirmCleanup = harness.ipcMain.handlers.get(GIT_CHANNELS.confirmCleanup);
+
+  assert.deepEqual(await listManaged(harness.trustedEvent), {
+    ok: true,
+    worktrees: [harness.managedWorktree],
+  });
+  const previewResult = await previewCleanup(harness.trustedEvent, {
+    creationId: harness.managedWorktree.creationId,
+  });
+  assert.equal(previewResult.ok, true);
+  assert.equal(previewResult.preview.operationId, 'cleanup-one');
+  assert.equal(harness.cleanupRequests[0].method, 'preview');
+  assert.deepEqual(harness.cleanupRequests[0].assignedWorktrees, [
+    { path: 'C:\\assigned', terminalId: 'terminal-one' },
+  ]);
+
+  const confirmResult = await confirmCleanup(harness.trustedEvent, {
+    operationId: 'cleanup-one',
+  });
+  assert.equal(confirmResult.ok, true);
+  assert.equal(confirmResult.operation.branchPreserved, true);
+  assert.deepEqual(harness.forgottenWorktrees, [harness.managedWorktree.creationId]);
+  await assert.rejects(
+    previewCleanup(
+      { sender: {}, senderFrame: {} },
+      {
+        creationId: harness.managedWorktree.creationId,
+      },
+    ),
+    /Untrusted/,
+  );
 
   harness.dispose();
 });

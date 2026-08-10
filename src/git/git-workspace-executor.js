@@ -186,6 +186,10 @@ class GitWorkspaceExecutor {
     });
   }
 
+  enqueueRepository(repositoryRoot, operation) {
+    return this._enqueueRepository(repositoryRoot, operation);
+  }
+
   _createWorktree({
     assignedWorktrees,
     buildArguments,
