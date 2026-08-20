@@ -1,7 +1,7 @@
 {
   "name": "agenza",
   "productName": "Agenza",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local desktop workspace for independent Codex CLI sessions.",
   "main": ".webpack/main",
   "private": true,

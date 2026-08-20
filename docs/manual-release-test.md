@@ -72,16 +72,16 @@ real saved layout. Close every Agenza window before changing that file.
 
 ## Release-test record
 
-| Field                                        | Result                                                                                                                                |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Candidate build                              | Commit `75b00f3`; EXE SHA-256 `A47060C2308B7FC1248170CFE9D606B1DB7A2E133A55A1FE4E983CDF9AB6802E`; metadata remains `0.1.0` until T218 |
-| Windows / Codex CLI                          | Windows `10.0.26200.9168`; Codex CLI `0.149.0`                                                                                        |
-| Tester and date                              | Tiago (interactive) and Codex (automated gate); 2026-08-20                                                                            |
-| Automated gate                               | Passed: 146 tests, package smoke, installer generation, artifact validation                                                           |
-| Layout persistence and restore               | Passed                                                                                                                                |
-| Two isolated Codex workspaces                | Passed                                                                                                                                |
-| Removal, dirty cleanup refusal, and shutdown | Passed                                                                                                                                |
-| Failures or follow-up                        | None; final `0.2.0` metadata and installer validation remain in T218                                                                  |
+| Field                                        | Result                                                                                                                                                     |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Candidate build                              | T217 interactive build: commit `75b00f3`; EXE SHA-256 `A47060C2308B7FC1248170CFE9D606B1DB7A2E133A55A1FE4E983CDF9AB6802E`; final metadata validated by T218 |
+| Windows / Codex CLI                          | Windows `10.0.26200.9168`; Codex CLI `0.149.0`                                                                                                             |
+| Tester and date                              | Tiago (interactive) and Codex (automated gate); 2026-08-20                                                                                                 |
+| Automated gate                               | Passed: 146 tests, package smoke, installer generation, artifact validation                                                                                |
+| Layout persistence and restore               | Passed                                                                                                                                                     |
+| Two isolated Codex workspaces                | Passed                                                                                                                                                     |
+| Removal, dirty cleanup refusal, and shutdown | Passed                                                                                                                                                     |
+| Failures or follow-up                        | None; T218 subsequently validated the final `0.2.0` metadata and installer                                                                                 |
 
 T217 is complete only after every checkbox passes on the candidate package. Leave it
 `in_progress` if an interactive check is pending or fails.

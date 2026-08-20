@@ -230,7 +230,7 @@
       "id": "T218",
       "order": 18,
       "title": "Create and validate the 0.2.0 distributable build",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T217"],
       "acceptance_criteria": [
         "Application and installer metadata use version 0.2.0 and the Windows installer is generated successfully.",

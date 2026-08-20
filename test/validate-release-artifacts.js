@@ -1,13 +1,16 @@
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const packageJson = require('../package.json');
 
+const EXPECTED_RELEASE_VERSION = '0.2.0';
 const projectRoot = path.resolve(__dirname, '..');
 const releaseDirectory = path.join(projectRoot, 'out', 'make', 'squirrel.windows', 'x64');
 const packagedDirectory = path.join(projectRoot, 'out', 'Agenza-win32-x64');
 const setupName = `${packageJson.productName}-${packageJson.version} Setup.exe`;
 const packageName = `${packageJson.name}-${packageJson.version}-full.nupkg`;
+const packagedExecutablePath = path.join(packagedDirectory, `${packageJson.productName}.exe`);
 
 const artifacts = [
   {
@@ -28,7 +31,7 @@ const artifacts = [
   {
     minimumSize: 1_000_000,
     name: 'Packaged executable',
-    path: path.join(packagedDirectory, `${packageJson.productName}.exe`),
+    path: packagedExecutablePath,
   },
   {
     minimumSize: 1,
@@ -54,6 +57,51 @@ const artifacts = [
 ];
 
 const failures = [];
+
+if (packageJson.version !== EXPECTED_RELEASE_VERSION) {
+  failures.push(
+    `Release metadata must use ${EXPECTED_RELEASE_VERSION}, found ${packageJson.version}.`,
+  );
+}
+
+if (fs.existsSync(packagedExecutablePath)) {
+  try {
+    const versionInfo = JSON.parse(
+      execFileSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          [
+            '$info = (Get-Item -LiteralPath $env:AGENZA_RELEASE_EXECUTABLE).VersionInfo;',
+            '[PSCustomObject]@{ productName = $info.ProductName; productVersion = $info.ProductVersion }',
+            '| ConvertTo-Json -Compress',
+          ].join(' '),
+        ],
+        {
+          encoding: 'utf8',
+          env: { ...process.env, AGENZA_RELEASE_EXECUTABLE: packagedExecutablePath },
+          windowsHide: true,
+        },
+      ).trim(),
+    );
+
+    if (versionInfo.productName !== packageJson.productName) {
+      failures.push(
+        `Packaged executable product name must be ${packageJson.productName}, found ${versionInfo.productName}.`,
+      );
+    }
+
+    if (versionInfo.productVersion !== EXPECTED_RELEASE_VERSION) {
+      failures.push(
+        `Packaged executable version must be ${EXPECTED_RELEASE_VERSION}, found ${versionInfo.productVersion}.`,
+      );
+    }
+  } catch (error) {
+    failures.push(`Unable to inspect packaged executable metadata: ${error.message}`);
+  }
+}
 
 for (const artifact of artifacts) {
   try {
