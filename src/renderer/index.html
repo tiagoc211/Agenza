@@ -31,6 +31,15 @@
             <span data-terminal-count>No terminals</span>
           </div>
           <button
+            class="orchestration-toggle-button"
+            type="button"
+            aria-controls="orchestration-panel"
+            aria-expanded="false"
+            data-toggle-orchestration
+          >
+            Orchestrator
+          </button>
+          <button
             class="cleanup-worktree-button"
             type="button"
             aria-label="Clean an Agenza-created worktree"
@@ -61,6 +70,55 @@
           </button>
         </div>
       </header>
+
+      <section
+        class="orchestration-panel"
+        id="orchestration-panel"
+        aria-labelledby="orchestration-title"
+        data-orchestration-panel
+        hidden
+      >
+        <header class="orchestration-header">
+          <div>
+            <p class="orchestration-eyebrow">Communication prototype</p>
+            <h2 id="orchestration-title">Agent orchestrator</h2>
+          </div>
+          <p>
+            Agents can also call <code>agenza-agent list</code>, <code>send</code>,
+            <code>inbox</code>, <code>create</code>, and <code>remove</code> from Codex.
+          </p>
+        </header>
+        <div class="orchestration-controls">
+          <label>
+            <span>Orchestrator instance</span>
+            <select data-orchestrator-select></select>
+          </label>
+          <button type="button" data-set-orchestrator>Set orchestrator</button>
+          <button type="button" data-create-agent>Create agent</button>
+          <label>
+            <span>Order target</span>
+            <select data-orchestration-target></select>
+          </label>
+          <label class="orchestration-message-field">
+            <span>Order or message</span>
+            <textarea
+              maxlength="8000"
+              rows="2"
+              placeholder="Describe the task and expected result"
+              data-orchestration-message
+            ></textarea>
+          </label>
+          <button class="orchestration-send-button" type="button" data-send-order>
+            Send order
+          </button>
+          <button class="orchestration-remove-button" type="button" data-remove-agent>
+            Remove target
+          </button>
+        </div>
+        <p class="orchestration-status" role="status" aria-live="polite" data-orchestration-status>
+          Select one terminal as the orchestrator, then connect agents and dispatch work.
+        </p>
+      </section>
 
       <main
         class="terminal-grid"

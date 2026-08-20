@@ -45,6 +45,34 @@ test('adds and removes dynamic terminal sessions through the narrow bridge', () 
   );
 });
 
+test('provides a functional orchestrator panel backed by a narrow control plane', () => {
+  for (const control of [
+    'data-toggle-orchestration',
+    'data-orchestration-panel',
+    'data-orchestrator-select',
+    'data-set-orchestrator',
+    'data-create-agent',
+    'data-orchestration-target',
+    'data-orchestration-message',
+    'data-send-order',
+    'data-remove-agent',
+  ]) {
+    assert.match(html, new RegExp(control));
+  }
+
+  assert.match(html, /agenza-agent list/);
+  assert.match(renderer, /window\.agenza\.orchestration\.setOrchestrator/);
+  assert.match(renderer, /window\.agenza\.orchestration\.createAgent/);
+  assert.match(renderer, /window\.agenza\.orchestration\.removeAgent/);
+  assert.match(renderer, /window\.agenza\.orchestration\.sendMessage/);
+  assert.match(renderer, /window\.agenza\.orchestration\.onStateChanged/);
+  assert.match(renderer, /event\.type === 'agent-created'/);
+  assert.match(renderer, /event\.type === 'agent-removed'/);
+  assert.match(renderer, /Order sent to/);
+  assert.match(styles, /\.orchestration-panel/);
+  assert.match(styles, /grid-template-rows: auto auto minmax\(0, 1fr\) auto/);
+});
+
 test('keeps zero, one, two, and several terminal layouts usable', () => {
   assert.match(html, /data-empty-workspace/);
   assert.match(renderer, /emptyWorkspace\.hidden = count !== 0/);

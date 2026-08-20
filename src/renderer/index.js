@@ -57,6 +57,16 @@ const confirmationTitle = document.querySelector('[data-confirmation-title]');
 const confirmationMessage = document.querySelector('[data-confirmation-message]');
 const confirmActionButton = document.querySelector('[data-confirm-action]');
 const cancelConfirmationButtons = document.querySelectorAll('[data-cancel-confirmation]');
+const orchestrationToggle = document.querySelector('[data-toggle-orchestration]');
+const orchestrationPanel = document.querySelector('[data-orchestration-panel]');
+const orchestratorSelect = document.querySelector('[data-orchestrator-select]');
+const setOrchestratorButton = document.querySelector('[data-set-orchestrator]');
+const createAgentButton = document.querySelector('[data-create-agent]');
+const orchestrationTarget = document.querySelector('[data-orchestration-target]');
+const orchestrationMessage = document.querySelector('[data-orchestration-message]');
+const sendOrderButton = document.querySelector('[data-send-order]');
+const removeAgentButton = document.querySelector('[data-remove-agent]');
+const orchestrationStatus = document.querySelector('[data-orchestration-status]');
 
 const terminalTheme = {
   background: '#090c12',
@@ -93,6 +103,8 @@ let confirmationDialogState = null;
 let managedWorktrees = [];
 let managedWorktreeRefreshPending = false;
 let managedWorktreeRefreshPromise = null;
+let orchestrationState = { agents: [], brokerReady: false, orchestratorId: null };
+let orchestrationBusy = false;
 
 const workspaceOperationTypes = Object.freeze({
   attachWorktree: 'attach-existing-worktree',
@@ -104,6 +116,71 @@ const getOrderedViews = () =>
   [...terminalGrid.querySelectorAll('[data-pane-id]')]
     .map((pane) => terminalViews.get(pane.dataset.paneId))
     .filter(Boolean);
+
+const replaceOrchestrationSelectOptions = (select, options, preferredValue) => {
+  select.replaceChildren(
+    ...options.map(({ disabled = false, label, value }) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      option.disabled = disabled;
+      return option;
+    }),
+  );
+
+  if (options.some(({ value }) => value === preferredValue)) {
+    select.value = preferredValue;
+  }
+};
+
+const updateOrchestrationControls = () => {
+  const views = getOrderedViews();
+  const previousOrchestrator = orchestratorSelect.value || orchestrationState.orchestratorId || '';
+  const previousTarget = orchestrationTarget.value;
+  const orchestratorOptions = [
+    { label: 'No orchestrator selected', value: '' },
+    ...views.map(({ id, isConnected, label }) => ({
+      label: `${label}${isConnected ? ' · connected' : ' · stopped'}`,
+      value: id,
+    })),
+  ];
+  replaceOrchestrationSelectOptions(orchestratorSelect, orchestratorOptions, previousOrchestrator);
+
+  const targetViews = views.filter(({ id }) => id !== orchestrationState.orchestratorId);
+  const targetOptions = [
+    { label: 'All agent instances', value: 'all' },
+    ...targetViews.map(({ id, isConnected, label }) => ({
+      label: `${label}${isConnected ? ' · connected' : ' · queued'}`,
+      value: id,
+    })),
+  ];
+  replaceOrchestrationSelectOptions(orchestrationTarget, targetOptions, previousTarget || 'all');
+
+  const hasOrchestrator = Boolean(orchestrationState.orchestratorId);
+  const hasTargets = targetViews.length > 0;
+  orchestratorSelect.disabled = orchestrationBusy || views.length === 0;
+  setOrchestratorButton.disabled = orchestrationBusy || views.length === 0;
+  createAgentButton.disabled = orchestrationBusy;
+  orchestrationTarget.disabled = orchestrationBusy || !hasTargets;
+  orchestrationMessage.disabled = orchestrationBusy || !hasOrchestrator || !hasTargets;
+  sendOrderButton.disabled = orchestrationBusy || !hasOrchestrator || !hasTargets;
+  removeAgentButton.disabled =
+    orchestrationBusy ||
+    orchestrationTarget.value === 'all' ||
+    !terminalViews.has(orchestrationTarget.value);
+};
+
+const syncOrchestrationState = async () => {
+  try {
+    orchestrationState = await window.agenza.orchestration.getState();
+    updateOrchestrationControls();
+  } catch (error) {
+    orchestrationStatus.textContent = formatUserFacingError(
+      error,
+      'Unable to refresh orchestration state.',
+    );
+  }
+};
 
 const announceWorkspace = (message) => {
   workspaceAnnouncement.textContent = message;
@@ -223,6 +300,8 @@ const updateWorkspaceLayout = () => {
       `${view.label}, terminal ${index + 1} of ${count}. Press F6 for the next terminal or Shift+F6 for the previous terminal.`,
     );
   }
+
+  updateOrchestrationControls();
 };
 
 const fitTerminals = () => {
@@ -1149,7 +1228,7 @@ const launchSession = async (view, { restart, failureMessage }) => {
 
 const chooseProjectFolder = async (view) => {
   if (view.isBusy) {
-    return;
+    return false;
   }
 
   let refreshAfterSelection = false;
@@ -1247,7 +1326,7 @@ const detachStaleWorkspace = async (view) => {
   });
 
   if (!confirmed) {
-    return;
+    return false;
   }
 
   view.isDetaching = true;
@@ -1287,51 +1366,20 @@ const detachStaleWorkspace = async (view) => {
   }
 };
 
-const removeTerminalView = async (view) => {
-  if (view.isBusy) {
-    return;
-  }
-
-  const confirmed = await requestConfirmation({
-    confirmLabel: 'Remove terminal only',
-    eyebrow: 'Terminal removal',
-    message: buildTerminalRemovalMessage(view),
-    returnFocus: view.removeButton,
-    title: `Remove ${view.label}?`,
-  });
-
-  if (!confirmed) {
-    return;
+const removeTerminalViewLocally = (view) => {
+  if (!terminalViews.has(view.id)) {
+    return false;
   }
 
   const viewsBeforeRemoval = getOrderedViews();
   const removedIndex = viewsBeforeRemoval.indexOf(view);
   const wasActive = view.pane.classList.contains('is-active');
-  view.isRemoving = true;
-  setControlsBusy(view, true);
-  setSessionState(view, 'stopping', 'Stopping', 'Stopping this terminal process');
-
-  try {
-    await window.agenza.terminal.remove(view.id);
-  } catch (error) {
-    view.isRemoving = false;
-    showSessionFailure(view, {
-      description: 'Terminal could not be removed - retry or close Agenza',
-      error,
-      heading: 'Unable to remove terminal.',
-      recovery: 'Retry removal. Closing Agenza will also stop every terminal process.',
-    });
-    setControlsBusy(view, false);
-    return;
-  }
-
   terminalViews.delete(view.id);
   view.terminal.dispose();
   view.pane.remove();
   updateWorkspaceLayout();
 
   const remainingViews = getOrderedViews();
-
   if (wasActive && remainingViews.length > 0) {
     const nextView = remainingViews[Math.min(removedIndex, remainingViews.length - 1)];
     setActivePane(nextView.pane);
@@ -1347,6 +1395,53 @@ const removeTerminalView = async (view) => {
 
   fitTerminals();
   refreshManagedWorktrees();
+  return true;
+};
+
+const removeTerminalView = async (
+  view,
+  {
+    removeOperation = () => window.agenza.terminal.remove(view.id),
+    returnFocus = view.removeButton,
+  } = {},
+) => {
+  if (view.isBusy) {
+    return false;
+  }
+
+  const confirmed = await requestConfirmation({
+    confirmLabel: 'Remove terminal only',
+    eyebrow: 'Terminal removal',
+    message: buildTerminalRemovalMessage(view),
+    returnFocus,
+    title: `Remove ${view.label}?`,
+  });
+
+  if (!confirmed) {
+    return false;
+  }
+
+  view.isRemoving = true;
+  setControlsBusy(view, true);
+  setSessionState(view, 'stopping', 'Stopping', 'Stopping this terminal process');
+
+  try {
+    await removeOperation();
+  } catch (error) {
+    view.isRemoving = false;
+    showSessionFailure(view, {
+      description: 'Terminal could not be removed - retry or close Agenza',
+      error,
+      heading: 'Unable to remove terminal.',
+      recovery: 'Retry removal. Closing Agenza will also stop every terminal process.',
+    });
+    setControlsBusy(view, false);
+    return false;
+  }
+
+  removeTerminalViewLocally(view);
+  syncOrchestrationState();
+  return true;
 };
 
 const configureTerminalShortcuts = (view) => {
@@ -1626,6 +1721,7 @@ const addTerminal = async () => {
     const snapshot = await window.agenza.terminal.create();
     const view = createTerminalView(snapshot);
     announceWorkspace(`${view.label} added. ${terminalViews.size} terminals open.`);
+    syncOrchestrationState();
     addTerminalButton.title = '';
   } catch (error) {
     addTerminalButton.title = formatUserFacingError(error, 'Unable to add a terminal.');
@@ -1637,9 +1733,113 @@ const addTerminal = async () => {
   }
 };
 
+const setOrchestrator = async () => {
+  orchestrationBusy = true;
+  updateOrchestrationControls();
+
+  try {
+    orchestrationState = await window.agenza.orchestration.setOrchestrator(
+      orchestratorSelect.value || null,
+    );
+    const view = terminalViews.get(orchestrationState.orchestratorId);
+    orchestrationStatus.textContent = view
+      ? `${view.label} is now the orchestrator. Its Codex process can create, remove, list, and message agents with agenza-agent.`
+      : 'No orchestrator is selected. Agent management from the CLI is disabled.';
+  } catch (error) {
+    orchestrationStatus.textContent = formatUserFacingError(
+      error,
+      'Unable to select the orchestrator.',
+    );
+  } finally {
+    orchestrationBusy = false;
+    updateOrchestrationControls();
+  }
+};
+
+const createOrchestratedAgent = async () => {
+  orchestrationBusy = true;
+  updateOrchestrationControls();
+
+  try {
+    const result = await window.agenza.orchestration.createAgent();
+    orchestrationState = result.state;
+    const view = terminalViews.get(result.snapshot.id) ?? createTerminalView(result.snapshot);
+    orchestrationStatus.textContent = `${view.label} was created. Assign a folder or Git worktree, then start Codex.`;
+    announceWorkspace(`${view.label} created by the orchestrator prototype.`);
+  } catch (error) {
+    orchestrationStatus.textContent = formatUserFacingError(error, 'Unable to create an agent.');
+  } finally {
+    orchestrationBusy = false;
+    updateOrchestrationControls();
+  }
+};
+
+const removeOrchestratedAgent = async () => {
+  const view = terminalViews.get(orchestrationTarget.value);
+  if (!view) {
+    return;
+  }
+
+  const removed = await removeTerminalView(view, {
+    removeOperation: () => window.agenza.orchestration.removeAgent(view.id),
+    returnFocus: removeAgentButton,
+  });
+  if (removed) {
+    orchestrationStatus.textContent = `${view.label} was removed. Its folder, worktree, and branch were preserved.`;
+  }
+};
+
+const sendOrchestrationOrder = async () => {
+  const message = orchestrationMessage.value.trim();
+  if (!message) {
+    orchestrationStatus.textContent = 'Write an order or message before sending it.';
+    orchestrationMessage.focus();
+    return;
+  }
+
+  orchestrationBusy = true;
+  updateOrchestrationControls();
+
+  try {
+    const targetIds = orchestrationTarget.value === 'all' ? 'all' : [orchestrationTarget.value];
+    const result = await window.agenza.orchestration.sendMessage(targetIds, message);
+    const delivered = result.deliveries.filter(({ status }) => status === 'delivered').length;
+    const queued = result.deliveries.length - delivered;
+    orchestrationMessage.value = '';
+    orchestrationStatus.textContent = `Order sent to ${result.recipientCount} agent${
+      result.recipientCount === 1 ? '' : 's'
+    }: ${delivered} delivered, ${queued} queued.`;
+  } catch (error) {
+    orchestrationStatus.textContent = formatUserFacingError(error, 'Unable to send the order.');
+  } finally {
+    orchestrationBusy = false;
+    updateOrchestrationControls();
+  }
+};
+
 const disposeDataSubscription = window.agenza.terminal.onData(({ id, data }) => {
   terminalViews.get(id)?.terminal.write(data);
 });
+
+const disposeOrchestrationStateSubscription = window.agenza.orchestration.onStateChanged(
+  (event) => {
+    orchestrationState = event.state;
+
+    if (event.type === 'agent-created' && !terminalViews.has(event.snapshot?.id)) {
+      const view = createTerminalView(event.snapshot, { activate: false });
+      orchestrationStatus.textContent = `${view.label} was created by the Codex orchestrator. Assign its workspace to start it.`;
+      announceWorkspace(`${view.label} created by the Codex orchestrator.`);
+    } else if (event.type === 'agent-removed') {
+      const view = terminalViews.get(event.id);
+      if (view) {
+        removeTerminalViewLocally(view);
+        orchestrationStatus.textContent = `${view.label} was removed by the Codex orchestrator. Git work was preserved.`;
+      }
+    }
+
+    updateOrchestrationControls();
+  },
+);
 
 const disposeExitSubscription = window.agenza.terminal.onExit(({ id, exitCode }) => {
   const view = terminalViews.get(id);
@@ -1679,6 +1879,27 @@ const handleTerminalFocusShortcut = (event) => {
 document.addEventListener('keydown', handleTerminalFocusShortcut);
 addTerminalButton.addEventListener('click', () => addTerminal());
 emptyAddTerminalButton.addEventListener('click', () => addTerminal());
+orchestrationToggle.addEventListener('click', () => {
+  orchestrationPanel.hidden = !orchestrationPanel.hidden;
+  orchestrationToggle.setAttribute('aria-expanded', String(!orchestrationPanel.hidden));
+  if (!orchestrationPanel.hidden) {
+    updateOrchestrationControls();
+    orchestratorSelect.focus();
+  }
+  fitTerminals();
+});
+orchestratorSelect.addEventListener('change', updateOrchestrationControls);
+orchestrationTarget.addEventListener('change', updateOrchestrationControls);
+setOrchestratorButton.addEventListener('click', () => setOrchestrator());
+createAgentButton.addEventListener('click', () => createOrchestratedAgent());
+removeAgentButton.addEventListener('click', () => removeOrchestratedAgent());
+sendOrderButton.addEventListener('click', () => sendOrchestrationOrder());
+orchestrationMessage.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    sendOrchestrationOrder();
+  }
+});
 cleanupButton.addEventListener('click', () => openCleanupDialog());
 cleanupSelect.addEventListener('change', resetCleanupPreview);
 previewCleanupButton.addEventListener('click', () => previewWorktreeCleanup());
@@ -1821,6 +2042,8 @@ const initializeWorkspace = async () => {
       setActivePane(firstView.pane, { persist: false });
     }
 
+    orchestrationState = await window.agenza.orchestration.getState();
+
     if (workspaceRecoveryIssue) {
       terminalCount.title = workspaceRecoveryIssue;
     }
@@ -1845,6 +2068,7 @@ window.addEventListener('beforeunload', () => {
   resizeObserver.disconnect();
   disposeDataSubscription();
   disposeExitSubscription();
+  disposeOrchestrationStateSubscription();
 
   for (const { terminal } of terminalViews.values()) {
     terminal.dispose();

@@ -178,6 +178,15 @@ before choosing to run it.
 - No automatic updates or code signing.
 - Codex must be installed and authenticated separately and may use its own online services.
 
+## Experimental orchestration branch
+
+The `test-comm-inter-term` branch contains a local functional prototype for agent communication and
+orchestration. Its **Orchestrator** panel can select one Codex terminal as coordinator, create and
+remove terminal instances, and send orders to one or all agents. Agenza-launched Codex processes can
+also communicate through the runtime-only `agenza-agent` command. See
+[docs/orchestration-prototype.md](docs/orchestration-prototype.md) for the workflow, security model,
+commands, and current limitations. This experiment is not part of the `0.2.0` release scope.
+
 The manual release checklist is recorded in
 [docs/manual-release-test.md](docs/manual-release-test.md).
 

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const { CLIPBOARD_CHANNELS } = require('./clipboard/ipc-channels');
 const { GIT_CHANNELS } = require('./git/ipc-channels');
+const { ORCHESTRATION_CHANNELS } = require('./orchestration/ipc-channels');
 const { PROJECT_CHANNELS } = require('./project/ipc-channels');
 const { TERMINAL_CHANNELS } = require('./terminal/ipc-channels');
 
@@ -53,11 +54,22 @@ const clipboardApi = Object.freeze({
   writeText: (text) => ipcRenderer.invoke(CLIPBOARD_CHANNELS.writeText, { text }),
 });
 
+const orchestrationApi = Object.freeze({
+  createAgent: () => ipcRenderer.invoke(ORCHESTRATION_CHANNELS.createAgent),
+  getState: () => ipcRenderer.invoke(ORCHESTRATION_CHANNELS.getState),
+  onStateChanged: (callback) => subscribe(ORCHESTRATION_CHANNELS.stateChanged, callback),
+  removeAgent: (id) => ipcRenderer.invoke(ORCHESTRATION_CHANNELS.removeAgent, { id }),
+  sendMessage: (targetIds, message) =>
+    ipcRenderer.invoke(ORCHESTRATION_CHANNELS.sendMessage, { message, targetIds }),
+  setOrchestrator: (id) => ipcRenderer.invoke(ORCHESTRATION_CHANNELS.setOrchestrator, { id }),
+});
+
 contextBridge.exposeInMainWorld(
   'agenza',
   Object.freeze({
     clipboard: clipboardApi,
     git: gitApi,
+    orchestration: orchestrationApi,
     platform: process.platform,
     project: projectApi,
     terminal: terminalApi,

@@ -9,6 +9,19 @@
     "Destructive Git operations require an explicit user action and safety validation.",
     "Automatic merge, rebase, push, pull, and branch deletion are out of scope for 0.2.0."
   ],
+  "experiments": [
+    {
+      "id": "P001",
+      "title": "Prototype local orchestration and inter-agent communication",
+      "branch": "test-comm-inter-term",
+      "status": "done",
+      "acceptance_criteria": [
+        "A selected orchestrator can create and remove terminal instances without deleting Git work.",
+        "The orchestrator can send orders to one or all agents and agents can exchange messages through a local authenticated broker.",
+        "Lifecycle changes initiated by Codex appear immediately in the renderer and message contents are not persisted or logged."
+      ]
+    }
+  ],
   "tasks": [
     {
       "id": "T201",

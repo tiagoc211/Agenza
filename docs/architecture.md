@@ -281,3 +281,7 @@ The following choices are intentionally deferred until they are needed:
 - Support for CLIs other than Codex.
 - Communication between terminal sessions.
 - Automatic application updates and code signing.
+
+The `test-comm-inter-term` branch explores the first deferred item with a non-release local broker.
+Its experimental architecture and boundaries are documented in
+[orchestration-prototype.md](orchestration-prototype.md); this does not change the `0.2.0` contract.

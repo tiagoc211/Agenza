@@ -9,6 +9,9 @@ const { registerGitIpc } = require('./git/git-ipc');
 const { inspectSavedGitWorkspace } = require('./git/git-workspace-recovery');
 const { createResourceDisposer } = require('./lifecycle/resource-disposer');
 const { createAppLogger, createNoopLogger } = require('./logging/app-logger');
+const { installAgentCli } = require('./orchestration/agent-cli');
+const { registerOrchestrationIpc } = require('./orchestration/orchestration-ipc');
+const { OrchestrationService } = require('./orchestration/orchestration-service');
 const { registerProjectFolderIpc } = require('./project/project-folder');
 const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
 const { TerminalManager } = require('./terminal/terminal-manager');
@@ -127,6 +130,12 @@ const createMainWindow = async () => {
     terminalManager,
   });
   await workspaceService.initialize();
+  const orchestrationService = new OrchestrationService({
+    terminalManager,
+    workspaceService,
+  });
+  await orchestrationService.start();
+  const agentCliDirectory = installAgentCli({ directory: workspaceDirectory });
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   const prepareTerminal = isStartupCheck
     ? async () => undefined
@@ -143,7 +152,14 @@ const createMainWindow = async () => {
           );
         }
 
-        return prepareCodexSessionOptions({ cwd: projectFolder });
+        return prepareCodexSessionOptions({
+          cwd: projectFolder,
+          environment: orchestrationService.createAgentEnvironment(
+            id,
+            process.env,
+            agentCliDirectory,
+          ),
+        });
       };
   const startTerminal = async (id) => {
     const options = (await prepareTerminal(id)) ?? {};
@@ -178,11 +194,18 @@ const createMainWindow = async () => {
     manager: terminalManager,
     prepare: prepareTerminal,
   });
+  const disposeOrchestrationIpc = registerOrchestrationIpc({
+    ipcMain,
+    service: orchestrationService,
+    window,
+  });
   const disposeWindowResources = createResourceDisposer([
+    { dispose: disposeOrchestrationIpc, label: 'orchestration IPC' },
     { dispose: disposeTerminalIpc, label: 'terminal IPC' },
     { dispose: projectFolderIpc.dispose, label: 'project folder IPC' },
     { dispose: disposeGitIpc, label: 'Git discovery IPC' },
     { dispose: disposeClipboardIpc, label: 'clipboard IPC' },
+    { dispose: () => orchestrationService.dispose(), label: 'orchestration broker' },
     { dispose: () => terminalManager.dispose(), label: 'terminal process trees' },
   ]);
 

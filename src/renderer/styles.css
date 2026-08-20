@@ -44,7 +44,7 @@ body {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: 100%;
   height: 100%;
 }
@@ -134,6 +134,7 @@ body {
 }
 
 .add-terminal-button,
+.orchestration-toggle-button,
 .cleanup-worktree-button,
 .empty-workspace-action {
   border: 1px solid #39708c;
@@ -160,6 +161,13 @@ body {
   color: #f4ca78;
 }
 
+.orchestration-toggle-button {
+  padding: 0.45rem 0.7rem;
+  border-color: #4c456f;
+  background: #211d35;
+  color: #cbbcff;
+}
+
 .add-terminal-button span {
   font-size: 1rem;
   line-height: 0.7;
@@ -167,6 +175,8 @@ body {
 
 .add-terminal-button:hover:not(:disabled),
 .add-terminal-button:focus-visible,
+.orchestration-toggle-button:hover:not(:disabled),
+.orchestration-toggle-button:focus-visible,
 .cleanup-worktree-button:hover:not(:disabled),
 .cleanup-worktree-button:focus-visible,
 .empty-workspace-action:hover:not(:disabled),
@@ -189,6 +199,116 @@ body {
 .dialog-button-danger:not(:disabled) {
   border-color: #8e5364;
   background: #421d29;
+  color: #ffb0be;
+}
+
+.orchestration-panel {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #2d2944;
+  background: linear-gradient(90deg, #151326, #101521);
+}
+
+.orchestration-panel[hidden] {
+  display: none;
+}
+
+.orchestration-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.orchestration-header h2,
+.orchestration-header p,
+.orchestration-eyebrow,
+.orchestration-status {
+  margin: 0;
+}
+
+.orchestration-header h2 {
+  margin-top: 0.12rem;
+  font-size: 0.95rem;
+}
+
+.orchestration-header > p,
+.orchestration-status {
+  color: #9aa7ba;
+  font-size: 0.7rem;
+}
+
+.orchestration-header code {
+  color: #cbbcff;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+
+.orchestration-eyebrow {
+  color: #aa98ee;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.orchestration-controls {
+  display: grid;
+  grid-template-columns:
+    minmax(10rem, 1fr) auto auto minmax(10rem, 1fr) minmax(16rem, 2fr)
+    auto auto;
+  align-items: end;
+  gap: 0.55rem;
+}
+
+.orchestration-controls label {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+  color: #aeb9c9;
+  font-size: 0.64rem;
+  font-weight: 650;
+}
+
+.orchestration-controls select,
+.orchestration-controls textarea,
+.orchestration-controls button {
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #3a4557;
+  border-radius: 6px;
+  background: #0b1018;
+  color: #dbe4f0;
+  font: inherit;
+  font-size: 0.7rem;
+}
+
+.orchestration-controls textarea {
+  resize: vertical;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+
+.orchestration-controls button {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.orchestration-controls button:disabled,
+.orchestration-controls select:disabled,
+.orchestration-controls textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.orchestration-send-button:not(:disabled) {
+  border-color: #39708c;
+  background: #123044;
+  color: #b9ecff;
+}
+
+.orchestration-remove-button:not(:disabled) {
+  border-color: #573746;
+  background: #2b1720;
   color: #ffb0be;
 }
 
@@ -898,6 +1018,25 @@ select:focus-visible {
   .workspace-dialog-actions {
     align-items: stretch;
     flex-direction: column-reverse;
+  }
+
+  .orchestration-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .orchestration-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1200px) and (min-width: 721px) {
+  .orchestration-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .orchestration-message-field {
+    grid-column: span 2;
   }
 }
 
