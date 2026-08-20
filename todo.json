@@ -242,7 +242,7 @@
       "id": "T219",
       "order": 19,
       "title": "Finish 0.2.0 usage, safety, and troubleshooting documentation",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T217", "T218"],
       "acceptance_criteria": [
         "The README explains dynamic terminal management and new/existing branch and worktree workflows.",
