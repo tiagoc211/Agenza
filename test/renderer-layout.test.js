@@ -21,21 +21,19 @@ test('adds and removes dynamic terminal sessions through the narrow bridge', () 
   assert.match(html, /data-add-terminal/);
   assert.match(html, /data-empty-add-terminal/);
   assert.match(html, /data-remove-button/);
-  assert.match(html, /data-remove-terminal-dialog/);
-  assert.match(html, /data-confirm-terminal-removal/);
-  assert.match(html, /Remove terminal only/);
+  assert.match(html, /data-confirmation-dialog/);
+  assert.match(html, /data-confirm-action/);
   assert.match(renderer, /window\.agenza\.terminal\.list\(\)/);
   assert.match(renderer, /window\.agenza\.terminal\.create\(\)/);
   assert.match(renderer, /window\.agenza\.terminal\.remove\(view\.id\)/);
   assert.match(renderer, /terminalViews\.delete\(view\.id\)/);
   assert.match(renderer, /view\.terminal\.dispose\(\)/);
   assert.match(renderer, /buildTerminalRemovalMessage/);
-  assert.match(renderer, /await confirmTerminalRemoval\(view\)/);
-  assert.doesNotMatch(renderer, /window\.confirm\(buildTerminalRemovalMessage/);
-  assert.match(
-    renderer,
-    /focusModalControl\(terminalRemovalDialog, confirmTerminalRemovalButton\)/,
-  );
+  assert.match(renderer, /confirmLabel: 'Remove terminal only'/);
+  assert.match(renderer, /title: `Remove \$\{view\.label\}\?`/);
+  assert.doesNotMatch(renderer, /window\.confirm/);
+  assert.match(renderer, /focusModalControl\(confirmationDialog, cancelConfirmationButtons\[0\]\)/);
+  assert.match(renderer, /restoreControlFocus\(state\.returnFocus\)/);
   assert.match(
     renderer,
     /This stops only this terminal's Codex process and removes its saved pane/,
@@ -190,7 +188,7 @@ test('offers a separate confirmed cleanup that keeps the Git branch', () => {
   assert.match(renderer, /window\.agenza\.git\.listManagedWorktrees\(\)/);
   assert.match(renderer, /const focusModalControl = \(dialog, control\)/);
   assert.match(renderer, /window\.requestAnimationFrame/);
-  assert.match(renderer, /window\.focus\(\)/);
+  assert.doesNotMatch(renderer, /window\.focus\(\)/);
   assert.match(renderer, /focusModalControl\(cleanupDialog, eligibleOption \? cleanupSelect/);
   assert.match(renderer, /window\.agenza\.git\.previewCleanup\(cleanupSelect\.value\)/);
   assert.match(renderer, /window\.agenza\.git\.confirmCleanup\(state\.preview\.operationId\)/);
@@ -234,6 +232,7 @@ test('recovers stale Git assignments without deleting Git resources', () => {
   assert.match(renderer, /workspaceStatus\?\.status === 'stale'/);
   assert.match(renderer, /Registered worktree found at/);
   assert.match(renderer, /window\.agenza\.terminal\.detachWorkspace\(view\.id\)/);
+  assert.match(renderer, /confirmLabel: 'Detach saved workspace only'/);
   assert.match(renderer, /Use Reassign Git to recover it/);
   assert.match(renderer, /No directory, branch, project file, or Git registration will be deleted/);
   assert.match(renderer, /Any Agenza ownership record will remain available/);

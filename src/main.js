@@ -282,9 +282,9 @@ const createMainWindow = async () => {
           const removeTerminal = async (id) => {
             getPane(id)?.querySelector('[data-remove-button]')?.click();
             await waitFor(
-              () => document.querySelector('[data-remove-terminal-dialog]')?.open === true,
+              () => document.querySelector('[data-confirmation-dialog]')?.open === true,
             );
-            document.querySelector('[data-confirm-terminal-removal]')?.click();
+            document.querySelector('[data-confirm-action]')?.click();
             return waitFor(() => !getPane(id));
           };
 
@@ -593,13 +593,32 @@ const createMainWindow = async () => {
           );
           removedTerminalPane?.querySelector('[data-remove-button]')?.click();
           await waitFor(
-            () => document.querySelector('[data-remove-terminal-dialog]')?.open === true,
+            () => document.querySelector('[data-confirmation-dialog]')?.open === true,
           );
-          document.querySelector('[data-confirm-terminal-removal]')?.click();
+          document.querySelector('[data-confirm-action]')?.click();
           const removedFromInterface = await waitFor(() => !getPane(removedTerminalId));
+          const cleanupButton = document.querySelector('[data-cleanup-worktree]');
+          cleanupButton?.click();
+          const cleanupDialogOpened = await waitFor(
+            () => document.querySelector('[data-cleanup-dialog]')?.open === true,
+          );
+          const cleanupSelect = document.querySelector('[data-cleanup-worktree-select]');
+          const cleanupSelectFocused = await waitFor(
+            () => document.activeElement === cleanupSelect,
+          );
+          const cleanupDropdownReadyAfterRemoval =
+            cleanupDialogOpened &&
+            cleanupSelectFocused &&
+            document.hasFocus() &&
+            !cleanupSelect?.disabled &&
+            Boolean(cleanupSelect?.value) &&
+            cleanupSelect.selectedOptions[0]?.textContent.includes(removedAssignment.worktreePath);
+          document.querySelector('[data-cancel-cleanup]')?.click();
+          await waitFor(() => document.querySelector('[data-cleanup-dialog]')?.open === false);
 
           return {
             assignments,
+            cleanupDropdownReadyAfterRemoval,
             removedAssignment,
             removedFromInterface,
             removedTerminalId,
@@ -626,6 +645,7 @@ const createMainWindow = async () => {
           );
         startupCheckLog('Git workspace check', {
           assignments: workspaceCheck.assignments.length,
+          cleanupDropdownReadyAfterRemoval: workspaceCheck.cleanupDropdownReadyAfterRemoval,
           removedFromInterface: workspaceCheck.removedFromInterface,
           worktreePathsExist: allWorktreePaths.map((worktreePath) => fs.existsSync(worktreePath)),
           workspaceAssignmentsAreIsolated,
@@ -633,6 +653,7 @@ const createMainWindow = async () => {
 
         if (
           !workspaceCheck.removedFromInterface ||
+          !workspaceCheck.cleanupDropdownReadyAfterRemoval ||
           workspaceCheck.assignments.length !== 2 ||
           !workspaceAssignmentsAreIsolated
         ) {

@@ -36,7 +36,6 @@ const createHarness = () => {
   const ipcMain = new FakeIpcMain();
   const logEntries = [];
   const sentMessages = [];
-  let windowFocusCount = 0;
   const mainFrame = {};
   const webContents = {
     isDestroyed: () => false,
@@ -44,9 +43,6 @@ const createHarness = () => {
     send: (channel, payload) => sentMessages.push({ channel, payload }),
   };
   const window = {
-    focus: () => {
-      windowFocusCount += 1;
-    },
     isDestroyed: () => false,
     webContents,
   };
@@ -160,7 +156,6 @@ const createHarness = () => {
     },
     startCount: () => startCount,
     trustedEvent: { sender: webContents, senderFrame: mainFrame },
-    windowFocusCount: () => windowFocusCount,
     writes,
   };
 };
@@ -208,7 +203,6 @@ test('detaches stale workspace metadata through a narrow trusted operation', asy
   assert.deepEqual(harness.detachedIds, [FIRST_ID]);
   assert.equal(result.id, FIRST_ID);
   assert.equal(result.workspace.kind, 'unassigned');
-  assert.equal(harness.windowFocusCount(), 1);
   await assert.rejects(
     detachWorkspace({ sender: {}, senderFrame: {} }, { id: FIRST_ID }),
     /Untrusted/,
@@ -290,7 +284,6 @@ test('restarts and removes one dynamic terminal without changing another', async
   assert.deepEqual(harness.manager.getSnapshot(SECOND_ID), secondBeforeRestart);
   assert.deepEqual(result, { id: FIRST_ID, removed: true });
   assert.deepEqual(harness.removedIds, [FIRST_ID]);
-  assert.equal(harness.windowFocusCount(), 1);
   assert.equal(harness.manager.has(FIRST_ID), false);
   assert.equal(harness.manager.has(SECOND_ID), true);
 

@@ -28,7 +28,9 @@ test('runs the packaged dynamic terminal and Git workspace startup check with a 
   assert.match(main, /create-new-branch-worktree/);
   assert.match(main, /workspaceAssignmentsAreIsolated/);
   assert.match(main, /removedFromInterface/);
-  assert.match(main, /data-confirm-terminal-removal/);
+  assert.match(main, /data-confirm-action/);
+  assert.match(main, /cleanupDropdownReadyAfterRemoval/);
+  assert.match(main, /document\.activeElement === cleanupSelect/);
 });
 
 test('provides a repeatable manual check for missing Codex', () => {

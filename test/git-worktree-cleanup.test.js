@@ -264,3 +264,32 @@ test('keeps the local record when the worktree remains registered', async () => 
     fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
   }
 });
+
+test('keeps ownership when Git reports the recorded branch at a moved worktree path', async () => {
+  const fixture = createOwnedWorktree();
+  const callbacks = createCallbacks(fixture.record);
+  const movedWorktreePath = path.join(fixture.temporaryDirectory, 'moved-agent-worktree');
+
+  try {
+    git(fixture.repositoryRoot, ['worktree', 'move', fixture.worktreePath, movedWorktreePath]);
+    const cleanup = new GitWorktreeCleanup();
+
+    await assert.rejects(
+      cleanup.forgetStaleRecord({
+        creationId: CREATION_ID,
+        forgetManagedWorktree: callbacks.forgetManagedWorktree,
+        getAssignedWorktrees: () => [],
+        getManagedWorktree: callbacks.getManagedWorktree,
+      }),
+      (error) => error.code === GIT_CLEANUP_ERROR_CODES.moved,
+    );
+    assert.equal(callbacks.wasForgotten(), false);
+    assert.equal(fs.existsSync(movedWorktreePath), true);
+    assert.match(
+      git(fixture.repositoryRoot, ['worktree', 'list', '--porcelain']),
+      /moved-agent-worktree/,
+    );
+  } finally {
+    fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
+  }
+});

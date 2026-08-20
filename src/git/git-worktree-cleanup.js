@@ -15,6 +15,7 @@ const GIT_CLEANUP_ERROR_CODES = Object.freeze({
   invalidRequest: 'INVALID_WORKTREE_CLEANUP_REQUEST',
   locked: 'WORKTREE_CLEANUP_LOCKED',
   missing: 'WORKTREE_CLEANUP_MISSING',
+  moved: 'WORKTREE_CLEANUP_MOVED',
   notOwned: 'WORKTREE_CLEANUP_NOT_OWNED',
   previewExpired: 'WORKTREE_CLEANUP_PREVIEW_EXPIRED',
   previewStale: 'WORKTREE_CLEANUP_PREVIEW_STALE',
@@ -39,6 +40,8 @@ const GIT_CLEANUP_ERROR_MESSAGES = Object.freeze({
     'This worktree is locked in Git. Unlock and inspect it outside Agenza first.',
   [GIT_CLEANUP_ERROR_CODES.missing]:
     'This worktree is missing or is no longer registered. Agenza did not change Git metadata.',
+  [GIT_CLEANUP_ERROR_CODES.moved]:
+    'This worktree is registered at another path. Agenza kept its ownership record for recovery.',
   [GIT_CLEANUP_ERROR_CODES.notOwned]:
     'Agenza can clean up only worktrees that it previously created and recorded.',
   [GIT_CLEANUP_ERROR_CODES.previewExpired]:
@@ -239,6 +242,14 @@ class GitWorktreeCleanup {
 
       if (isStillRegistered) {
         throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.staleRecordNotConfirmed);
+      }
+
+      const movedWorktrees = discovery.worktrees.filter(
+        ({ branchRef }) => branchRef === record.branchRef,
+      );
+
+      if (movedWorktrees.length > 0) {
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.moved);
       }
 
       try {

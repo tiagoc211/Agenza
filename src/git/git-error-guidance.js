@@ -65,6 +65,8 @@ const GIT_RECOVERY_ACTIONS = Object.freeze({
   WORKTREE_CLEANUP_LOCKED: 'Unlock and inspect the worktree outside Agenza before retrying.',
   WORKTREE_CLEANUP_MISSING:
     'Inspect the missing registration outside Agenza; no Git metadata was changed.',
+  WORKTREE_CLEANUP_MOVED:
+    'Keep the ownership record. Reassign the registered worktree through a terminal recovery flow.',
   WORKTREE_CLEANUP_NOT_OWNED: 'Choose a worktree that Agenza created and recorded.',
   WORKTREE_CLEANUP_PREVIEW_EXPIRED: 'Run Check safety again before confirming cleanup.',
   WORKTREE_CLEANUP_PREVIEW_STALE:

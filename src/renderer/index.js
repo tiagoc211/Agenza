@@ -52,10 +52,12 @@ const previewCleanupButton = document.querySelector('[data-preview-cleanup]');
 const forgetStaleCleanupRecordButton = document.querySelector('[data-forget-stale-cleanup-record]');
 const confirmCleanupButton = document.querySelector('[data-confirm-cleanup]');
 const cancelCleanupButtons = document.querySelectorAll('[data-cancel-cleanup]');
-const terminalRemovalDialog = document.querySelector('[data-remove-terminal-dialog]');
-const terminalRemovalMessage = document.querySelector('[data-remove-terminal-message]');
-const confirmTerminalRemovalButton = document.querySelector('[data-confirm-terminal-removal]');
-const cancelTerminalRemovalButtons = document.querySelectorAll('[data-cancel-terminal-removal]');
+const confirmationDialog = document.querySelector('[data-confirmation-dialog]');
+const confirmationEyebrow = document.querySelector('[data-confirmation-eyebrow]');
+const confirmationTitle = document.querySelector('[data-confirmation-title]');
+const confirmationMessage = document.querySelector('[data-confirmation-message]');
+const confirmActionButton = document.querySelector('[data-confirm-action]');
+const cancelConfirmationButtons = document.querySelectorAll('[data-cancel-confirmation]');
 
 const terminalTheme = {
   background: '#090c12',
@@ -88,7 +90,7 @@ let activeTerminalId = null;
 let workspaceRecoveryIssue = null;
 let worktreeDialogState = null;
 let cleanupDialogState = null;
-let terminalRemovalDialogState = null;
+let confirmationDialogState = null;
 let managedWorktrees = [];
 
 const workspaceOperationTypes = Object.freeze({
@@ -112,8 +114,49 @@ const focusModalControl = (dialog, control) => {
       return;
     }
 
-    window.focus();
     control.focus({ preventScroll: true });
+  });
+};
+
+const restoreControlFocus = (control) => {
+  window.requestAnimationFrame(() => {
+    if (control?.isConnected && typeof control.focus === 'function') {
+      control.focus({ preventScroll: true });
+    }
+  });
+};
+
+const settleConfirmationDialog = (confirmed) => {
+  const state = confirmationDialogState;
+
+  if (!state) {
+    return;
+  }
+
+  confirmationDialogState = null;
+  confirmationDialog.close();
+
+  if (!confirmed) {
+    restoreControlFocus(state.returnFocus);
+  }
+
+  state.resolve(confirmed);
+};
+
+const requestConfirmation = ({ confirmLabel, eyebrow, message, returnFocus, title }) => {
+  if (confirmationDialog.open || confirmationDialogState) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    confirmationDialogState = { resolve, returnFocus };
+    confirmationEyebrow.textContent = eyebrow;
+    confirmationTitle.textContent = title;
+    confirmationMessage.textContent = message;
+    confirmActionButton.textContent = confirmLabel;
+    confirmationDialog.showModal();
+    announceWorkspace(`${title} Confirmation opened.`);
+    focusModalControl(confirmationDialog, cancelConfirmationButtons[0]);
   });
 };
 
@@ -416,9 +459,13 @@ const forgetStaleCleanupRecord = async () => {
 
   const selectedOption = cleanupSelect.selectedOptions[0];
   const description = selectedOption?.textContent ?? 'this worktree';
-  const confirmed = window.confirm(
-    `Forget Agenza's stale local record for ${description}? This does not delete files, Git worktrees, or branches.`,
-  );
+  const confirmed = await requestConfirmation({
+    confirmLabel: 'Forget local record only',
+    eyebrow: 'Local record recovery',
+    message: `Forget Agenza's stale local record for ${description}?\n\nThis does not delete files, Git worktrees, or branches.`,
+    returnFocus: forgetStaleCleanupRecordButton,
+    title: 'Forget this stale local record?',
+  });
 
   if (!confirmed) {
     return;
@@ -1157,11 +1204,7 @@ const chooseProjectFolder = async (view) => {
 };
 
 const buildTerminalRemovalMessage = (view) => {
-  const lines = [
-    `Remove ${view.label}?`,
-    '',
-    "This stops only this terminal's Codex process and removes its saved pane.",
-  ];
+  const lines = ["This stops only this terminal's Codex process and removes its saved pane."];
 
   if (view.workspace?.kind === 'git-worktree') {
     lines.push(
@@ -1185,32 +1228,6 @@ const buildTerminalRemovalMessage = (view) => {
   return lines.join('\n');
 };
 
-const settleTerminalRemovalDialog = (confirmed) => {
-  const state = terminalRemovalDialogState;
-
-  if (!state) {
-    return;
-  }
-
-  terminalRemovalDialogState = null;
-  terminalRemovalDialog.close();
-  state.resolve(confirmed);
-};
-
-const confirmTerminalRemoval = (view) => {
-  if (terminalRemovalDialog.open || terminalRemovalDialogState) {
-    return Promise.resolve(false);
-  }
-
-  return new Promise((resolve) => {
-    terminalRemovalDialogState = { resolve, view };
-    terminalRemovalMessage.textContent = buildTerminalRemovalMessage(view);
-    terminalRemovalDialog.showModal();
-    announceWorkspace(`Terminal removal confirmation opened for ${view.label}.`);
-    focusModalControl(terminalRemovalDialog, confirmTerminalRemovalButton);
-  });
-};
-
 const detachStaleWorkspace = async (view) => {
   if (
     view.isBusy ||
@@ -1221,10 +1238,10 @@ const detachStaleWorkspace = async (view) => {
     return;
   }
 
-  const confirmed = window.confirm(
-    [
-      `Detach the saved Git workspace from ${view.label}?`,
-      '',
+  const confirmed = await requestConfirmation({
+    confirmLabel: 'Detach saved workspace only',
+    eyebrow: 'Workspace recovery',
+    message: [
       "This stops only this terminal's Codex process and clears its saved assignment.",
       '',
       `Saved worktree: ${view.workspace.repository.worktree.path}`,
@@ -1233,7 +1250,9 @@ const detachStaleWorkspace = async (view) => {
       'No directory, branch, project file, or Git registration will be deleted.',
       'Any Agenza ownership record will remain available under Clean worktrees.',
     ].join('\n'),
-  );
+    returnFocus: view.recoveryButton,
+    title: `Detach the saved Git workspace from ${view.label}?`,
+  });
 
   if (!confirmed) {
     return;
@@ -1281,7 +1300,13 @@ const removeTerminalView = async (view) => {
     return;
   }
 
-  const confirmed = await confirmTerminalRemoval(view);
+  const confirmed = await requestConfirmation({
+    confirmLabel: 'Remove terminal only',
+    eyebrow: 'Terminal removal',
+    message: buildTerminalRemovalMessage(view),
+    returnFocus: view.removeButton,
+    title: `Remove ${view.label}?`,
+  });
 
   if (!confirmed) {
     return;
@@ -1649,7 +1674,7 @@ const handleTerminalFocusShortcut = (event) => {
     return;
   }
 
-  if (worktreeDialog.open || cleanupDialog.open || terminalRemovalDialog.open) {
+  if (worktreeDialog.open || cleanupDialog.open || confirmationDialog.open) {
     event.preventDefault();
     return;
   }
@@ -1698,20 +1723,20 @@ cleanupDialog.addEventListener('close', () => {
   }
   cleanupButton.focus();
 });
-for (const button of cancelTerminalRemovalButtons) {
-  button.addEventListener('click', () => settleTerminalRemovalDialog(false));
+for (const button of cancelConfirmationButtons) {
+  button.addEventListener('click', () => settleConfirmationDialog(false));
 }
-confirmTerminalRemovalButton.addEventListener('click', () => settleTerminalRemovalDialog(true));
-terminalRemovalDialog.addEventListener('cancel', (event) => {
+confirmActionButton.addEventListener('click', () => settleConfirmationDialog(true));
+confirmationDialog.addEventListener('cancel', (event) => {
   event.preventDefault();
-  settleTerminalRemovalDialog(false);
+  settleConfirmationDialog(false);
 });
-terminalRemovalDialog.addEventListener('close', () => {
-  if (terminalRemovalDialogState) {
-    const { resolve, view } = terminalRemovalDialogState;
-    terminalRemovalDialogState = null;
+confirmationDialog.addEventListener('close', () => {
+  if (confirmationDialogState) {
+    const { resolve, returnFocus } = confirmationDialogState;
+    confirmationDialogState = null;
     resolve(false);
-    view.removeButton.focus();
+    restoreControlFocus(returnFocus);
   }
 });
 workspaceOperation.addEventListener('change', () => {

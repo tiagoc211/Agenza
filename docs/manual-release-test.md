@@ -55,6 +55,9 @@ real saved layout. Close every Agenza window before changing that file.
 - [ ] Remove the first terminal and accept the terminal-only confirmation. Confirm its pane is
       gone, then use `git worktree list` to verify that its worktree and branch still exist. Do not
       clean it up at this point.
+- [ ] Immediately open **Clean worktrees** without switching to another application. Confirm the
+      dialog opens with keyboard focus on its worktree dropdown and that the dropdown responds to
+      mouse and keyboard without requiring `Alt+Tab`.
 - [ ] Put an untracked file in that now-unassigned Agenza-created worktree. In Agenza, request
       **Clean worktree** for it and confirm the preview. Verify cleanup is refused because the
       worktree is dirty, and that its directory, registration, and branch remain present.

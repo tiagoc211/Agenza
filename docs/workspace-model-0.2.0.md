@@ -120,7 +120,8 @@ removes the catalog record; it never removes the branch.
 If Git independently confirms that a recorded Agenza worktree is no longer registered, the user can
 explicitly forget the stale catalog record. This changes only Agenza's persisted ownership metadata;
 it does not remove files, modify Git metadata, or delete a branch. Agenza refuses to forget a record
-while its worktree is still registered or assigned.
+while its worktree is still registered or assigned, including when Git reports the recorded branch
+at a moved worktree path.
 
 ## Terminal process lifecycle
 
