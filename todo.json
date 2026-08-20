@@ -218,7 +218,7 @@
       "id": "T217",
       "order": 17,
       "title": "Perform manual 0.2.0 workspace release testing",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": ["T216"],
       "acceptance_criteria": [
         "Zero, one, two, and several terminal layouts remain usable across restart and restore.",
