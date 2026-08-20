@@ -3,13 +3,21 @@ const { readFileSync } = require('node:fs');
 const test = require('node:test');
 
 const currentTodo = JSON.parse(readFileSync('todo.json', 'utf8'));
-const archivedTodo = JSON.parse(readFileSync('todo-v0.1.0.json', 'utf8'));
+const archivedTodo010 = JSON.parse(readFileSync('todo-v0.1.0.json', 'utf8'));
+const archivedTodo020 = JSON.parse(readFileSync('todo-v0.2.0.json', 'utf8'));
 
 test('archives the completed 0.1.0 release plan', () => {
-  assert.equal(archivedTodo.release, '0.1.0');
-  assert.equal(archivedTodo.archived, true);
-  assert.ok(archivedTodo.tasks.length > 0);
-  assert.ok(archivedTodo.tasks.every(({ status }) => status === 'done'));
+  assert.equal(archivedTodo010.release, '0.1.0');
+  assert.equal(archivedTodo010.archived, true);
+  assert.ok(archivedTodo010.tasks.length > 0);
+  assert.ok(archivedTodo010.tasks.every(({ status }) => status === 'done'));
+});
+
+test('archives the completed 0.2.0 release plan', () => {
+  assert.equal(archivedTodo020.release, '0.2.0');
+  assert.equal(archivedTodo020.archived, true);
+  assert.deepEqual(archivedTodo020.tasks, currentTodo.tasks);
+  assert.ok(archivedTodo020.tasks.every(({ status }) => status === 'done'));
 });
 
 test('defines an ordered and dependency-safe 0.2.0 plan', () => {

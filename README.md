@@ -293,5 +293,6 @@ Release before running it.
 See [docs/release-notes-0.2.0.md](docs/release-notes-0.2.0.md) for the publication-ready release
 notes, [CHANGELOG.md](CHANGELOG.md) for the complete change summary, and
 [docs/manual-release-test.md](docs/manual-release-test.md) for the validated workspace checklist.
-The completed `0.2.0` implementation plan remains in [todo.json](todo.json); the `0.1.0` plan is
-archived in [todo-v0.1.0.json](todo-v0.1.0.json).
+The completed release plans are archived in [todo-v0.2.0.json](todo-v0.2.0.json) and
+[todo-v0.1.0.json](todo-v0.1.0.json). The current `0.2.0` plan also remains in
+[todo.json](todo.json).

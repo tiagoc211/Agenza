@@ -1,6 +1,7 @@
 {
   "project": "Agenza",
   "release": "0.2.0",
+  "archived": true,
   "goal": "Ship dynamic Codex terminal management with safe, isolated Git branches and worktrees for each agent workspace.",
   "status_values": ["todo", "in_progress", "blocked", "done"],
   "release_principles": [
