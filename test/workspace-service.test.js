@@ -657,8 +657,21 @@ test('persists an Agenza-owned Git worktree only for the selected terminal', asy
     service.forgetManagedWorktree(workspace.repository.worktree.ownership.creationId),
     /assigned worktree/,
   );
+  await assert.rejects(
+    service.updateManagedWorktreePath(
+      workspace.repository.worktree.ownership.creationId,
+      'C:\\Projects\\MovedAgentOne',
+    ),
+    /assigned worktree/,
+  );
   await service.assignFolder(FIRST_ID, 'C:\\Projects\\Replacement');
   assert.equal(service.getManagedWorktrees()[0].assignedTerminalId, null);
+  const relocated = await service.updateManagedWorktreePath(
+    workspace.repository.worktree.ownership.creationId,
+    'C:\\Projects\\MovedAgentOne',
+  );
+  assert.equal(relocated.path, 'C:\\Projects\\MovedAgentOne');
+  assert.equal(service.getManagedWorktrees()[0].path, 'C:\\Projects\\MovedAgentOne');
   await service.forgetManagedWorktree(workspace.repository.worktree.ownership.creationId);
   assert.deepEqual(service.getManagedWorktrees(), []);
   assert.deepEqual(secondAfter, secondBefore);

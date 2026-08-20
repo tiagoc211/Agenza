@@ -30,6 +30,8 @@ const createHarness = ({
   discoveryError = null,
   executionError = null,
   planError = null,
+  reconcileAsStale = false,
+  reconciliationWarningCode = null,
   recoveryFolder = null,
   recoveryStatus = null,
   statusError = null,
@@ -115,12 +117,27 @@ const createHarness = ({
           worktreePath: managedWorktree.path,
         };
       },
-      forgetStaleRecord: async (request) => {
-        cleanupRequests.push({ method: 'forget-stale-record', ...request });
-        await request.forgetManagedWorktree(managedWorktree.creationId);
+      reconcileManagedWorktrees: async (request) => {
+        cleanupRequests.push({ method: 'reconcile', ...request });
+
+        if (reconcileAsStale) {
+          await request.forgetManagedWorktree(managedWorktree.creationId);
+          return {
+            removed: [{ ...managedWorktree, state: 'stale-record-forgotten' }],
+            retained: [],
+            updated: [],
+          };
+        }
+
         return {
-          ...managedWorktree,
-          state: 'stale-record-forgotten',
+          removed: [],
+          retained: [
+            {
+              code: reconciliationWarningCode ?? 'WORKTREE_CLEANUP_STALE_RECORD_NOT_CONFIRMED',
+              creationId: managedWorktree.creationId,
+            },
+          ],
+          updated: [],
         };
       },
       preview: async (request) => {
@@ -196,8 +213,11 @@ const createHarness = ({
       ],
       forgetManagedWorktree: async (creationId) => forgottenWorktrees.push(creationId),
       getManagedWorktree: (creationId) =>
-        creationId === managedWorktree.creationId ? managedWorktree : null,
-      getManagedWorktrees: () => [managedWorktree],
+        creationId === managedWorktree.creationId && !forgottenWorktrees.includes(creationId)
+          ? managedWorktree
+          : null,
+      getManagedWorktrees: () =>
+        forgottenWorktrees.includes(managedWorktree.creationId) ? [] : [managedWorktree],
       ...(recoveryStatus
         ? {
             getGitInspectionFolder: () => recoveryFolder,
@@ -216,7 +236,6 @@ const createHarness = ({
     discover: ipcMain.handlers.get(GIT_CHANNELS.discover),
     dispose,
     executionRequests,
-    forgetStaleCleanupRecord: ipcMain.handlers.get(GIT_CHANNELS.forgetStaleCleanupRecord),
     forgottenWorktrees,
     ipcMain,
     logs,
@@ -354,15 +373,17 @@ test('lists, previews, and confirms only the recorded managed worktree cleanup',
 
   assert.deepEqual(await listManaged(harness.trustedEvent), {
     ok: true,
+    reconciliation: { removedCount: 0, updatedCount: 0, warningCount: 0 },
     worktrees: [harness.managedWorktree],
   });
+  assert.equal(harness.cleanupRequests[0].method, 'reconcile');
   const previewResult = await previewCleanup(harness.trustedEvent, {
     creationId: harness.managedWorktree.creationId,
   });
   assert.equal(previewResult.ok, true);
   assert.equal(previewResult.preview.operationId, 'cleanup-one');
-  assert.equal(harness.cleanupRequests[0].method, 'preview');
-  assert.deepEqual(harness.cleanupRequests[0].assignedWorktrees, [
+  const previewRequest = harness.cleanupRequests.find(({ method }) => method === 'preview');
+  assert.deepEqual(previewRequest.assignedWorktrees, [
     { path: 'C:\\assigned', terminalId: 'terminal-one' },
   ]);
 
@@ -385,27 +406,39 @@ test('lists, previews, and confirms only the recorded managed worktree cleanup',
   harness.dispose();
 });
 
-test('forgets only a verified stale managed-worktree record through the trusted cleanup bridge', async () => {
-  const harness = createHarness();
-  const result = await harness.forgetStaleCleanupRecord(harness.trustedEvent, {
-    creationId: harness.managedWorktree.creationId,
-  });
+test('automatically removes only Git-confirmed stale records before listing cleanup choices', async () => {
+  const harness = createHarness({ reconcileAsStale: true });
+  const listManaged = harness.ipcMain.handlers.get(GIT_CHANNELS.listManagedWorktrees);
 
-  assert.deepEqual(result, {
+  assert.deepEqual(await listManaged(harness.trustedEvent), {
     ok: true,
-    operation: {
-      ...harness.managedWorktree,
-      state: 'stale-record-forgotten',
-    },
+    reconciliation: { removedCount: 1, updatedCount: 0, warningCount: 0 },
+    worktrees: [],
   });
-  assert.equal(harness.cleanupRequests[0].method, 'forget-stale-record');
+  assert.equal(harness.cleanupRequests[0].method, 'reconcile');
   assert.deepEqual(harness.forgottenWorktrees, [harness.managedWorktree.creationId]);
-  await assert.rejects(
-    harness.forgetStaleCleanupRecord(
-      { sender: {}, senderFrame: {} },
-      { creationId: harness.managedWorktree.creationId },
-    ),
-    /Untrusted/,
+  assert.equal(
+    harness.logs.some(({ event }) => event === 'git.worktree_catalog_reconcile_succeeded'),
+    true,
+  );
+  await assert.rejects(listManaged({ sender: {}, senderFrame: {} }), /Untrusted/);
+
+  harness.dispose();
+});
+
+test('preserves unverifiable catalog records and reports deferred reconciliation', async () => {
+  const harness = createHarness({ reconciliationWarningCode: 'WORKTREE_CLEANUP_MISSING' });
+  const listManaged = harness.ipcMain.handlers.get(GIT_CHANNELS.listManagedWorktrees);
+
+  assert.deepEqual(await listManaged(harness.trustedEvent), {
+    ok: true,
+    reconciliation: { removedCount: 0, updatedCount: 0, warningCount: 1 },
+    worktrees: [harness.managedWorktree],
+  });
+  assert.deepEqual(harness.forgottenWorktrees, []);
+  assert.equal(
+    harness.logs.some(({ event }) => event === 'git.worktree_catalog_reconcile_deferred'),
+    true,
   );
 
   harness.dispose();

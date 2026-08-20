@@ -61,9 +61,11 @@ real saved layout. Close every Agenza window before changing that file.
 - [ ] Put an untracked file in that now-unassigned Agenza-created worktree. In Agenza, request
       **Clean worktree** for it and confirm the preview. Verify cleanup is refused because the
       worktree is dirty, and that its directory, registration, and branch remain present.
-- [ ] If cleanup reports a recorded worktree as missing, use **Verify and forget stale local
-      record**. Confirm it proceeds only after finding no Git registration, removes only the Agenza
-      catalog entry, and leaves Git files, worktrees, and branches unchanged.
+- [ ] Remove an unassigned Agenza-created worktree outside Agenza, then reopen **Clean worktrees**.
+      Confirm its stale entry disappears automatically only after Git no longer registers it. Verify
+      an assigned, still-registered, ambiguous, or temporarily inaccessible worktree remains
+      preserved; a uniquely moved unassigned worktree updates to its current Git path; and no Git
+      files, worktrees, or branches are changed by catalog reconciliation.
 - [ ] With the remaining Codex sessions running, note the session process IDs in Task Manager.
       Close Agenza normally. Verify the window closes and those Codex process trees no longer exist;
       the fixture repository's worktrees and branches must remain untouched.

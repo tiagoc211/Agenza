@@ -414,6 +414,37 @@ class WorkspaceService {
     });
   }
 
+  updateManagedWorktreePath(creationId, worktreePath) {
+    return this._enqueueMutation(async () => {
+      const worktree = this._state.managedWorktrees.find(
+        (candidate) => candidate.creationId === creationId,
+      );
+
+      if (!worktree || typeof worktreePath !== 'string') {
+        throw new Error('Agenza does not own that worktree.');
+      }
+
+      const isAssigned = this.getAssignedGitWorktrees().some(
+        ({ path: assignedPath }) => assignedPath.toLowerCase() === worktree.path.toLowerCase(),
+      );
+
+      if (isAssigned) {
+        throw new Error('An assigned worktree must be recovered through its terminal.');
+      }
+
+      const updatedRecord = { ...copyValue(worktree), path: worktreePath };
+      const nextState = {
+        ...copyValue(this._state),
+        revision: this._state.revision + 1,
+        managedWorktrees: this._state.managedWorktrees.map((candidate) =>
+          candidate.creationId === creationId ? updatedRecord : copyValue(candidate),
+        ),
+      };
+      await this._commit(nextState);
+      return copyValue(updatedRecord);
+    });
+  }
+
   flush() {
     return this._mutationQueue;
   }

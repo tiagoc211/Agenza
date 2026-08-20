@@ -47,7 +47,13 @@ const createCallbacks = (record) => {
       assert.equal(creationId, CREATION_ID);
       currentRecord = null;
     },
+    getCurrentRecord: () => currentRecord,
     getManagedWorktree: (creationId) => (creationId === CREATION_ID ? currentRecord : null),
+    updateManagedWorktreePath: async (creationId, worktreePath) => {
+      assert.equal(creationId, CREATION_ID);
+      currentRecord = { ...currentRecord, path: worktreePath };
+      return currentRecord;
+    },
     wasForgotten: () => currentRecord === null,
   };
 };
@@ -185,21 +191,22 @@ test('revalidates immediately before cleanup and refuses newly created files', a
   }
 });
 
-test('forgets only a verified stale local cleanup record without changing its branch', async () => {
+test('automatically reconciles a verified stale local record without changing its branch', async () => {
   const fixture = createOwnedWorktree();
   const callbacks = createCallbacks(fixture.record);
 
   try {
     git(fixture.repositoryRoot, ['worktree', 'remove', fixture.worktreePath]);
     const cleanup = new GitWorktreeCleanup();
-    const result = await cleanup.forgetStaleRecord({
-      creationId: CREATION_ID,
+    const result = await cleanup.reconcileManagedWorktrees({
       forgetManagedWorktree: callbacks.forgetManagedWorktree,
       getAssignedWorktrees: () => [],
       getManagedWorktree: callbacks.getManagedWorktree,
+      records: [fixture.record],
     });
 
-    assert.equal(result.state, 'stale-record-forgotten');
+    assert.equal(result.removed[0].state, 'stale-record-forgotten');
+    assert.deepEqual(result.retained, []);
     assert.equal(callbacks.wasForgotten(), true);
     assert.equal(
       git(fixture.repositoryRoot, ['branch', '--list', 'agent-work']).trim(),
@@ -244,28 +251,28 @@ test('reports local catalog sync failure after Git removes the worktree and keep
   }
 });
 
-test('keeps the local record when the worktree remains registered', async () => {
+test('automatic reconciliation keeps the local record when the worktree remains registered', async () => {
   const fixture = createOwnedWorktree();
   const callbacks = createCallbacks(fixture.record);
 
   try {
     const cleanup = new GitWorktreeCleanup();
-    await assert.rejects(
-      cleanup.forgetStaleRecord({
-        creationId: CREATION_ID,
-        forgetManagedWorktree: callbacks.forgetManagedWorktree,
-        getAssignedWorktrees: () => [],
-        getManagedWorktree: callbacks.getManagedWorktree,
-      }),
-      (error) => error.code === GIT_CLEANUP_ERROR_CODES.staleRecordNotConfirmed,
-    );
+    const result = await cleanup.reconcileManagedWorktrees({
+      forgetManagedWorktree: callbacks.forgetManagedWorktree,
+      getAssignedWorktrees: () => [],
+      getManagedWorktree: callbacks.getManagedWorktree,
+      records: [fixture.record],
+    });
+
+    assert.deepEqual(result.removed, []);
+    assert.equal(result.retained[0].code, GIT_CLEANUP_ERROR_CODES.staleRecordNotConfirmed);
     assert.equal(callbacks.wasForgotten(), false);
   } finally {
     fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
   }
 });
 
-test('keeps ownership when Git reports the recorded branch at a moved worktree path', async () => {
+test('automatic reconciliation updates ownership when Git reports a moved worktree', async () => {
   const fixture = createOwnedWorktree();
   const callbacks = createCallbacks(fixture.record);
   const movedWorktreePath = path.join(fixture.temporaryDirectory, 'moved-agent-worktree');
@@ -274,21 +281,72 @@ test('keeps ownership when Git reports the recorded branch at a moved worktree p
     git(fixture.repositoryRoot, ['worktree', 'move', fixture.worktreePath, movedWorktreePath]);
     const cleanup = new GitWorktreeCleanup();
 
-    await assert.rejects(
-      cleanup.forgetStaleRecord({
-        creationId: CREATION_ID,
-        forgetManagedWorktree: callbacks.forgetManagedWorktree,
-        getAssignedWorktrees: () => [],
-        getManagedWorktree: callbacks.getManagedWorktree,
-      }),
-      (error) => error.code === GIT_CLEANUP_ERROR_CODES.moved,
-    );
+    const result = await cleanup.reconcileManagedWorktrees({
+      forgetManagedWorktree: callbacks.forgetManagedWorktree,
+      getAssignedWorktrees: () => [],
+      getManagedWorktree: callbacks.getManagedWorktree,
+      records: [fixture.record],
+      updateManagedWorktreePath: callbacks.updateManagedWorktreePath,
+    });
+
+    assert.deepEqual(result.removed, []);
+    assert.deepEqual(result.retained, []);
+    assert.equal(result.updated[0].worktreePath, path.resolve(movedWorktreePath));
+    assert.equal(callbacks.getCurrentRecord().path, path.resolve(movedWorktreePath));
     assert.equal(callbacks.wasForgotten(), false);
     assert.equal(fs.existsSync(movedWorktreePath), true);
     assert.match(
       git(fixture.repositoryRoot, ['worktree', 'list', '--porcelain']),
       /moved-agent-worktree/,
     );
+  } finally {
+    fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('automatic reconciliation preserves a record when Git discovery is unavailable', async () => {
+  const fixture = createOwnedWorktree();
+  const callbacks = createCallbacks(fixture.record);
+
+  try {
+    const cleanup = new GitWorktreeCleanup({
+      discover: async () => {
+        throw new Error('repository temporarily unavailable');
+      },
+    });
+    const result = await cleanup.reconcileManagedWorktrees({
+      forgetManagedWorktree: callbacks.forgetManagedWorktree,
+      getAssignedWorktrees: () => [],
+      getManagedWorktree: callbacks.getManagedWorktree,
+      records: [fixture.record],
+    });
+
+    assert.deepEqual(result.removed, []);
+    assert.equal(result.retained[0].code, GIT_CLEANUP_ERROR_CODES.missing);
+    assert.equal(callbacks.wasForgotten(), false);
+    assert.equal(fs.existsSync(fixture.worktreePath), true);
+  } finally {
+    fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('automatic reconciliation preserves a stale record while a terminal still owns its path', async () => {
+  const fixture = createOwnedWorktree();
+  const callbacks = createCallbacks(fixture.record);
+
+  try {
+    git(fixture.repositoryRoot, ['worktree', 'remove', fixture.worktreePath]);
+    const cleanup = new GitWorktreeCleanup();
+    const result = await cleanup.reconcileManagedWorktrees({
+      forgetManagedWorktree: callbacks.forgetManagedWorktree,
+      getAssignedWorktrees: () => [{ path: fixture.worktreePath, terminalId: 'terminal-one' }],
+      getManagedWorktree: callbacks.getManagedWorktree,
+      records: [fixture.record],
+    });
+
+    assert.deepEqual(result.removed, []);
+    assert.equal(result.retained[0].code, GIT_CLEANUP_ERROR_CODES.assigned);
+    assert.equal(callbacks.wasForgotten(), false);
   } finally {
     fs.rmSync(fixture.temporaryDirectory, { force: true, recursive: true });
   }

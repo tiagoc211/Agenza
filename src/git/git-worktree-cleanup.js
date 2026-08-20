@@ -60,8 +60,18 @@ const GIT_CLEANUP_ERROR_MESSAGES = Object.freeze({
     'Git cleanup did not reach the expected safe result. Inspect the worktree registration outside Agenza.',
 });
 
+const RECONCILIATION_RETAINED_CODES = new Set([
+  GIT_CLEANUP_ERROR_CODES.assigned,
+  GIT_CLEANUP_ERROR_CODES.catalogSyncFailed,
+  GIT_CLEANUP_ERROR_CODES.missing,
+  GIT_CLEANUP_ERROR_CODES.moved,
+  GIT_CLEANUP_ERROR_CODES.notOwned,
+  GIT_CLEANUP_ERROR_CODES.previewStale,
+  GIT_CLEANUP_ERROR_CODES.staleRecordNotConfirmed,
+]);
+
 class GitWorktreeCleanupError extends Error {
-  constructor(code, { cause, operationId = null } = {}) {
+  constructor(code, { candidatePath = null, cause, operationId = null } = {}) {
     super(
       GIT_CLEANUP_ERROR_MESSAGES[code] ??
         GIT_CLEANUP_ERROR_MESSAGES[GIT_CLEANUP_ERROR_CODES.removeFailed],
@@ -69,6 +79,7 @@ class GitWorktreeCleanupError extends Error {
     );
     this.name = 'GitWorktreeCleanupError';
     this.code = code in GIT_CLEANUP_ERROR_MESSAGES ? code : GIT_CLEANUP_ERROR_CODES.removeFailed;
+    this.candidatePath = candidatePath;
     this.operationId = operationId;
   }
 }
@@ -249,7 +260,9 @@ class GitWorktreeCleanup {
       );
 
       if (movedWorktrees.length > 0) {
-        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.moved);
+        throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.moved, {
+          candidatePath: movedWorktrees.length === 1 ? movedWorktrees[0].path : null,
+        });
       }
 
       try {
@@ -273,6 +286,87 @@ class GitWorktreeCleanup {
         state: 'stale-record-forgotten',
         worktreePath: record.path,
       });
+    });
+  }
+
+  async reconcileManagedWorktrees({
+    forgetManagedWorktree,
+    getAssignedWorktrees,
+    getManagedWorktree,
+    records = [],
+    updateManagedWorktreePath,
+  } = {}) {
+    if (
+      !Array.isArray(records) ||
+      typeof forgetManagedWorktree !== 'function' ||
+      typeof getManagedWorktree !== 'function'
+    ) {
+      throw new GitWorktreeCleanupError(GIT_CLEANUP_ERROR_CODES.invalidRequest);
+    }
+
+    const removed = [];
+    const retained = [];
+    const updated = [];
+
+    for (const record of records) {
+      try {
+        removed.push(
+          await this.forgetStaleRecord({
+            creationId: record?.creationId,
+            forgetManagedWorktree,
+            getAssignedWorktrees,
+            getManagedWorktree,
+          }),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof GitWorktreeCleanupError) ||
+          !RECONCILIATION_RETAINED_CODES.has(error.code)
+        ) {
+          throw error;
+        }
+
+        if (
+          error.code === GIT_CLEANUP_ERROR_CODES.moved &&
+          typeof error.candidatePath === 'string' &&
+          typeof updateManagedWorktreePath === 'function'
+        ) {
+          try {
+            const updatedRecord = await updateManagedWorktreePath(
+              record.creationId,
+              error.candidatePath,
+            );
+            updated.push(
+              Object.freeze({
+                creationId: updatedRecord.creationId,
+                worktreePath: updatedRecord.path,
+              }),
+            );
+            continue;
+          } catch {
+            retained.push(
+              Object.freeze({
+                code: GIT_CLEANUP_ERROR_CODES.catalogSyncFailed,
+                creationId: record?.creationId ?? null,
+              }),
+            );
+            continue;
+          }
+        }
+
+        retained.push(
+          Object.freeze({
+            code: error.code,
+            creationId: record?.creationId ?? null,
+          }),
+        );
+      }
+    }
+
+    return Object.freeze({
+      removed: Object.freeze(removed),
+      retained: Object.freeze(retained),
+      updated: Object.freeze(updated),
     });
   }
 

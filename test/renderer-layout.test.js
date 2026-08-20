@@ -173,7 +173,6 @@ test('offers a separate confirmed cleanup that keeps the Git branch', () => {
     'data-cleanup-dialog',
     'data-cleanup-worktree-select',
     'data-preview-cleanup',
-    'data-forget-stale-cleanup-record',
     'data-confirm-cleanup',
     'data-cleanup-repository',
     'data-cleanup-branch',
@@ -186,15 +185,22 @@ test('offers a separate confirmed cleanup that keeps the Git branch', () => {
   assert.match(html, /without force/);
   assert.match(html, /local\s+branch and its commits will remain/);
   assert.match(renderer, /window\.agenza\.git\.listManagedWorktrees\(\)/);
+  assert.match(renderer, /managedWorktreeRefreshPending = true/);
+  assert.match(renderer, /while \(managedWorktreeRefreshPending\)/);
+  assert.match(renderer, /result\.reconciliation\?\.removedCount/);
+  assert.match(renderer, /result\.reconciliation\?\.updatedCount/);
+  assert.match(renderer, /Git confirmed no longer exist/);
+  assert.match(renderer, /Updated \$\{updatedCount\} moved/);
   assert.match(renderer, /const focusModalControl = \(dialog, control\)/);
   assert.match(renderer, /window\.requestAnimationFrame/);
   assert.doesNotMatch(renderer, /window\.focus\(\)/);
   assert.match(renderer, /focusModalControl\(cleanupDialog, eligibleOption \? cleanupSelect/);
   assert.match(renderer, /window\.agenza\.git\.previewCleanup\(cleanupSelect\.value\)/);
   assert.match(renderer, /window\.agenza\.git\.confirmCleanup\(state\.preview\.operationId\)/);
-  assert.match(renderer, /window\.agenza\.git\.forgetStaleCleanupRecord\(cleanupSelect\.value\)/);
+  assert.doesNotMatch(renderer, /forgetStaleCleanupRecord/);
+  assert.doesNotMatch(html, /data-forget-stale-cleanup-record/);
   assert.match(renderer, /WORKTREE_CLEANUP_MISSING/);
-  assert.match(renderer, /No Git files, worktrees, or branches were changed/);
+  assert.match(renderer, /No Git resources were changed/);
   assert.match(renderer, /worktree\.assignedTerminalId \? ' \(assigned to a terminal\)'/);
   assert.match(renderer, /Remove or reassign that terminal first/);
   assert.match(renderer, /Branch \$\{displayBranchName\(result\.operation\.branchRef\)\} was kept/);

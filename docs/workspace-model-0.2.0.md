@@ -117,11 +117,13 @@ changing its assignment leaves this record intact. Cleanup is therefore availabl
 worktree is no longer assigned, even across application restarts. Successful verified cleanup
 removes the catalog record; it never removes the branch.
 
-If Git independently confirms that a recorded Agenza worktree is no longer registered, the user can
-explicitly forget the stale catalog record. This changes only Agenza's persisted ownership metadata;
-it does not remove files, modify Git metadata, or delete a branch. Agenza refuses to forget a record
-while its worktree is still registered or assigned, including when Git reports the recorded branch
-at a moved worktree path.
+Before returning managed worktrees to the cleanup interface, Agenza reconciles every catalog record
+against fresh Git discovery. It automatically removes only an unassigned record whose saved path is
+no longer registered and whose recorded branch is not registered at a moved worktree path. For an
+unassigned record whose branch identifies one registered moved worktree, Agenza updates the catalog
+to that current Git path. This changes only Agenza's persisted ownership metadata; it does not
+remove files, modify Git metadata, or delete a branch. Agenza preserves assigned, registered,
+ambiguous, and temporarily unverifiable records.
 
 ## Terminal process lifecycle
 

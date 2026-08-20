@@ -73,9 +73,11 @@ Changing an assignment never cleans up the previous worktree automatically.
 5. The local branch remains in the repository after successful cleanup.
 
 If any safety check fails, Agenza refuses cleanup and explains how the user can inspect or preserve
-the work outside the app. If Git proves a recorded Agenza worktree is no longer registered, the
-user may explicitly forget that stale local ownership record. Forgetting it changes neither Git
-metadata, files, worktrees, nor branches.
+the work outside the app. Before showing cleanup choices, Agenza automatically reconciles its local
+catalog and removes an unassigned record only when Git proves its saved worktree is no longer
+registered and was not moved. A uniquely registered moved worktree updates the unassigned catalog
+record to its current Git path. Reconciliation changes neither Git metadata, files, worktrees, nor
+branches; assigned, registered, ambiguous, and temporarily unverifiable records remain preserved.
 
 ## Separate lifecycle operations
 

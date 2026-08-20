@@ -598,6 +598,7 @@ const createMainWindow = async () => {
           document.querySelector('[data-confirm-action]')?.click();
           const removedFromInterface = await waitFor(() => !getPane(removedTerminalId));
           const cleanupButton = document.querySelector('[data-cleanup-worktree]');
+          await waitFor(() => cleanupButton?.disabled === false);
           cleanupButton?.click();
           const cleanupDialogOpened = await waitFor(
             () => document.querySelector('[data-cleanup-dialog]')?.open === true,
@@ -613,12 +614,24 @@ const createMainWindow = async () => {
             !cleanupSelect?.disabled &&
             Boolean(cleanupSelect?.value) &&
             cleanupSelect.selectedOptions[0]?.textContent.includes(removedAssignment.worktreePath);
+          const cleanupFocusDetails = {
+            cleanupDialogOpened,
+            cleanupSelectFocused,
+            documentHasFocus: document.hasFocus(),
+            selectDisabled: cleanupSelect?.disabled ?? null,
+            selectedRemovedWorktree:
+              cleanupSelect?.selectedOptions[0]?.textContent.includes(
+                removedAssignment.worktreePath,
+              ) ?? false,
+            selectHasValue: Boolean(cleanupSelect?.value),
+          };
           document.querySelector('[data-cancel-cleanup]')?.click();
           await waitFor(() => document.querySelector('[data-cleanup-dialog]')?.open === false);
 
           return {
             assignments,
             cleanupDropdownReadyAfterRemoval,
+            cleanupFocusDetails,
             removedAssignment,
             removedFromInterface,
             removedTerminalId,
@@ -646,6 +659,7 @@ const createMainWindow = async () => {
         startupCheckLog('Git workspace check', {
           assignments: workspaceCheck.assignments.length,
           cleanupDropdownReadyAfterRemoval: workspaceCheck.cleanupDropdownReadyAfterRemoval,
+          cleanupFocusDetails: workspaceCheck.cleanupFocusDetails,
           removedFromInterface: workspaceCheck.removedFromInterface,
           worktreePathsExist: allWorktreePaths.map((worktreePath) => fs.existsSync(worktreePath)),
           workspaceAssignmentsAreIsolated,
@@ -658,6 +672,53 @@ const createMainWindow = async () => {
           !workspaceAssignmentsAreIsolated
         ) {
           throw new Error('The startup check did not preserve isolated Git worktrees safely.');
+        }
+
+        runStartupCheckGit(
+          ['worktree', 'remove', workspaceCheck.removedAssignment.worktreePath],
+          startupCheckRepository.repositoryRoot,
+        );
+        runStartupCheckGit(
+          ['branch', '-D', workspaceCheck.removedAssignment.branch],
+          startupCheckRepository.repositoryRoot,
+        );
+        const staleCatalogWasReconciled = await window.webContents.executeJavaScript(`(async () => {
+          const waitFor = async (predicate, timeoutMs = 3000) => {
+            const startedAt = Date.now();
+
+            while (Date.now() - startedAt < timeoutMs) {
+              if (predicate()) {
+                return true;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 25));
+            }
+
+            return false;
+          };
+          const stalePath = ${JSON.stringify(workspaceCheck.removedAssignment.worktreePath)};
+          document.querySelector('[data-cleanup-worktree]')?.click();
+          const opened = await waitFor(
+            () => document.querySelector('[data-cleanup-dialog]')?.open === true,
+          );
+          const options = [
+            ...(document.querySelector('[data-cleanup-worktree-select]')?.options ?? []),
+          ];
+          const staleOptionWasRemoved = !options.some((option) =>
+            option.textContent.includes(stalePath),
+          );
+          const reconciliationWasAnnounced = document
+            .querySelector('[data-cleanup-status]')
+            ?.textContent.includes('Git confirmed no longer exist');
+          document.querySelector('[data-cancel-cleanup]')?.click();
+          await waitFor(() => document.querySelector('[data-cleanup-dialog]')?.open === false);
+          return opened && staleOptionWasRemoved && reconciliationWasAnnounced;
+        })()`);
+        startupCheckLog('managed worktree catalog reconciliation', {
+          staleCatalogWasReconciled,
+        });
+
+        if (!staleCatalogWasReconciled) {
+          throw new Error('The startup check left a Git-confirmed stale cleanup record visible.');
         }
 
         await workspaceService.flush();

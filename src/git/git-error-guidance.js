@@ -57,16 +57,16 @@ const GIT_RECOVERY_ACTIONS = Object.freeze({
   WORKSPACE_PREVIEW_STALE: 'Refresh and review the updated repository details before confirming.',
   WORKTREE_CLEANUP_ASSIGNED: 'Remove or reassign the terminal first, then check cleanup again.',
   WORKTREE_CLEANUP_CATALOG_SYNC_FAILED:
-    'Git removed the worktree and kept its branch. Reopen cleanup and forget only the stale local record after Agenza verifies it is no longer registered.',
+    'Git removed the worktree and kept its branch. Reopen Clean worktrees so Agenza can reconcile the local catalog automatically.',
   WORKTREE_CLEANUP_CONFLICTED:
     'Resolve and preserve the conflicted files outside Agenza, then check cleanup again.',
   WORKTREE_CLEANUP_DIRTY:
     'Commit, stash, or discard tracked changes outside Agenza, then check cleanup again.',
   WORKTREE_CLEANUP_LOCKED: 'Unlock and inspect the worktree outside Agenza before retrying.',
   WORKTREE_CLEANUP_MISSING:
-    'Inspect the missing registration outside Agenza; no Git metadata was changed.',
+    'Retry Clean worktrees. Agenza preserves the local record unless Git confirms that its registration is gone.',
   WORKTREE_CLEANUP_MOVED:
-    'Keep the ownership record. Reassign the registered worktree through a terminal recovery flow.',
+    'Reopen Clean worktrees to sync an unassigned moved path, or reassign it through its terminal recovery flow.',
   WORKTREE_CLEANUP_NOT_OWNED: 'Choose a worktree that Agenza created and recorded.',
   WORKTREE_CLEANUP_PREVIEW_EXPIRED: 'Run Check safety again before confirming cleanup.',
   WORKTREE_CLEANUP_PREVIEW_STALE:

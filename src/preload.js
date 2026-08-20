@@ -42,8 +42,6 @@ const gitApi = Object.freeze({
     ipcRenderer.invoke(GIT_CHANNELS.createNewBranch, { id, operationId }),
   confirmCleanup: (operationId) => ipcRenderer.invoke(GIT_CHANNELS.confirmCleanup, { operationId }),
   discover: (id) => ipcRenderer.invoke(GIT_CHANNELS.discover, { id }),
-  forgetStaleCleanupRecord: (creationId) =>
-    ipcRenderer.invoke(GIT_CHANNELS.forgetStaleCleanupRecord, { creationId }),
   listManagedWorktrees: () => ipcRenderer.invoke(GIT_CHANNELS.listManagedWorktrees),
   planWorkspace: (id, request) => ipcRenderer.invoke(GIT_CHANNELS.planWorkspace, { id, request }),
   previewCleanup: (creationId) => ipcRenderer.invoke(GIT_CHANNELS.previewCleanup, { creationId }),

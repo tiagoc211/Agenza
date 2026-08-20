@@ -9,7 +9,11 @@ const {
 } = require('./git-workspace-executor');
 const { GitWorkspacePlanner, toGitWorkspacePlanErrorPayload } = require('./git-workspace-planner');
 const { readGitWorkspaceStatus } = require('./git-status');
-const { GitWorktreeCleanup, toGitWorktreeCleanupErrorPayload } = require('./git-worktree-cleanup');
+const {
+  GIT_CLEANUP_ERROR_CODES,
+  GitWorktreeCleanup,
+  toGitWorktreeCleanupErrorPayload,
+} = require('./git-worktree-cleanup');
 const { GIT_CHANNELS } = require('./ipc-channels');
 
 const isTrustedEvent = (event, window) =>
@@ -72,9 +76,12 @@ const registerGitIpc = ({
   if (
     !worktreeCleanup ||
     typeof worktreeCleanup.preview !== 'function' ||
-    typeof worktreeCleanup.confirm !== 'function'
+    typeof worktreeCleanup.confirm !== 'function' ||
+    typeof worktreeCleanup.reconcileManagedWorktrees !== 'function'
   ) {
-    throw new TypeError('Git IPC worktree cleanup must provide preview and confirm functions.');
+    throw new TypeError(
+      'Git IPC worktree cleanup must provide preview, confirm, and reconciliation functions.',
+    );
   }
 
   const getTerminalProjectPath = (id, { allowRecovery = false } = {}) => {
@@ -292,7 +299,67 @@ const registerGitIpc = ({
       throw new Error('Untrusted managed worktree request.');
     }
 
-    return { ok: true, worktrees: workspaceService.getManagedWorktrees?.() ?? [] };
+    const records = workspaceService.getManagedWorktrees?.() ?? [];
+
+    try {
+      const reconciliation = await worktreeCleanup.reconcileManagedWorktrees({
+        forgetManagedWorktree: (creationId) => workspaceService.forgetManagedWorktree(creationId),
+        getAssignedWorktrees: () => workspaceService.getAssignedGitWorktrees?.() ?? [],
+        getManagedWorktree: (creationId) =>
+          workspaceService.getManagedWorktree?.(creationId) ?? null,
+        records,
+        updateManagedWorktreePath: (creationId, worktreePath) =>
+          workspaceService.updateManagedWorktreePath(creationId, worktreePath),
+      });
+      const warningCodes = new Set([
+        GIT_CLEANUP_ERROR_CODES.catalogSyncFailed,
+        GIT_CLEANUP_ERROR_CODES.missing,
+      ]);
+      const warnings = reconciliation.retained.filter(({ code }) => warningCodes.has(code));
+
+      for (const operation of reconciliation.removed) {
+        writeGitLifecycleLog(logger, 'info', 'git.worktree_catalog_reconcile_succeeded', {
+          creationId: operation.creationId,
+          operationType: 'cleanup',
+          workspaceState: 'succeeded',
+        });
+      }
+
+      for (const operation of reconciliation.updated) {
+        writeGitLifecycleLog(logger, 'info', 'git.worktree_catalog_relocate_succeeded', {
+          creationId: operation.creationId,
+          operationType: 'cleanup',
+          workspaceState: 'succeeded',
+        });
+      }
+
+      for (const warning of warnings) {
+        writeGitLifecycleLog(logger, 'warn', 'git.worktree_catalog_reconcile_deferred', {
+          creationId: warning.creationId,
+          errorCode: warning.code,
+          operationType: 'cleanup',
+          workspaceState: 'stale',
+        });
+      }
+
+      return {
+        ok: true,
+        reconciliation: {
+          removedCount: reconciliation.removed.length,
+          updatedCount: reconciliation.updated.length,
+          warningCount: warnings.length,
+        },
+        worktrees: workspaceService.getManagedWorktrees?.() ?? [],
+      };
+    } catch (error) {
+      const errorPayload = addGitRecovery(toGitWorktreeCleanupErrorPayload(error));
+      writeGitLifecycleLog(logger, 'warn', 'git.worktree_catalog_reconcile_failed', {
+        errorCode: errorPayload.code,
+        operationType: 'cleanup',
+        workspaceState: 'failed',
+      });
+      return { error: errorPayload, ok: false };
+    }
   };
 
   const handlePreviewCleanup = async (event, payload) => {
@@ -364,43 +431,6 @@ const registerGitIpc = ({
       writeGitLifecycleLog(logger, 'warn', 'git.worktree_cleanup_failed', {
         errorCode: errorPayload.code,
         operationId,
-        operationType: 'cleanup',
-        workspaceState: 'failed',
-      });
-      return { error: errorPayload, ok: false };
-    }
-  };
-
-  const handleForgetStaleCleanupRecord = async (event, payload) => {
-    if (!isTrustedEvent(event, window)) {
-      throw new Error('Untrusted stale cleanup record request.');
-    }
-
-    const { creationId } = payload ?? {};
-    writeGitLifecycleLog(logger, 'info', 'git.worktree_cleanup_stale_record_forget_requested', {
-      creationId,
-      operationType: 'cleanup',
-      workspaceState: 'stale',
-    });
-
-    try {
-      const operation = await worktreeCleanup.forgetStaleRecord({
-        creationId,
-        forgetManagedWorktree: (id) => workspaceService.forgetManagedWorktree(id),
-        getAssignedWorktrees: () => workspaceService.getAssignedGitWorktrees?.() ?? [],
-        getManagedWorktree: (id) => workspaceService.getManagedWorktree?.(id) ?? null,
-      });
-      writeGitLifecycleLog(logger, 'info', 'git.worktree_cleanup_stale_record_forget_succeeded', {
-        creationId: operation.creationId,
-        operationType: 'cleanup',
-        workspaceState: 'succeeded',
-      });
-      return { ok: true, operation };
-    } catch (error) {
-      const errorPayload = addGitRecovery(toGitWorktreeCleanupErrorPayload(error));
-      writeGitLifecycleLog(logger, 'warn', 'git.worktree_cleanup_stale_record_forget_failed', {
-        creationId,
-        errorCode: errorPayload.code,
         operationType: 'cleanup',
         workspaceState: 'failed',
       });
@@ -493,7 +523,6 @@ const registerGitIpc = ({
   ipcMain.handle(GIT_CHANNELS.createExistingBranch, handleCreateExistingBranch);
   ipcMain.handle(GIT_CHANNELS.createNewBranch, handleCreateNewBranch);
   ipcMain.handle(GIT_CHANNELS.discover, handleDiscover);
-  ipcMain.handle(GIT_CHANNELS.forgetStaleCleanupRecord, handleForgetStaleCleanupRecord);
   ipcMain.handle(GIT_CHANNELS.listManagedWorktrees, handleListManagedWorktrees);
   ipcMain.handle(GIT_CHANNELS.planWorkspace, handlePlanWorkspace);
   ipcMain.handle(GIT_CHANNELS.previewCleanup, handlePreviewCleanup);
@@ -507,7 +536,6 @@ const registerGitIpc = ({
     ipcMain.removeHandler(GIT_CHANNELS.createExistingBranch);
     ipcMain.removeHandler(GIT_CHANNELS.createNewBranch);
     ipcMain.removeHandler(GIT_CHANNELS.discover);
-    ipcMain.removeHandler(GIT_CHANNELS.forgetStaleCleanupRecord);
     ipcMain.removeHandler(GIT_CHANNELS.listManagedWorktrees);
     ipcMain.removeHandler(GIT_CHANNELS.planWorkspace);
     ipcMain.removeHandler(GIT_CHANNELS.previewCleanup);

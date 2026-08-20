@@ -49,7 +49,6 @@ const cleanupRepository = document.querySelector('[data-cleanup-repository]');
 const cleanupBranch = document.querySelector('[data-cleanup-branch]');
 const cleanupPath = document.querySelector('[data-cleanup-path]');
 const previewCleanupButton = document.querySelector('[data-preview-cleanup]');
-const forgetStaleCleanupRecordButton = document.querySelector('[data-forget-stale-cleanup-record]');
 const confirmCleanupButton = document.querySelector('[data-confirm-cleanup]');
 const cancelCleanupButtons = document.querySelectorAll('[data-cancel-cleanup]');
 const confirmationDialog = document.querySelector('[data-confirmation-dialog]');
@@ -92,6 +91,8 @@ let worktreeDialogState = null;
 let cleanupDialogState = null;
 let confirmationDialogState = null;
 let managedWorktrees = [];
+let managedWorktreeRefreshPending = false;
+let managedWorktreeRefreshPromise = null;
 
 const workspaceOperationTypes = Object.freeze({
   attachWorktree: 'attach-existing-worktree',
@@ -321,7 +322,7 @@ const setCleanupError = (error, fallback = 'Unable to inspect this worktree.') =
   cleanupError.hidden = !error;
 };
 
-const refreshManagedWorktrees = async () => {
+const loadManagedWorktrees = async () => {
   try {
     const result = await window.agenza.git.listManagedWorktrees();
 
@@ -330,16 +331,55 @@ const refreshManagedWorktrees = async () => {
     }
 
     managedWorktrees = result.worktrees;
+    const removedCount = result.reconciliation?.removedCount ?? 0;
+    const updatedCount = result.reconciliation?.updatedCount ?? 0;
+    const warningCount = result.reconciliation?.warningCount ?? 0;
     cleanupButton.disabled = managedWorktrees.length === 0;
     cleanupButton.title =
       managedWorktrees.length === 0
         ? 'No Agenza-created worktrees are recorded.'
         : `${managedWorktrees.length} Agenza-created ${managedWorktrees.length === 1 ? 'worktree' : 'worktrees'} recorded.`;
+
+    if (removedCount > 0) {
+      cleanupStatus.textContent = `Removed ${removedCount} stale local ${removedCount === 1 ? 'record' : 'records'} that Git confirmed no longer exist. No Git resources were changed.`;
+      announceWorkspace(cleanupStatus.textContent);
+    }
+    if (updatedCount > 0) {
+      cleanupStatus.textContent = `Updated ${updatedCount} moved ${updatedCount === 1 ? 'worktree record' : 'worktree records'} from current Git registrations. No Git resources were changed.`;
+      announceWorkspace(cleanupStatus.textContent);
+    }
+    if (warningCount > 0) {
+      cleanupButton.title += ` ${warningCount} local ${warningCount === 1 ? 'record could' : 'records could'} not be verified and were preserved.`;
+    }
+
+    return { ok: true, removedCount, updatedCount, warningCount };
   } catch (error) {
     managedWorktrees = [];
     cleanupButton.disabled = true;
     cleanupButton.title = formatUserFacingError(error, 'Unable to list managed worktrees.');
+    return { ok: false, removedCount: 0, updatedCount: 0, warningCount: 0 };
   }
+};
+
+const refreshManagedWorktrees = () => {
+  managedWorktreeRefreshPending = true;
+
+  if (!managedWorktreeRefreshPromise) {
+    managedWorktreeRefreshPromise = (async () => {
+      let result;
+
+      do {
+        managedWorktreeRefreshPending = false;
+        result = await loadManagedWorktrees();
+      } while (managedWorktreeRefreshPending);
+
+      return result;
+    })().finally(() => {
+      managedWorktreeRefreshPromise = null;
+    });
+  }
+
+  return managedWorktreeRefreshPromise;
 };
 
 const resetCleanupPreview = () => {
@@ -348,8 +388,6 @@ const resetCleanupPreview = () => {
   }
   cleanupPreview.hidden = true;
   confirmCleanupButton.disabled = true;
-  forgetStaleCleanupRecordButton.disabled = true;
-  forgetStaleCleanupRecordButton.hidden = true;
   setCleanupError();
 };
 
@@ -365,7 +403,13 @@ const openCleanupDialog = async () => {
     return;
   }
 
-  await refreshManagedWorktrees();
+  const refreshResult = await refreshManagedWorktrees();
+
+  if (!refreshResult.ok || managedWorktrees.length === 0) {
+    cleanupButton.focus();
+    return;
+  }
+
   cleanupDialogState = { isRemoving: false, preview: null };
   cleanupForm.reset();
   cleanupSelect.replaceChildren();
@@ -436,77 +480,25 @@ const previewWorktreeCleanup = async () => {
     confirmCleanupButton.focus();
   } catch (error) {
     if (cleanupDialogState === state) {
-      setCleanupError(error, 'This worktree cannot be cleaned up safely.');
       if (error?.code === 'WORKTREE_CLEANUP_MISSING') {
-        forgetStaleCleanupRecordButton.disabled = false;
-        forgetStaleCleanupRecordButton.hidden = false;
+        const creationId = cleanupSelect.value;
+        const refreshResult = await refreshManagedWorktrees();
+
+        if (
+          refreshResult.ok &&
+          !managedWorktrees.some((worktree) => worktree.creationId === creationId)
+        ) {
+          cleanupDialog.close();
+          return;
+        }
       }
+
+      setCleanupError(error, 'This worktree cannot be cleaned up safely.');
     }
   } finally {
     if (cleanupDialogState === state) {
       previewCleanupButton.disabled = false;
       previewCleanupButton.textContent = 'Check safety';
-    }
-  }
-};
-
-const forgetStaleCleanupRecord = async () => {
-  const state = cleanupDialogState;
-
-  if (!state || !cleanupSelect.value || forgetStaleCleanupRecordButton.disabled) {
-    return;
-  }
-
-  const selectedOption = cleanupSelect.selectedOptions[0];
-  const description = selectedOption?.textContent ?? 'this worktree';
-  const confirmed = await requestConfirmation({
-    confirmLabel: 'Forget local record only',
-    eyebrow: 'Local record recovery',
-    message: `Forget Agenza's stale local record for ${description}?\n\nThis does not delete files, Git worktrees, or branches.`,
-    returnFocus: forgetStaleCleanupRecordButton,
-    title: 'Forget this stale local record?',
-  });
-
-  if (!confirmed) {
-    return;
-  }
-
-  forgetStaleCleanupRecordButton.disabled = true;
-  forgetStaleCleanupRecordButton.textContent = 'Verifying...';
-  previewCleanupButton.disabled = true;
-  cleanupSelect.disabled = true;
-  setCleanupError();
-
-  try {
-    const result = await window.agenza.git.forgetStaleCleanupRecord(cleanupSelect.value);
-
-    if (cleanupDialogState !== state) {
-      return;
-    }
-    if (!result.ok) {
-      throw result.error;
-    }
-
-    cleanupStatus.textContent = `Forgot stale local record for ${displayBranchName(result.operation.branchRef)}. No Git files, worktrees, or branches were changed.`;
-    announceWorkspace(
-      `Forgot the stale local cleanup record for ${displayBranchName(result.operation.branchRef)}. No Git resources were changed.`,
-    );
-    cleanupDialog.close();
-    await refreshManagedWorktrees();
-  } catch (error) {
-    if (cleanupDialogState === state) {
-      setCleanupError(error, 'Agenza could not verify that this local record is stale.');
-      if (error?.code !== 'WORKTREE_CLEANUP_MISSING') {
-        forgetStaleCleanupRecordButton.disabled = true;
-        forgetStaleCleanupRecordButton.hidden = true;
-      }
-    }
-  } finally {
-    if (cleanupDialogState === state) {
-      forgetStaleCleanupRecordButton.textContent = 'Verify and forget stale local record';
-      forgetStaleCleanupRecordButton.disabled = forgetStaleCleanupRecordButton.hidden;
-      previewCleanupButton.disabled = false;
-      cleanupSelect.disabled = false;
     }
   }
 };
@@ -1691,7 +1683,6 @@ cleanupButton.addEventListener('click', () => openCleanupDialog());
 cleanupSelect.addEventListener('change', resetCleanupPreview);
 previewCleanupButton.addEventListener('click', () => previewWorktreeCleanup());
 confirmCleanupButton.addEventListener('click', () => confirmWorktreeCleanup());
-forgetStaleCleanupRecordButton.addEventListener('click', () => forgetStaleCleanupRecord());
 for (const button of cancelCleanupButtons) {
   button.addEventListener('click', closeCleanupDialog);
 }
@@ -1713,9 +1704,6 @@ cleanupDialog.addEventListener('close', () => {
   cleanupSelect.disabled = false;
   previewCleanupButton.disabled = false;
   previewCleanupButton.textContent = 'Check safety';
-  forgetStaleCleanupRecordButton.disabled = true;
-  forgetStaleCleanupRecordButton.hidden = true;
-  forgetStaleCleanupRecordButton.textContent = 'Verify and forget stale local record';
   confirmCleanupButton.disabled = true;
   confirmCleanupButton.textContent = 'Remove worktree, keep branch';
   for (const button of cancelCleanupButtons) {

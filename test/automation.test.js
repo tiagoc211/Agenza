@@ -31,6 +31,8 @@ test('runs the packaged dynamic terminal and Git workspace startup check with a 
   assert.match(main, /data-confirm-action/);
   assert.match(main, /cleanupDropdownReadyAfterRemoval/);
   assert.match(main, /document\.activeElement === cleanupSelect/);
+  assert.match(main, /staleCatalogWasReconciled/);
+  assert.match(main, /Git confirmed no longer exist/);
 });
 
 test('provides a repeatable manual check for missing Codex', () => {
