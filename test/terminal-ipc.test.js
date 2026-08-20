@@ -4,6 +4,9 @@ const test = require('node:test');
 const { TERMINAL_CHANNELS } = require('../src/terminal/ipc-channels');
 const { MAX_INPUT_LENGTH, registerTerminalIpc } = require('../src/terminal/terminal-ipc');
 
+const FIRST_ID = 'terminal-00000000-0000-4000-8000-000000000001';
+const SECOND_ID = 'terminal-00000000-0000-4000-8000-000000000002';
+
 class FakeIpcMain {
   constructor() {
     this.handlers = new Map();
@@ -43,40 +46,67 @@ const createHarness = () => {
     isDestroyed: () => false,
     webContents,
   };
-  const dataListeners = new Map();
-  const exitListeners = new Map();
+  const dataListeners = new Set();
+  const exitListeners = new Set();
   const writes = [];
   const resizes = [];
+  const removedIds = [];
+  const detachedIds = [];
+  const activatedIds = [];
   let startCount = 0;
   let prepareCount = 0;
   let prepareError = null;
+  let nextId = 3;
   let snapshots = [
-    { id: 'terminal-one', isRunning: false },
-    { id: 'terminal-two', isRunning: false },
+    { id: FIRST_ID, isRunning: false, pid: null },
+    { id: SECOND_ID, isRunning: false, pid: null },
   ];
-  const subscribe = (listeners, id, listener) => {
-    listeners.set(id, listener);
-    return () => listeners.delete(id);
+  const subscribe = (listeners, listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const updateSnapshot = (id, update) => {
+    snapshots = snapshots.map((snapshot) =>
+      snapshot.id === id ? { ...snapshot, ...update } : snapshot,
+    );
+    return snapshots.find((snapshot) => snapshot.id === id);
   };
   const manager = {
-    getSnapshot: (id) => snapshots.find((snapshot) => snapshot.id === id),
-    getSnapshots: () => snapshots,
-    kill: (id) => {
-      snapshots = snapshots.map((snapshot) =>
-        snapshot.id === id ? { ...snapshot, isRunning: false, pid: null } : snapshot,
-      );
-      exitListeners.get(id)?.({ exitCode: 0, signal: 0 });
-      return true;
+    activate: async (id) => {
+      activatedIds.push(id);
+      return { activeTerminalId: id };
     },
-    onData: (id, listener) => subscribe(dataListeners, id, listener),
-    onExit: (id, listener) => subscribe(exitListeners, id, listener),
+    create: () => {
+      const id = `terminal-00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`;
+      const snapshot = { id, isRunning: false, pid: null };
+      snapshots.push(snapshot);
+      return snapshot;
+    },
+    detachWorkspace: async (id) => {
+      detachedIds.push(id);
+      return {
+        ...updateSnapshot(id, { isRunning: false, pid: null }),
+        workspace: { kind: 'unassigned', projectPath: null, repository: null },
+        workspaceStatus: { status: 'unassigned' },
+      };
+    },
+    getSnapshot: (id) => snapshots.find((snapshot) => snapshot.id === id),
+    has: (id) => snapshots.some((snapshot) => snapshot.id === id),
+    list: () => snapshots,
+    onSessionData: (listener) => subscribe(dataListeners, listener),
+    onSessionExit: (listener) => subscribe(exitListeners, listener),
+    remove: (id) => {
+      removedIds.push(id);
+      snapshots = snapshots.filter((snapshot) => snapshot.id !== id);
+    },
     resize: (id, columns, rows) => resizes.push({ id, columns, rows }),
+    restart: async (id) => {
+      startCount += 1;
+      return updateSnapshot(id, { isRunning: true, pid: startCount + 300 });
+    },
     start: (id) => {
       startCount += 1;
-      snapshots = snapshots.map((snapshot) =>
-        snapshot.id === id ? { ...snapshot, isRunning: true, pid: startCount + 200 } : snapshot,
-      );
-      return snapshots.find((snapshot) => snapshot.id === id);
+      return updateSnapshot(id, { isRunning: true, pid: startCount + 200 });
     },
     startAll: () => {
       startCount += 1;
@@ -109,13 +139,16 @@ const createHarness = () => {
   });
 
   return {
+    activatedIds,
     dataListeners,
+    detachedIds,
     dispose,
     exitListeners,
     ipcMain,
     logEntries,
     manager,
     prepareCount: () => prepareCount,
+    removedIds,
     resizes,
     sentMessages,
     setPrepareError: (error) => {
@@ -127,127 +160,190 @@ const createHarness = () => {
   };
 };
 
-test('prepares and starts two sessions, then routes input and resize by terminal id', async () => {
+test('persists the active dynamic terminal and accepts an empty active selection', async () => {
+  const harness = createHarness();
+  const activate = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.activate);
+
+  assert.deepEqual(await activate(harness.trustedEvent, { id: SECOND_ID }), {
+    activeTerminalId: SECOND_ID,
+  });
+  assert.deepEqual(await activate(harness.trustedEvent, { id: null }), {
+    activeTerminalId: null,
+  });
+  await assert.rejects(
+    activate(harness.trustedEvent, { id: 'terminal-unknown' }),
+    /Invalid terminal session id/,
+  );
+  assert.deepEqual(harness.activatedIds, [SECOND_ID, null]);
+
+  harness.dispose();
+});
+
+test('creates and lists dynamic sessions only for the owning renderer', async () => {
+  const harness = createHarness();
+  const create = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.create);
+  const list = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.list);
+  const created = await create(harness.trustedEvent);
+
+  assert.equal(created.id.endsWith('000000000003'), true);
+  assert.deepEqual(
+    (await list(harness.trustedEvent)).map(({ id }) => id),
+    [FIRST_ID, SECOND_ID, created.id],
+  );
+  await assert.rejects(create({ sender: {}, senderFrame: {} }), /Untrusted/);
+
+  harness.dispose();
+});
+
+test('detaches stale workspace metadata through a narrow trusted operation', async () => {
+  const harness = createHarness();
+  const detachWorkspace = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.detachWorkspace);
+  const result = await detachWorkspace(harness.trustedEvent, { id: FIRST_ID });
+
+  assert.deepEqual(harness.detachedIds, [FIRST_ID]);
+  assert.equal(result.id, FIRST_ID);
+  assert.equal(result.workspace.kind, 'unassigned');
+  await assert.rejects(
+    detachWorkspace({ sender: {}, senderFrame: {} }, { id: FIRST_ID }),
+    /Untrusted/,
+  );
+  await assert.rejects(
+    detachWorkspace(harness.trustedEvent, { id: 'terminal-unknown' }),
+    /Invalid terminal session id/,
+  );
+
+  harness.dispose();
+});
+
+test('starts sessions and routes input and resize by dynamic terminal id', async () => {
   const harness = createHarness();
   const start = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.start);
   const input = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.input);
   const resize = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.resize);
 
   const snapshots = await start(harness.trustedEvent);
-  input(harness.trustedEvent, { id: 'terminal-one', data: 'first' });
-  input(harness.trustedEvent, { id: 'terminal-two', data: 'second' });
-  resize(harness.trustedEvent, { id: 'terminal-two', columns: 120, rows: 40 });
+  input(harness.trustedEvent, { id: FIRST_ID, data: 'first' });
+  input(harness.trustedEvent, { id: SECOND_ID, data: 'second' });
+  resize(harness.trustedEvent, { id: SECOND_ID, columns: 120, rows: 40 });
 
   assert.equal(harness.startCount(), 1);
   assert.equal(harness.prepareCount(), 1);
-  assert.deepEqual(
-    snapshots.map(({ id, isRunning }) => ({ id, isRunning })),
-    [
-      { id: 'terminal-one', isRunning: true },
-      { id: 'terminal-two', isRunning: true },
-    ],
+  assert.equal(
+    snapshots.every(({ isRunning }) => isRunning),
+    true,
   );
   assert.deepEqual(harness.writes, [
-    { id: 'terminal-one', data: 'first' },
-    { id: 'terminal-two', data: 'second' },
+    { id: FIRST_ID, data: 'first' },
+    { id: SECOND_ID, data: 'second' },
   ]);
-  assert.deepEqual(harness.resizes, [{ id: 'terminal-two', columns: 120, rows: 40 }]);
+  assert.deepEqual(harness.resizes, [{ id: SECOND_ID, columns: 120, rows: 40 }]);
 
   harness.dispose();
 });
 
 test('forwards process output and exit events only with their source terminal id', () => {
   const harness = createHarness();
+  const emitData = [...harness.dataListeners][0];
+  const emitExit = [...harness.exitListeners][0];
 
-  harness.dataListeners.get('terminal-one')('output one');
-  harness.dataListeners.get('terminal-two')('output two');
-  harness.exitListeners.get('terminal-two')({ exitCode: 7, signal: 0 });
+  emitData({ id: FIRST_ID, data: 'output one' });
+  emitData({ id: SECOND_ID, data: 'output two' });
+  emitExit({ id: SECOND_ID, event: { exitCode: 7, signal: 0 } });
 
   assert.deepEqual(harness.sentMessages, [
     {
       channel: TERMINAL_CHANNELS.data,
-      payload: { id: 'terminal-one', data: 'output one' },
+      payload: { id: FIRST_ID, data: 'output one' },
     },
     {
       channel: TERMINAL_CHANNELS.data,
-      payload: { id: 'terminal-two', data: 'output two' },
+      payload: { id: SECOND_ID, data: 'output two' },
     },
     {
       channel: TERMINAL_CHANNELS.exit,
-      payload: { id: 'terminal-two', exitCode: 7, signal: 0 },
+      payload: { id: SECOND_ID, exitCode: 7, signal: 0 },
     },
   ]);
 
   harness.dispose();
 });
 
-test('starts and restarts one terminal without changing the other', async () => {
+test('restarts and removes one dynamic terminal without changing another', async () => {
   const harness = createHarness();
   const start = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.start);
   const restart = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.restart);
+  const remove = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.remove);
 
-  await start(harness.trustedEvent, { id: 'terminal-one' });
-  const secondBeforeRestart = harness.manager.getSnapshot('terminal-two');
-  const restarted = await restart(harness.trustedEvent, { id: 'terminal-one' });
+  await start(harness.trustedEvent, { id: FIRST_ID });
+  const secondBeforeRestart = harness.manager.getSnapshot(SECOND_ID);
+  const restarted = await restart(harness.trustedEvent, { id: FIRST_ID });
+  const result = await remove(harness.trustedEvent, { id: FIRST_ID });
 
-  assert.equal(restarted.id, 'terminal-one');
+  assert.equal(restarted.id, FIRST_ID);
   assert.equal(restarted.isRunning, true);
-  assert.deepEqual(harness.manager.getSnapshot('terminal-two'), secondBeforeRestart);
-  assert.equal(harness.startCount(), 2);
+  assert.deepEqual(harness.manager.getSnapshot(SECOND_ID), secondBeforeRestart);
+  assert.deepEqual(result, { id: FIRST_ID, removed: true });
+  assert.deepEqual(harness.removedIds, [FIRST_ID]);
+  assert.equal(harness.manager.has(FIRST_ID), false);
+  assert.equal(harness.manager.has(SECOND_ID), true);
 
   harness.dispose();
 });
 
-test('keeps a startup failure isolated to its terminal and records a safe diagnostic event', async () => {
+test('keeps a startup failure isolated to its dynamic terminal', async () => {
   const harness = createHarness();
   const start = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.start);
   const startupError = new Error('Codex is unavailable');
 
   harness.setPrepareError(startupError);
-  await assert.rejects(start(harness.trustedEvent, { id: 'terminal-one' }), startupError);
+  await assert.rejects(start(harness.trustedEvent, { id: FIRST_ID }), startupError);
 
-  assert.equal(harness.manager.getSnapshot('terminal-one').isRunning, false);
-  assert.equal(harness.manager.getSnapshot('terminal-two').isRunning, false);
+  assert.equal(harness.manager.getSnapshot(FIRST_ID).isRunning, false);
+  assert.equal(harness.manager.getSnapshot(SECOND_ID).isRunning, false);
   assert.deepEqual(
     harness.logEntries.find(({ event }) => event === 'terminal.start_failed'),
     {
-      details: { error: startupError, terminalId: 'terminal-one' },
+      details: { error: startupError, terminalId: FIRST_ID },
       event: 'terminal.start_failed',
       level: 'error',
     },
   );
 
   harness.setPrepareError(null);
-  const secondSession = await start(harness.trustedEvent, { id: 'terminal-two' });
+  const secondSession = await start(harness.trustedEvent, { id: SECOND_ID });
 
   assert.equal(secondSession.isRunning, true);
-  assert.equal(harness.manager.getSnapshot('terminal-one').isRunning, false);
-  assert.equal(harness.manager.getSnapshot('terminal-two').isRunning, true);
+  assert.equal(harness.manager.getSnapshot(FIRST_ID).isRunning, false);
+  assert.equal(harness.manager.getSnapshot(SECOND_ID).isRunning, true);
 
   harness.dispose();
 });
 
-test('rejects invalid trusted payloads and ignores messages from other senders', () => {
+test('rejects unknown trusted ids and unsafe payloads while ignoring other senders', async () => {
   const harness = createHarness();
   const input = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.input);
   const resize = harness.ipcMain.listeners.get(TERMINAL_CHANNELS.resize);
+  const remove = harness.ipcMain.handlers.get(TERMINAL_CHANNELS.remove);
   const untrustedEvent = { sender: {}, senderFrame: {} };
 
-  input(untrustedEvent, { id: 'terminal-one', data: 'ignored' });
-  resize(untrustedEvent, { id: 'terminal-one', columns: 80, rows: 24 });
+  input(untrustedEvent, { id: FIRST_ID, data: 'ignored' });
+  resize(untrustedEvent, { id: FIRST_ID, columns: 80, rows: 24 });
 
   assert.throws(
-    () => input(harness.trustedEvent, { id: 'unknown', data: 'bad' }),
+    () => input(harness.trustedEvent, { id: 'terminal-unknown', data: 'bad' }),
     /Invalid terminal session id/,
   );
   assert.throws(
-    () =>
-      input(harness.trustedEvent, { id: 'terminal-one', data: 'x'.repeat(MAX_INPUT_LENGTH + 1) }),
+    () => input(harness.trustedEvent, { id: FIRST_ID, data: 'x'.repeat(MAX_INPUT_LENGTH + 1) }),
     /valid string/,
   );
   assert.throws(
-    () => resize(harness.trustedEvent, { id: 'terminal-one', columns: 0, rows: 24 }),
+    () => resize(harness.trustedEvent, { id: FIRST_ID, columns: 0, rows: 24 }),
     /valid terminal dimension/,
+  );
+  await assert.rejects(
+    remove(harness.trustedEvent, { id: 'terminal-unknown' }),
+    /Invalid terminal session id/,
   );
   assert.deepEqual(harness.writes, []);
   assert.deepEqual(harness.resizes, []);
@@ -255,7 +351,7 @@ test('rejects invalid trusted payloads and ignores messages from other senders',
   harness.dispose();
 });
 
-test('removes IPC handlers and process subscriptions when disposed', () => {
+test('removes every IPC handler and aggregate process subscription when disposed', () => {
   const harness = createHarness();
 
   harness.dispose();

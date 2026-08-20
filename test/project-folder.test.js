@@ -110,3 +110,44 @@ test('keeps the current state unchanged when selection is canceled', async () =>
   assert.equal(selection.getCurrentFolder('terminal-one'), 'C:\\existing');
   selection.dispose();
 });
+
+test('accepts newly registered dynamic terminal ids and provides a smoke-test default folder', async () => {
+  const ipcMain = new FakeIpcMain();
+  const mainFrame = {};
+  const webContents = { mainFrame };
+  const activeIds = new Set(['terminal-dynamic-one']);
+  const committedFolders = [];
+  const selection = registerProjectFolderIpc({
+    defaultFolder: 'C:\\workspace',
+    dialog: {
+      showOpenDialog: async () => {
+        throw new Error('The startup check should not open a dialog.');
+      },
+    },
+    ipcMain,
+    isValidFolderId: (id) => activeIds.has(id),
+    onFolderSelected: async (id, folder) => {
+      committedFolders.push({ folder, id });
+      return folder;
+    },
+    skipDialog: true,
+    window: { webContents },
+  });
+  const selectFolder = ipcMain.handlers.get(PROJECT_CHANNELS.selectFolder);
+  const trustedEvent = { sender: webContents, senderFrame: mainFrame };
+
+  assert.deepEqual(await selectFolder(trustedEvent, { id: 'terminal-dynamic-one' }), {
+    canceled: false,
+    id: 'terminal-dynamic-one',
+    path: 'C:\\workspace',
+  });
+  assert.equal(selection.getCurrentFolder('terminal-dynamic-one'), 'C:\\workspace');
+  assert.deepEqual(committedFolders, [{ folder: 'C:\\workspace', id: 'terminal-dynamic-one' }]);
+
+  activeIds.delete('terminal-dynamic-one');
+  await assert.rejects(
+    selectFolder(trustedEvent, { id: 'terminal-dynamic-one' }),
+    /Invalid terminal project id/,
+  );
+  selection.dispose();
+});

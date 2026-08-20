@@ -1,13 +1,10 @@
 const { TERMINAL_CHANNELS } = require('./ipc-channels');
-const { DEFAULT_SESSION_IDS } = require('./terminal-manager');
 const { MAX_TERMINAL_DIMENSION } = require('./terminal-session');
 
 const MAX_INPUT_LENGTH = 1024 * 1024;
-const STOP_TIMEOUT_MS = 10000;
-const validSessionIds = new Set(DEFAULT_SESSION_IDS);
 
-const assertSessionId = (id) => {
-  if (!validSessionIds.has(id)) {
+const assertSessionId = (manager, id) => {
+  if (typeof id !== 'string' || !manager.has(id)) {
     throw new Error('Invalid terminal session id.');
   }
 };
@@ -29,10 +26,19 @@ const writeLog = (logger, level, event, details) => {
   }
 };
 
-const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () => undefined }) => {
+const registerTerminalIpc = ({
+  catalog,
+  ipcMain,
+  window,
+  manager,
+  logger,
+  prepare = () => undefined,
+}) => {
   if (!ipcMain || !window || !manager) {
     throw new TypeError('Terminal IPC requires ipcMain, a window, and a terminal manager.');
   }
+
+  const sessionCatalog = catalog ?? manager;
 
   const sendToRenderer = (channel, payload) => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
@@ -40,9 +46,9 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     }
   };
 
-  const outputSubscriptions = DEFAULT_SESSION_IDS.flatMap((id) => [
-    manager.onData(id, (data) => sendToRenderer(TERMINAL_CHANNELS.data, { id, data })),
-    manager.onExit(id, (event) => {
+  const outputSubscriptions = [
+    manager.onSessionData(({ id, data }) => sendToRenderer(TERMINAL_CHANNELS.data, { id, data })),
+    manager.onSessionExit(({ id, event }) => {
       writeLog(logger, 'warn', 'terminal.exited', {
         exitCode: event.exitCode,
         signal: event.signal,
@@ -54,38 +60,80 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
         signal: event.signal,
       });
     }),
-  ]);
+  ];
 
-  const stopSession = (id) =>
-    new Promise((resolve, reject) => {
-      if (!manager.getSnapshot(id).isRunning) {
-        resolve();
-        return;
-      }
-
-      let unsubscribe = () => {};
-      const timeout = setTimeout(() => {
-        unsubscribe();
-        reject(new Error(`Terminal session "${id}" did not stop in time.`));
-      }, STOP_TIMEOUT_MS);
-
-      unsubscribe = manager.onExit(id, () => {
-        clearTimeout(timeout);
-        unsubscribe();
-        resolve();
-      });
-      manager.kill(id);
-    });
-
-  const handleStart = async (event, payload) => {
+  const requireTrustedEvent = (event, action) => {
     if (!isTrustedEvent(event, window)) {
-      throw new Error('Untrusted terminal start request.');
+      throw new Error(`Untrusted terminal ${action} request.`);
+    }
+  };
+
+  const handleActivate = async (event, payload) => {
+    requireTrustedEvent(event, 'activate');
+    const { id } = payload ?? {};
+
+    if (id !== null) {
+      assertSessionId(manager, id);
     }
 
+    return sessionCatalog.activate?.(id) ?? { activeTerminalId: id };
+  };
+
+  const handleCreate = async (event) => {
+    requireTrustedEvent(event, 'create');
+    const snapshot = await sessionCatalog.create();
+    writeLog(logger, 'info', 'terminal.created', { terminalId: snapshot.id });
+    return snapshot;
+  };
+
+  const handleList = async (event) => {
+    requireTrustedEvent(event, 'list');
+    return sessionCatalog.list();
+  };
+
+  const handleDetachWorkspace = async (event, payload) => {
+    requireTrustedEvent(event, 'workspace detach');
+    const { id } = payload ?? {};
+    assertSessionId(manager, id);
+
+    if (typeof sessionCatalog.detachWorkspace !== 'function') {
+      throw new Error('Terminal workspace detach is unavailable.');
+    }
+
+    writeLog(logger, 'info', 'workspace.detach_requested', { terminalId: id });
+
+    try {
+      const snapshot = await sessionCatalog.detachWorkspace(id);
+      writeLog(logger, 'info', 'workspace.detach_succeeded', { terminalId: id });
+      return snapshot;
+    } catch (error) {
+      writeLog(logger, 'error', 'workspace.detach_failed', { error, terminalId: id });
+      throw error;
+    }
+  };
+
+  const handleRemove = async (event, payload) => {
+    requireTrustedEvent(event, 'remove');
+    const { id } = payload ?? {};
+    assertSessionId(manager, id);
+    writeLog(logger, 'info', 'terminal.remove_requested', { terminalId: id });
+
+    try {
+      await sessionCatalog.remove(id);
+      writeLog(logger, 'info', 'terminal.remove_succeeded', { terminalId: id });
+      return { id, removed: true };
+    } catch (error) {
+      writeLog(logger, 'error', 'terminal.remove_failed', { error, terminalId: id });
+      throw error;
+    }
+  };
+
+  const handleStart = async (event, payload) => {
+    requireTrustedEvent(event, 'start');
     const { id } = payload ?? {};
 
     if (id !== undefined) {
-      assertSessionId(id);
+      assertSessionId(manager, id);
     }
 
     const terminalId = id ?? 'all';
@@ -112,7 +160,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
         return startedSession;
       }
 
-      const snapshots = manager.getSnapshots();
+      const snapshots = manager.list();
 
       if (snapshots.every((snapshot) => snapshot.isRunning)) {
         writeLog(logger, 'info', 'terminal.start_skipped', {
@@ -146,18 +194,14 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
   };
 
   const handleRestart = async (event, payload) => {
-    if (!isTrustedEvent(event, window)) {
-      throw new Error('Untrusted terminal restart request.');
-    }
-
+    requireTrustedEvent(event, 'restart');
     const { id } = payload ?? {};
-    assertSessionId(id);
+    assertSessionId(manager, id);
     writeLog(logger, 'info', 'terminal.restart_requested', { terminalId: id });
 
     try {
       const options = (await prepare(id)) ?? {};
-      await stopSession(id);
-      const restartedSession = manager.start(id, options);
+      const restartedSession = await manager.restart(id, options);
       writeLog(logger, 'info', 'terminal.restart_succeeded', {
         pid: restartedSession.pid,
         terminalId: id,
@@ -175,7 +219,7 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     }
 
     const { id, data } = payload ?? {};
-    assertSessionId(id);
+    assertSessionId(manager, id);
 
     if (typeof data !== 'string' || data.length > MAX_INPUT_LENGTH) {
       throw new TypeError('Terminal input must be a valid string.');
@@ -190,18 +234,28 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
     }
 
     const { id, columns, rows } = payload ?? {};
-    assertSessionId(id);
+    assertSessionId(manager, id);
     assertDimension(columns, 'columns');
     assertDimension(rows, 'rows');
     manager.resize(id, columns, rows);
   };
 
+  ipcMain.handle(TERMINAL_CHANNELS.activate, handleActivate);
+  ipcMain.handle(TERMINAL_CHANNELS.create, handleCreate);
+  ipcMain.handle(TERMINAL_CHANNELS.detachWorkspace, handleDetachWorkspace);
+  ipcMain.handle(TERMINAL_CHANNELS.list, handleList);
+  ipcMain.handle(TERMINAL_CHANNELS.remove, handleRemove);
   ipcMain.handle(TERMINAL_CHANNELS.start, handleStart);
   ipcMain.handle(TERMINAL_CHANNELS.restart, handleRestart);
   ipcMain.on(TERMINAL_CHANNELS.input, handleInput);
   ipcMain.on(TERMINAL_CHANNELS.resize, handleResize);
 
   return () => {
+    ipcMain.removeHandler(TERMINAL_CHANNELS.activate);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.create);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.detachWorkspace);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.list);
+    ipcMain.removeHandler(TERMINAL_CHANNELS.remove);
     ipcMain.removeHandler(TERMINAL_CHANNELS.start);
     ipcMain.removeHandler(TERMINAL_CHANNELS.restart);
     ipcMain.removeListener(TERMINAL_CHANNELS.input, handleInput);
@@ -215,7 +269,6 @@ const registerTerminalIpc = ({ ipcMain, window, manager, logger, prepare = () =>
 
 module.exports = {
   MAX_INPUT_LENGTH,
-  STOP_TIMEOUT_MS,
   isTrustedEvent,
   registerTerminalIpc,
   writeLog,

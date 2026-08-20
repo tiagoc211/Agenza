@@ -14,7 +14,7 @@
       "id": "T201",
       "order": 1,
       "title": "Define the 0.2.0 scope and workspace safety rules",
-      "status": "todo",
+      "status": "done",
       "depends_on": [],
       "acceptance_criteria": [
         "The user workflows for adding and removing terminals and assigning Git workspaces are documented.",
@@ -26,7 +26,7 @@
       "id": "T202",
       "order": 2,
       "title": "Design the dynamic terminal and Git workspace model",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T201"],
       "acceptance_criteria": [
         "The model defines stable session IDs, labels, process state, project path, repository root, branch, worktree path, and Agenza ownership metadata.",
@@ -38,7 +38,7 @@
       "id": "T203",
       "order": 3,
       "title": "Refactor the terminal process layer for dynamic sessions",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T202"],
       "acceptance_criteria": [
         "The terminal manager can create, list, restart, and remove sessions using generated IDs instead of two fixed IDs.",
@@ -50,7 +50,7 @@
       "id": "T204",
       "order": 4,
       "title": "Build the dynamic terminal workspace interface",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T202", "T203"],
       "acceptance_criteria": [
         "The user can add terminals and remove any selected terminal from the interface.",
@@ -62,7 +62,7 @@
       "id": "T205",
       "order": 5,
       "title": "Persist and restore the terminal workspace layout",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T202", "T204"],
       "acceptance_criteria": [
         "Terminal definitions, labels, ordering, and assigned workspace metadata are stored locally using the versioned schema.",
@@ -74,7 +74,7 @@
       "id": "T206",
       "order": 6,
       "title": "Add read-only Git repository and worktree discovery",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T201", "T202"],
       "acceptance_criteria": [
         "Agenza can identify a selected folder's repository root, current branch, and worktree state using bounded Git commands.",
@@ -86,7 +86,7 @@
       "id": "T207",
       "order": 7,
       "title": "Plan and validate branch and worktree assignments",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T206"],
       "acceptance_criteria": [
         "New branch names and worktree paths are validated with Git before any mutation occurs.",
@@ -98,7 +98,7 @@
       "id": "T208",
       "order": 8,
       "title": "Create a branch and worktree for a terminal",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T203", "T204", "T207"],
       "acceptance_criteria": [
         "The user can create a new local branch from a selected base and assign its new worktree to one terminal.",
@@ -110,7 +110,7 @@
       "id": "T209",
       "order": 9,
       "title": "Attach an existing branch or worktree to a terminal",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T203", "T204", "T207"],
       "acceptance_criteria": [
         "The user can attach a registered worktree to a terminal without recreating it.",
@@ -122,7 +122,7 @@
       "id": "T210",
       "order": 10,
       "title": "Show terminal repository and workspace status",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T206", "T208", "T209"],
       "acceptance_criteria": [
         "Each terminal clearly shows its label, repository, branch, and worktree path.",
@@ -134,7 +134,7 @@
       "id": "T211",
       "order": 11,
       "title": "Remove terminals without deleting Git workspaces",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T203", "T204", "T205"],
       "acceptance_criteria": [
         "Removing a terminal terminates only its process tree and removes only its saved terminal definition.",
@@ -146,7 +146,7 @@
       "id": "T212",
       "order": 12,
       "title": "Add explicit safe cleanup for Agenza-created worktrees",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T207", "T208", "T211"],
       "acceptance_criteria": [
         "Worktree cleanup is a separate confirmed action available only for worktrees recorded as created by Agenza.",
@@ -158,7 +158,7 @@
       "id": "T213",
       "order": 13,
       "title": "Recover safely from stale workspace state",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T205", "T206", "T208", "T209", "T212"],
       "acceptance_criteria": [
         "Externally moved or deleted worktrees, branches, and repositories are detected during restore and refresh.",
@@ -170,7 +170,7 @@
       "id": "T214",
       "order": 14,
       "title": "Extend keyboard and accessibility behavior for dynamic panes",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T204", "T210", "T211"],
       "acceptance_criteria": [
         "Keyboard focus cycles predictably through any number of terminals after additions, removals, and reordering.",
@@ -182,7 +182,7 @@
       "id": "T215",
       "order": 15,
       "title": "Add Git workspace logging and user-facing error handling",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T206", "T208", "T209", "T212", "T213"],
       "acceptance_criteria": [
         "Git discovery and mutation failures provide concise recovery actions scoped to the affected terminal.",
@@ -194,7 +194,7 @@
       "id": "T216",
       "order": 16,
       "title": "Add automated tests for dynamic terminals and Git workspaces",
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T203",
         "T204",
@@ -218,7 +218,7 @@
       "id": "T217",
       "order": 17,
       "title": "Perform manual 0.2.0 workspace release testing",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T216"],
       "acceptance_criteria": [
         "Zero, one, two, and several terminal layouts remain usable across restart and restore.",
@@ -230,7 +230,7 @@
       "id": "T218",
       "order": 18,
       "title": "Create and validate the 0.2.0 distributable build",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T217"],
       "acceptance_criteria": [
         "Application and installer metadata use version 0.2.0 and the Windows installer is generated successfully.",
@@ -242,7 +242,7 @@
       "id": "T219",
       "order": 19,
       "title": "Finish 0.2.0 usage, safety, and troubleshooting documentation",
-      "status": "todo",
+      "status": "done",
       "depends_on": ["T217", "T218"],
       "acceptance_criteria": [
         "The README explains dynamic terminal management and new/existing branch and worktree workflows.",

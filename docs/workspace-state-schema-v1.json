@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenza.local/schemas/workspace-state-v1.json",
+  "title": "Agenza workspace state v1",
+  "description": "Persisted terminal definitions, workspace assignments, and Agenza-created worktree records for Agenza 0.2.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "activeTerminalId", "terminals"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "activeTerminalId": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/terminalId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "managedWorktrees": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/managedWorktree"
+      }
+    },
+    "terminals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/terminalDefinition"
+      }
+    }
+  },
+  "$defs": {
+    "managedWorktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["creationId", "repositoryRoot", "branchRef", "path"],
+      "properties": {
+        "creationId": {
+          "type": "string",
+          "pattern": "^worktree-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "repositoryRoot": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "branchRef": {
+          "type": "string",
+          "pattern": "^refs/heads/.+",
+          "maxLength": 1024
+        },
+        "path": {
+          "$ref": "#/$defs/absolutePath"
+        }
+      }
+    },
+    "terminalId": {
+      "type": "string",
+      "pattern": "^terminal-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "terminalDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "order", "createdAt", "updatedAt", "workspace"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/terminalId"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "workspace": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unassignedWorkspace"
+            },
+            {
+              "$ref": "#/$defs/folderWorkspace"
+            },
+            {
+              "$ref": "#/$defs/gitWorktreeWorkspace"
+            }
+          ]
+        }
+      }
+    },
+    "unassignedWorkspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "projectPath", "repository"],
+      "properties": {
+        "kind": {
+          "const": "unassigned"
+        },
+        "projectPath": {
+          "type": "null"
+        },
+        "repository": {
+          "type": "null"
+        }
+      }
+    },
+    "folderWorkspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "projectPath", "repository"],
+      "properties": {
+        "kind": {
+          "const": "folder"
+        },
+        "projectPath": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "repository": {
+          "type": "null"
+        }
+      }
+    },
+    "gitWorktreeWorkspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "projectPath", "repository"],
+      "properties": {
+        "kind": {
+          "const": "git-worktree"
+        },
+        "projectPath": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "repository": {
+          "$ref": "#/$defs/repositoryAssignment"
+        }
+      }
+    },
+    "repositoryAssignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "branch", "worktree"],
+      "properties": {
+        "root": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "worktree": {
+          "$ref": "#/$defs/worktreeAssignment"
+        }
+      }
+    },
+    "worktreeAssignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "ownership"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "ownership": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/externalOwnership"
+            },
+            {
+              "$ref": "#/$defs/agenzaOwnership"
+            }
+          ]
+        }
+      }
+    },
+    "externalOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "creationId"],
+      "properties": {
+        "kind": {
+          "const": "external"
+        },
+        "creationId": {
+          "type": "null"
+        }
+      }
+    },
+    "agenzaOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "creationId"],
+      "properties": {
+        "kind": {
+          "const": "agenza"
+        },
+        "creationId": {
+          "type": "string",
+          "pattern": "^worktree-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      }
+    },
+    "absolutePath": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 32767
+    }
+  }
+}

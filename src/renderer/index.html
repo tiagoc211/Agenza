@@ -19,14 +19,54 @@
             <p>Codex workspace</p>
           </div>
         </div>
-        <div class="workspace-status" aria-label="Workspace status">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span>2 independent terminals</span>
+        <div class="workspace-actions">
+          <div
+            class="workspace-status"
+            role="status"
+            aria-label="Workspace status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span class="status-dot" aria-hidden="true"></span>
+            <span data-terminal-count>No terminals</span>
+          </div>
+          <button
+            class="cleanup-worktree-button"
+            type="button"
+            aria-label="Clean an Agenza-created worktree"
+            aria-haspopup="dialog"
+            aria-controls="cleanup-worktree-dialog"
+            aria-expanded="false"
+            data-cleanup-worktree
+            disabled
+          >
+            Clean worktree
+          </button>
+          <span class="visually-hidden" role="status" aria-live="polite" data-cleanup-status></span>
+          <span
+            class="visually-hidden"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-workspace-announcement
+          ></span>
+          <button
+            class="add-terminal-button"
+            type="button"
+            aria-label="Add a new terminal"
+            data-add-terminal
+          >
+            <span aria-hidden="true">+</span>
+            Add terminal
+          </button>
         </div>
       </header>
 
       <main
         class="terminal-grid"
+        data-terminal-grid
+        data-terminal-count="0"
+        data-workspace-ready="false"
         aria-label="Codex terminal workspace"
         aria-describedby="terminal-keyboard-help"
         aria-keyshortcuts="F6 Shift+F6"
@@ -34,152 +74,374 @@
         <span class="visually-hidden" id="terminal-keyboard-help">
           Press F6 to focus the next terminal or Shift plus F6 to focus the previous terminal.
         </span>
-        <section
-          class="terminal-pane is-active"
-          data-pane-id="terminal-one"
-          data-session-state="waiting"
-          aria-labelledby="terminal-one-title"
-        >
-          <header class="pane-header">
-            <div class="pane-identity">
-              <span class="pane-number" aria-hidden="true">01</span>
-              <div>
-                <h2 id="terminal-one-title">Codex one</h2>
-                <p data-terminal-description>Choose a project folder</p>
-              </div>
-            </div>
-            <div class="pane-actions">
-              <button
-                class="pane-action-button pane-project-button"
-                type="button"
-                data-project-button
-              >
-                Choose folder
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Copy selected text from Codex terminal one"
-                data-copy-button
-                disabled
-              >
-                Copy
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Paste text into Codex terminal one"
-                data-paste-button
-                disabled
-              >
-                Paste
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Clear Codex terminal one"
-                data-clear-button
-              >
-                Clear
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Restart Codex terminal one"
-                data-restart-button
-                disabled
-              >
-                Restart
-              </button>
-              <span
-                class="pane-state"
-                role="status"
-                aria-atomic="true"
-                aria-live="polite"
-                data-terminal-state
-              >
-                Waiting
-              </span>
-            </div>
-          </header>
-          <div class="terminal-frame">
-            <div class="terminal-mount" id="terminal-one" aria-label="Codex terminal one"></div>
-          </div>
-        </section>
-
-        <section
-          class="terminal-pane"
-          data-pane-id="terminal-two"
-          data-session-state="waiting"
-          aria-labelledby="terminal-two-title"
-        >
-          <header class="pane-header">
-            <div class="pane-identity">
-              <span class="pane-number" aria-hidden="true">02</span>
-              <div>
-                <h2 id="terminal-two-title">Codex two</h2>
-                <p data-terminal-description>Choose a project folder</p>
-              </div>
-            </div>
-            <div class="pane-actions">
-              <button
-                class="pane-action-button pane-project-button"
-                type="button"
-                data-project-button
-              >
-                Choose folder
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Copy selected text from Codex terminal two"
-                data-copy-button
-                disabled
-              >
-                Copy
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Paste text into Codex terminal two"
-                data-paste-button
-                disabled
-              >
-                Paste
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Clear Codex terminal two"
-                data-clear-button
-              >
-                Clear
-              </button>
-              <button
-                class="pane-action-button"
-                type="button"
-                aria-label="Restart Codex terminal two"
-                data-restart-button
-                disabled
-              >
-                Restart
-              </button>
-              <span
-                class="pane-state"
-                role="status"
-                aria-atomic="true"
-                aria-live="polite"
-                data-terminal-state
-              >
-                Waiting
-              </span>
-            </div>
-          </header>
-          <div class="terminal-frame">
-            <div class="terminal-mount" id="terminal-two" aria-label="Codex terminal two"></div>
-          </div>
+        <section class="empty-workspace" data-empty-workspace>
+          <span class="empty-workspace-mark" aria-hidden="true">&gt;_</span>
+          <h2>No terminals open</h2>
+          <p>Add a terminal to choose a project folder and start Codex.</p>
+          <button
+            class="empty-workspace-action"
+            type="button"
+            aria-label="Add a new terminal"
+            data-empty-add-terminal
+          >
+            Add terminal
+          </button>
         </section>
       </main>
+
+      <template id="terminal-pane-template">
+        <section class="terminal-pane" data-session-state="waiting" aria-busy="false">
+          <header class="pane-header">
+            <div class="pane-identity">
+              <span class="pane-number" aria-hidden="true" data-terminal-number></span>
+              <div>
+                <h2 data-terminal-title></h2>
+                <p data-terminal-description>Choose a project folder</p>
+              </div>
+            </div>
+            <div class="pane-actions">
+              <button
+                class="pane-action-button pane-project-button"
+                type="button"
+                data-project-button
+              >
+                Choose folder
+              </button>
+              <button
+                class="pane-action-button pane-worktree-button"
+                type="button"
+                data-worktree-button
+                disabled
+              >
+                Git workspace
+              </button>
+              <button
+                class="pane-action-button pane-recovery-button"
+                type="button"
+                data-recovery-button
+                hidden
+              >
+                Detach saved workspace
+              </button>
+              <button class="pane-action-button" type="button" data-copy-button disabled>
+                Copy
+              </button>
+              <button class="pane-action-button" type="button" data-paste-button disabled>
+                Paste
+              </button>
+              <button class="pane-action-button" type="button" data-clear-button>Clear</button>
+              <button class="pane-action-button" type="button" data-restart-button disabled>
+                Restart
+              </button>
+              <button
+                class="pane-action-button pane-remove-button"
+                type="button"
+                data-remove-button
+              >
+                Remove
+              </button>
+              <span
+                class="pane-state"
+                role="status"
+                aria-atomic="true"
+                aria-live="polite"
+                data-terminal-state
+              >
+                Waiting
+              </span>
+            </div>
+          </header>
+          <section
+            class="workspace-summary"
+            data-git-summary
+            data-git-state="unavailable"
+            aria-label="Terminal Git workspace status"
+          >
+            <div class="workspace-summary-details">
+              <div class="workspace-summary-detail workspace-summary-repository">
+                <span>Repository</span>
+                <output data-git-repository title="Not inspected">Not inspected</output>
+              </div>
+              <div class="workspace-summary-detail">
+                <span>Branch</span>
+                <output data-git-branch title="Not inspected">&mdash;</output>
+              </div>
+              <div class="workspace-summary-detail workspace-summary-worktree">
+                <span>Worktree</span>
+                <output data-git-worktree title="No folder selected">&mdash;</output>
+              </div>
+              <div class="workspace-summary-detail">
+                <span>Changes</span>
+                <output class="git-change-summary" data-git-changes>Unavailable</output>
+              </div>
+            </div>
+            <div class="workspace-summary-footer">
+              <p role="status" aria-live="polite" data-git-status-message>
+                Choose a project folder to inspect Git.
+              </p>
+              <button class="git-refresh-button" type="button" data-git-refresh disabled>
+                Refresh Git
+              </button>
+            </div>
+          </section>
+          <div class="terminal-frame">
+            <div class="terminal-mount" data-terminal-mount></div>
+          </div>
+        </section>
+      </template>
+
+      <dialog
+        class="workspace-dialog"
+        id="git-workspace-dialog"
+        aria-labelledby="git-workspace-dialog-title"
+        aria-describedby="git-workspace-dialog-intro"
+        data-worktree-dialog
+      >
+        <form class="workspace-dialog-form" method="dialog" data-worktree-form>
+          <header class="workspace-dialog-header">
+            <div>
+              <p class="workspace-dialog-eyebrow">Git workspace</p>
+              <h2 id="git-workspace-dialog-title">Assign an isolated Git workspace</h2>
+            </div>
+            <button
+              class="workspace-dialog-close"
+              type="button"
+              data-cancel-worktree
+              aria-label="Close new worktree dialog"
+            >
+              &times;
+            </button>
+          </header>
+
+          <p
+            class="workspace-dialog-intro"
+            id="git-workspace-dialog-intro"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-worktree-intro
+          >
+            Loading the selected terminal repository&hellip;
+          </p>
+
+          <div class="workspace-dialog-fields" data-worktree-fields hidden>
+            <label class="workspace-dialog-field workspace-dialog-field-wide">
+              <span>Repository</span>
+              <output data-worktree-repository></output>
+            </label>
+            <label class="workspace-dialog-field workspace-dialog-field-wide">
+              <span>Assignment</span>
+              <select data-workspace-operation required>
+                <option value="create-new-branch-worktree">Create a new branch</option>
+                <option value="create-existing-branch-worktree">
+                  Use an existing local branch
+                </option>
+                <option value="attach-existing-worktree">Attach a registered worktree</option>
+              </select>
+            </label>
+            <label class="workspace-dialog-field" data-base-branch-field>
+              <span>Base branch</span>
+              <select data-worktree-base required></select>
+            </label>
+            <label class="workspace-dialog-field" data-new-branch-field>
+              <span>New branch</span>
+              <input
+                type="text"
+                maxlength="1024"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="agenza/my-task"
+                data-worktree-branch
+                required
+              />
+            </label>
+            <label class="workspace-dialog-field" data-existing-branch-field hidden>
+              <span>Existing local branch</span>
+              <select data-existing-branch required disabled></select>
+            </label>
+            <label
+              class="workspace-dialog-field workspace-dialog-field-wide"
+              data-existing-worktree-field
+              hidden
+            >
+              <span>Registered worktree</span>
+              <select data-existing-worktree required disabled></select>
+            </label>
+            <label
+              class="workspace-dialog-field workspace-dialog-field-wide"
+              data-worktree-path-field
+            >
+              <span>New worktree path</span>
+              <input
+                type="text"
+                maxlength="32767"
+                autocomplete="off"
+                spellcheck="false"
+                data-worktree-path
+                required
+              />
+            </label>
+          </div>
+
+          <p class="workspace-dialog-error" role="alert" data-worktree-error hidden></p>
+
+          <section class="workspace-preview" data-worktree-preview hidden>
+            <h3>Confirm this Git operation</h3>
+            <dl>
+              <div>
+                <dt>Repository</dt>
+                <dd data-preview-repository></dd>
+              </div>
+              <div>
+                <dt>Base branch</dt>
+                <dd data-preview-base></dd>
+              </div>
+              <div>
+                <dt data-preview-target-label>New branch</dt>
+                <dd data-preview-target></dd>
+              </div>
+              <div>
+                <dt>Worktree path</dt>
+                <dd data-preview-path></dd>
+              </div>
+            </dl>
+            <p data-preview-explanation>
+              Agenza will create only this local branch and worktree, then assign and start this
+              terminal. Other terminals and existing Git work remain unchanged.
+            </p>
+          </section>
+
+          <footer class="workspace-dialog-actions">
+            <button class="dialog-button" type="button" data-cancel-worktree>Cancel</button>
+            <button class="dialog-button dialog-button-secondary" type="button" data-preview-button>
+              Review operation
+            </button>
+            <button
+              class="dialog-button dialog-button-primary"
+              type="button"
+              data-confirm-worktree
+              disabled
+            >
+              Create branch and worktree
+            </button>
+          </footer>
+        </form>
+      </dialog>
+
+      <dialog
+        class="workspace-dialog cleanup-dialog"
+        id="cleanup-worktree-dialog"
+        aria-labelledby="cleanup-worktree-dialog-title"
+        aria-describedby="cleanup-worktree-dialog-intro"
+        data-cleanup-dialog
+      >
+        <form class="workspace-dialog-form" method="dialog" data-cleanup-form>
+          <header class="workspace-dialog-header">
+            <div>
+              <p class="workspace-dialog-eyebrow">Git cleanup</p>
+              <h2 id="cleanup-worktree-dialog-title">Remove an Agenza-created worktree</h2>
+            </div>
+            <button
+              class="workspace-dialog-close"
+              type="button"
+              data-cancel-cleanup
+              aria-label="Close worktree cleanup dialog"
+            >
+              &times;
+            </button>
+          </header>
+
+          <p class="workspace-dialog-intro" id="cleanup-worktree-dialog-intro">
+            This is separate from terminal removal. Agenza will never delete the Git branch.
+          </p>
+
+          <label class="workspace-dialog-field workspace-dialog-field-wide">
+            <span>Agenza-created worktree</span>
+            <select data-cleanup-worktree-select required></select>
+          </label>
+
+          <p class="workspace-dialog-error" role="alert" data-cleanup-error hidden></p>
+
+          <section class="workspace-preview cleanup-preview" data-cleanup-preview hidden>
+            <h3>Confirm worktree removal</h3>
+            <dl>
+              <div>
+                <dt>Repository</dt>
+                <dd data-cleanup-repository></dd>
+              </div>
+              <div>
+                <dt>Branch kept</dt>
+                <dd data-cleanup-branch></dd>
+              </div>
+              <div>
+                <dt>Worktree removed</dt>
+                <dd data-cleanup-path></dd>
+              </div>
+            </dl>
+            <p>
+              Git will remove this clean, unassigned worktree normally, without force. The local
+              branch and its commits will remain.
+            </p>
+          </section>
+
+          <footer class="workspace-dialog-actions">
+            <button class="dialog-button" type="button" data-cancel-cleanup>Cancel</button>
+            <button
+              class="dialog-button dialog-button-secondary"
+              type="button"
+              data-preview-cleanup
+            >
+              Check safety
+            </button>
+            <button
+              class="dialog-button dialog-button-danger"
+              type="button"
+              data-confirm-cleanup
+              disabled
+            >
+              Remove worktree, keep branch
+            </button>
+          </footer>
+        </form>
+      </dialog>
+
+      <dialog
+        class="workspace-dialog confirmation-dialog"
+        id="confirmation-dialog"
+        aria-labelledby="confirmation-dialog-title"
+        aria-describedby="confirmation-dialog-message"
+        data-confirmation-dialog
+      >
+        <form class="workspace-dialog-form" method="dialog" data-confirmation-form>
+          <header class="workspace-dialog-header">
+            <div>
+              <p class="workspace-dialog-eyebrow" data-confirmation-eyebrow></p>
+              <h2 id="confirmation-dialog-title" data-confirmation-title></h2>
+            </div>
+            <button
+              class="workspace-dialog-close"
+              type="button"
+              data-cancel-confirmation
+              aria-label="Cancel confirmation"
+            >
+              &times;
+            </button>
+          </header>
+
+          <p
+            class="workspace-dialog-intro confirmation-dialog-message"
+            id="confirmation-dialog-message"
+            data-confirmation-message
+          ></p>
+
+          <footer class="workspace-dialog-actions">
+            <button class="dialog-button" type="button" data-cancel-confirmation>Cancel</button>
+            <button class="dialog-button dialog-button-danger" type="button" data-confirm-action>
+              Confirm
+            </button>
+          </footer>
+        </form>
+      </dialog>
 
       <footer class="status-bar">
         <span>Local workspace</span>

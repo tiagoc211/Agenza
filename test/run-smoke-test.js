@@ -1,5 +1,6 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const { killProcessTree } = require('../src/terminal/process-tree');
@@ -9,7 +10,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const executablePath = path.join(projectRoot, 'out', 'Agenza-win32-x64', 'Agenza.exe');
 
 if (process.platform !== 'win32') {
-  console.error('The Agenza 0.1.0 smoke test requires Windows.');
+  console.error('The Agenza 0.2.0 smoke test requires Windows.');
   process.exit(1);
 }
 
@@ -24,8 +25,28 @@ const child = spawn(executablePath, ['--startup-check'], {
   stdio: 'inherit',
   windowsHide: false,
 });
+const temporaryWorkspacePath = path.join(os.tmpdir(), 'Agenza', `startup-check-${child.pid}`);
 
 let isComplete = false;
+const removeTemporaryWorkspace = () => {
+  if (!fs.existsSync(temporaryWorkspacePath)) {
+    return true;
+  }
+
+  try {
+    fs.rmSync(temporaryWorkspacePath, {
+      force: true,
+      maxRetries: 10,
+      recursive: true,
+      retryDelay: 100,
+    });
+    return true;
+  } catch (error) {
+    console.error(`Unable to clean up the smoke-test workspace: ${error.message}`);
+    return false;
+  }
+};
+
 const finish = (exitCode) => {
   if (isComplete) {
     return;
@@ -33,7 +54,7 @@ const finish = (exitCode) => {
 
   isComplete = true;
   clearTimeout(timeout);
-  process.exitCode = exitCode;
+  process.exitCode = removeTemporaryWorkspace() ? exitCode : 1;
 };
 
 const timeout = setTimeout(() => {
