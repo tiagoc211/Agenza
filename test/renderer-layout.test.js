@@ -6,6 +6,28 @@ const html = readFileSync('src/renderer/index.html', 'utf8');
 const renderer = readFileSync('src/renderer/index.js', 'utf8');
 const styles = readFileSync('src/renderer/styles.css', 'utf8');
 
+test('requires an explicit Git project before showing orchestration goal controls', () => {
+  assert.match(html, /data-orchestration-choose-project/);
+  assert.match(html, /data-orchestration-goal-step hidden/);
+  assert.match(html, /data-orchestration-results hidden/);
+  assert.match(html, /data-orchestration-goal/);
+  assert.match(html, /data-orchestration-max-agents/);
+  assert.match(html, /data-orchestration-start/);
+  assert.match(html, /data-orchestration-stop/);
+  assert.match(html, /data-orchestration-tasks/);
+  assert.match(html, /data-orchestration-agents/);
+  assert.match(renderer, /window\.agenza\.orchestration\.start/);
+  assert.match(renderer, /window\.agenza\.orchestration\.stop/);
+  assert.match(renderer, /window\.agenza\.orchestration\.onEvent/);
+  assert.match(renderer, /focusAgentTerminal/);
+  assert.match(renderer, /const updateOrchestrationProjectContext/);
+  assert.match(renderer, /activeView\?\.gitStatus\?\.repositoryRoot/);
+  assert.match(renderer, /orchestrationGoalStep\.hidden = !isValidProject/);
+  assert.match(renderer, /orchestration\.project\?\.sourceTerminalId/);
+  assert.doesNotMatch(renderer, /orchestration\.start\([^)]*projectPath/s);
+  assert.match(styles, /\.orchestration-panel/);
+});
+
 test('builds terminal panes from one reusable template instead of fixed pane ids', () => {
   assert.equal((html.match(/class="terminal-mount"/g) ?? []).length, 1);
   assert.equal((html.match(/class="terminal-pane"/g) ?? []).length, 1);

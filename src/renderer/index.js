@@ -57,6 +57,24 @@ const confirmationTitle = document.querySelector('[data-confirmation-title]');
 const confirmationMessage = document.querySelector('[data-confirmation-message]');
 const confirmActionButton = document.querySelector('[data-confirm-action]');
 const cancelConfirmationButtons = document.querySelectorAll('[data-cancel-confirmation]');
+const orchestrationForm = document.querySelector('[data-orchestration-form]');
+const orchestrationTitle = document.querySelector('[data-orchestration-title]');
+const orchestrationProjectStep = document.querySelector('[data-orchestration-project-step]');
+const orchestrationProjectName = document.querySelector('[data-orchestration-project-name]');
+const orchestrationProjectPath = document.querySelector('[data-orchestration-project-path]');
+const orchestrationChooseProjectButton = document.querySelector(
+  '[data-orchestration-choose-project]',
+);
+const orchestrationGoalStep = document.querySelector('[data-orchestration-goal-step]');
+const orchestrationGoal = document.querySelector('[data-orchestration-goal]');
+const orchestrationMaxAgents = document.querySelector('[data-orchestration-max-agents]');
+const orchestrationStartButton = document.querySelector('[data-orchestration-start]');
+const orchestrationStopButton = document.querySelector('[data-orchestration-stop]');
+const orchestrationStatus = document.querySelector('[data-orchestration-status]');
+const orchestrationMessage = document.querySelector('[data-orchestration-message]');
+const orchestrationResults = document.querySelector('[data-orchestration-results]');
+const orchestrationTasks = document.querySelector('[data-orchestration-tasks]');
+const orchestrationAgents = document.querySelector('[data-orchestration-agents]');
 
 const terminalTheme = {
   background: '#090c12',
@@ -93,6 +111,8 @@ let confirmationDialogState = null;
 let managedWorktrees = [];
 let managedWorktreeRefreshPending = false;
 let managedWorktreeRefreshPromise = null;
+let currentOrchestration = null;
+let orchestrationProjectSelectionPending = false;
 
 const workspaceOperationTypes = Object.freeze({
   attachWorktree: 'attach-existing-worktree',
@@ -179,6 +199,7 @@ const setActivePane = (activePane, { persist = true } = {}) => {
   }
 
   activeTerminalId = nextActiveId;
+  updateOrchestrationProjectContext();
 
   if (persist && nextActiveId !== previousActiveId) {
     window.agenza.terminal.activate(nextActiveId).catch(() => {
@@ -285,13 +306,13 @@ const setControlsBusy = (view, isBusy) => {
   view.pane.setAttribute('aria-busy', String(isBusy));
   const canInspectGit = Boolean(view.projectFolder || view.gitRecoveryPath);
   view.clearButton.disabled = isBusy;
-  view.projectButton.disabled = isBusy;
-  view.worktreeButton.disabled = isBusy || !canInspectGit;
+  view.projectButton.disabled = isBusy || view.isOrchestrationManaged;
+  view.worktreeButton.disabled = isBusy || view.isOrchestrationManaged || !canInspectGit;
   view.recoveryButton.disabled = isBusy;
   view.gitRefreshButton.disabled = isBusy || view.isGitRefreshing || !canInspectGit;
   view.pasteButton.disabled = isBusy || !view.isConnected;
-  view.restartButton.disabled = isBusy || !view.projectFolder;
-  view.removeButton.disabled = isBusy;
+  view.restartButton.disabled = isBusy || view.isOrchestrationManaged || !view.projectFolder;
+  view.removeButton.disabled = isBusy || view.isOrchestrationManaged;
 };
 
 const displayBranchName = (branch) => {
@@ -642,6 +663,7 @@ const refreshGitStatus = async (view) => {
   view.gitRefreshButton.textContent = 'Refreshing...';
   view.gitSummary.dataset.gitState = 'refreshing';
   view.gitStatusMessage.textContent = 'Inspecting this terminal workspace...';
+  updateOrchestrationProjectContext();
 
   try {
     const result = await window.agenza.git.status(view.id);
@@ -697,6 +719,7 @@ const refreshGitStatus = async (view) => {
     view.isGitRefreshing = false;
     view.gitRefreshButton.textContent = 'Refresh Git';
     view.gitRefreshButton.disabled = view.isBusy || (!view.projectFolder && !view.gitRecoveryPath);
+    updateOrchestrationProjectContext();
   }
 };
 
@@ -1190,8 +1213,9 @@ const chooseProjectFolder = async (view) => {
     view.projectButton.textContent = view.projectFolder ? 'Change folder' : 'Choose folder';
 
     if (refreshAfterSelection) {
-      refreshGitStatus(view);
+      await refreshGitStatus(view);
     }
+    updateOrchestrationProjectContext();
   }
 };
 
@@ -1618,6 +1642,274 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
   return view;
 };
 
+const activeOrchestrationStatuses = new Set(['created', 'planning', 'running', 'reviewing']);
+let knownOrchestrations = [];
+
+const replaceOrchestrationList = (container, items, createItem, placeholder) => {
+  container.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement('li');
+    empty.className = 'orchestration-placeholder';
+    empty.textContent = placeholder;
+    container.append(empty);
+    return;
+  }
+  for (const item of items) container.append(createItem(item));
+};
+
+const createOrchestrationItemCopy = (title, detail) => {
+  const copy = document.createElement('span');
+  copy.className = 'orchestration-item-copy';
+  const heading = document.createElement('strong');
+  heading.textContent = title;
+  const metadata = document.createElement('small');
+  metadata.textContent = detail;
+  copy.append(heading, metadata);
+  return copy;
+};
+
+const syncOrchestrationTerminals = async () => {
+  const catalog = await window.agenza.terminal.list();
+  const snapshots = Array.isArray(catalog) ? catalog : catalog.sessions;
+  for (const snapshot of snapshots) {
+    if (!terminalViews.has(snapshot.id)) createTerminalView(snapshot, { activate: false });
+  }
+};
+
+const getProjectDisplayName = (projectPath) =>
+  projectPath.split(/[\\/]/).filter(Boolean).at(-1) ?? projectPath;
+
+const updateOrchestrationProjectContext = () => {
+  const isActive =
+    currentOrchestration && activeOrchestrationStatuses.has(currentOrchestration.status);
+  const activeView = terminalViews.get(activeTerminalId);
+  const projectPath = isActive
+    ? currentOrchestration.project?.projectPath
+    : activeView?.projectFolder;
+  const isInspecting = !isActive && Boolean(projectPath && activeView?.isGitRefreshing);
+  const isValidProject = Boolean(
+    isActive ||
+    (projectPath &&
+      activeView?.gitStatus?.repositoryRoot &&
+      activeView.gitStatus.branch &&
+      !activeView.gitStatus.detached),
+  );
+
+  orchestrationProjectStep.dataset.projectState = isValidProject
+    ? 'ready'
+    : isInspecting
+      ? 'inspecting'
+      : 'required';
+  orchestrationProjectName.textContent = projectPath
+    ? getProjectDisplayName(projectPath)
+    : 'No project selected';
+  orchestrationProjectPath.textContent = projectPath
+    ? isInspecting
+      ? `Checking Git workspace: ${projectPath}`
+      : projectPath
+    : 'Choose the Git project that the Orchestrator should analyse and modify.';
+  orchestrationProjectPath.title = projectPath ?? '';
+  orchestrationChooseProjectButton.textContent = projectPath
+    ? 'Change project folder'
+    : 'Choose project folder';
+  orchestrationChooseProjectButton.disabled = Boolean(
+    isActive || orchestrationProjectSelectionPending,
+  );
+  orchestrationGoalStep.hidden = !isValidProject;
+  orchestrationResults.hidden = !currentOrchestration;
+  orchestrationTitle.textContent = isValidProject ? 'Orchestrator goal' : 'Choose a Git project';
+  orchestrationStatus.textContent = isActive
+    ? currentOrchestration.status
+    : orchestrationProjectSelectionPending
+      ? 'Selecting project'
+      : isInspecting
+        ? 'Checking project'
+        : isValidProject
+          ? (currentOrchestration?.status ?? 'Ready')
+          : 'Project required';
+  orchestrationStartButton.disabled = Boolean(isActive || !isValidProject);
+  orchestrationGoal.disabled = Boolean(isActive || !isValidProject);
+  orchestrationMaxAgents.disabled = Boolean(isActive || !isValidProject);
+  orchestrationStopButton.disabled = !isActive;
+};
+
+const updateOrchestrationManagedTerminals = () => {
+  const managedIds = new Set(
+    knownOrchestrations.flatMap((orchestration) => {
+      if (!activeOrchestrationStatuses.has(orchestration.status)) return [];
+      return [
+        orchestration.project?.sourceTerminalId,
+        ...orchestration.agents
+          .filter(
+            (agent) =>
+              agent.terminalId && !['completed', 'failed', 'stopped'].includes(agent.status),
+          )
+          .map(({ terminalId }) => terminalId),
+      ].filter(Boolean);
+    }),
+  );
+  for (const view of terminalViews.values()) {
+    view.isOrchestrationManaged = managedIds.has(view.id);
+    setControlsBusy(view, view.isBusy);
+    if (view.isOrchestrationManaged) {
+      view.restartButton.title = 'This worktree is currently owned by an App Server agent.';
+    } else {
+      view.restartButton.title = '';
+    }
+  }
+};
+
+const focusAgentTerminal = async (terminalId) => {
+  await syncOrchestrationTerminals();
+  const view = terminalViews.get(terminalId);
+  if (!view) {
+    orchestrationMessage.textContent = 'The associated terminal is no longer available.';
+    return;
+  }
+  setActivePane(view.pane);
+  view.pane.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  view.terminal.focus();
+};
+
+const renderOrchestration = (orchestration) => {
+  currentOrchestration = orchestration ?? null;
+  updateOrchestrationProjectContext();
+
+  replaceOrchestrationList(
+    orchestrationTasks,
+    orchestration?.tasks ?? [],
+    (task) => {
+      const item = document.createElement('li');
+      const dependencyCount = task.dependencies.length;
+      item.append(
+        createOrchestrationItemCopy(
+          task.title,
+          `${task.status}${dependencyCount ? ` · ${dependencyCount} dependencies` : ''}`,
+        ),
+      );
+      return item;
+    },
+    orchestration?.status === 'planning' ? 'Planning tasks…' : 'No plan yet.',
+  );
+  replaceOrchestrationList(
+    orchestrationAgents,
+    orchestration?.agents ?? [],
+    (agent) => {
+      const item = document.createElement('li');
+      item.append(
+        createOrchestrationItemCopy(
+          agent.name,
+          `${agent.role} · ${agent.provider}${agent.model ? `/${agent.model}` : ''} · ${agent.status}`,
+        ),
+      );
+      if (agent.terminalId) {
+        const button = document.createElement('button');
+        button.className = 'orchestration-agent-button';
+        button.type = 'button';
+        button.textContent = 'Open workspace';
+        button.addEventListener('click', () => focusAgentTerminal(agent.terminalId));
+        item.append(button);
+      }
+      return item;
+    },
+    'No agents yet.',
+  );
+  updateOrchestrationManagedTerminals();
+};
+
+const initializeOrchestration = async () => {
+  try {
+    const catalog = await window.agenza.orchestration.list();
+    knownOrchestrations = catalog.orchestrations ?? [];
+    renderOrchestration(knownOrchestrations.at(-1) ?? null);
+    if (catalog.issue) orchestrationMessage.textContent = catalog.issue;
+  } catch (error) {
+    orchestrationMessage.textContent = formatUserFacingError(
+      error,
+      'Agenza could not load orchestration state.',
+    );
+  }
+};
+
+const disposeOrchestrationSubscription = window.agenza.orchestration.onEvent(async (event) => {
+  const index = knownOrchestrations.findIndex(({ id }) => id === event.orchestrationId);
+  if (index === -1) knownOrchestrations.push(event.orchestration);
+  else knownOrchestrations[index] = event.orchestration;
+  try {
+    await syncOrchestrationTerminals();
+  } catch {
+    // The domain state remains visible even if a terminal refresh fails.
+  }
+  renderOrchestration(event.orchestration);
+});
+
+orchestrationChooseProjectButton.addEventListener('click', async () => {
+  orchestrationMessage.textContent = '';
+  orchestrationProjectSelectionPending = true;
+  updateOrchestrationProjectContext();
+  try {
+    let view = terminalViews.get(activeTerminalId);
+    if (!view) view = await addTerminal();
+    if (!view) {
+      orchestrationMessage.textContent = 'A terminal could not be created for the project.';
+      return;
+    }
+    setActivePane(view.pane);
+    await chooseProjectFolder(view);
+  } catch (error) {
+    orchestrationMessage.textContent = formatUserFacingError(
+      error,
+      'Unable to select the orchestration project.',
+    );
+  } finally {
+    orchestrationProjectSelectionPending = false;
+    updateOrchestrationProjectContext();
+  }
+});
+
+orchestrationForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  orchestrationMessage.textContent = '';
+  if (!activeTerminalId) {
+    orchestrationMessage.textContent = 'Select an active project terminal first.';
+    return;
+  }
+  orchestrationStartButton.disabled = true;
+  try {
+    const orchestration = await window.agenza.orchestration.start(
+      orchestrationGoal.value,
+      { maxAgents: Number.parseInt(orchestrationMaxAgents.value, 10) },
+      activeTerminalId,
+    );
+    knownOrchestrations.push(orchestration);
+    renderOrchestration(orchestration);
+  } catch (error) {
+    orchestrationMessage.textContent = formatUserFacingError(
+      error,
+      'Unable to start orchestration.',
+    );
+    orchestrationStartButton.disabled = false;
+  }
+});
+
+orchestrationStopButton.addEventListener('click', async () => {
+  if (!currentOrchestration) return;
+  orchestrationStopButton.disabled = true;
+  orchestrationMessage.textContent = '';
+  try {
+    const orchestration = await window.agenza.orchestration.stop(currentOrchestration.id);
+    const index = knownOrchestrations.findIndex(({ id }) => id === orchestration.id);
+    if (index >= 0) knownOrchestrations[index] = orchestration;
+    renderOrchestration(orchestration);
+  } catch (error) {
+    orchestrationMessage.textContent = formatUserFacingError(
+      error,
+      'Unable to stop orchestration.',
+    );
+    orchestrationStopButton.disabled = false;
+  }
+});
+
 const addTerminal = async () => {
   addTerminalButton.disabled = true;
   emptyAddTerminalButton.disabled = true;
@@ -1627,10 +1919,12 @@ const addTerminal = async () => {
     const view = createTerminalView(snapshot);
     announceWorkspace(`${view.label} added. ${terminalViews.size} terminals open.`);
     addTerminalButton.title = '';
+    return view;
   } catch (error) {
     addTerminalButton.title = formatUserFacingError(error, 'Unable to add a terminal.');
     terminalCount.textContent = 'Unable to add terminal';
     announceWorkspace(addTerminalButton.title);
+    return null;
   } finally {
     addTerminalButton.disabled = false;
     emptyAddTerminalButton.disabled = false;
@@ -1826,6 +2120,7 @@ const initializeWorkspace = async () => {
     }
 
     await refreshManagedWorktrees();
+    await initializeOrchestration();
   } catch (error) {
     emptyWorkspace.querySelector('p').textContent = formatUserFacingError(
       error,
@@ -1845,6 +2140,7 @@ window.addEventListener('beforeunload', () => {
   resizeObserver.disconnect();
   disposeDataSubscription();
   disposeExitSubscription();
+  disposeOrchestrationSubscription();
 
   for (const { terminal } of terminalViews.values()) {
     terminal.dispose();
