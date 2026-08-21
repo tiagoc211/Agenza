@@ -7,6 +7,91 @@ const { MAX_RESULT_LENGTH } = require('../orchestration-model');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const MAX_JSON_RPC_LINE_LENGTH = 8 * 1024 * 1024;
+const MAX_ACTIVITY_TEXT_LENGTH = 16 * 1024;
+
+const sanitizeActivityText = (value) =>
+  String(value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, '')
+    .slice(0, MAX_ACTIVITY_TEXT_LENGTH);
+
+const summarizeItem = (item, phase) => {
+  const type = item?.type;
+  if (type === 'commandExecution') {
+    const command = Array.isArray(item.command) ? item.command.join(' ') : item.command;
+    if (phase === 'started') {
+      return { kind: 'command', text: command ? `$ ${command}` : 'Command started' };
+    }
+    const status = item.status === 'failed' ? 'failed' : 'completed';
+    const exitCode = Number.isInteger(item.exitCode) ? ` (exit ${item.exitCode})` : '';
+    return { kind: 'command', text: `Command ${status}${exitCode}` };
+  }
+  if (type === 'fileChange') {
+    const count = Array.isArray(item.changes) ? item.changes.length : 0;
+    return {
+      kind: 'file-change',
+      text: `${phase === 'started' ? 'Applying' : 'Applied'} file changes${count ? ` (${count})` : ''}`,
+    };
+  }
+  if (type === 'mcpToolCall') {
+    const tool = [item.server, item.tool].filter(Boolean).join('/');
+    return { kind: 'tool', text: `${tool || 'Tool'} ${phase}` };
+  }
+  if (type === 'webSearch') {
+    return { kind: 'tool', text: `Web search ${phase}` };
+  }
+  if (type === 'agentMessage' && phase === 'completed') {
+    return { kind: 'message', text: item.text };
+  }
+  return null;
+};
+
+const normalizeActivityNotification = (method, params, runtime) => {
+  const itemId = params?.itemId ?? params?.item?.id ?? null;
+  let activity = null;
+  if (method === 'item/started' || method === 'item/completed') {
+    const phase = method === 'item/started' ? 'started' : 'completed';
+    const summary = summarizeItem(params.item, phase);
+    if (summary) activity = { ...summary, phase };
+  } else if (method === 'item/agentMessage/delta') {
+    runtime.streamedMessageItems.add(itemId ?? 'agent-message');
+    activity = { kind: 'message', phase: 'delta', text: params.delta };
+  } else if (method === 'item/plan/delta') {
+    activity = { kind: 'plan', phase: 'delta', text: params.delta };
+  } else if (method === 'item/reasoning/summaryTextDelta') {
+    activity = { kind: 'reasoning', phase: 'delta', text: params.delta };
+  } else if (method === 'item/commandExecution/outputDelta') {
+    activity = {
+      kind: 'command-output',
+      phase: 'delta',
+      stream: params.stream === 'stderr' ? 'stderr' : 'stdout',
+      text: params.delta,
+    };
+  } else if (method === 'turn/diff/updated') {
+    activity = { kind: 'file-change', phase: 'completed', text: 'Working tree diff updated' };
+  } else if (method === 'warning' || method === 'error') {
+    activity = { kind: 'notice', phase: 'completed', text: params.message ?? method };
+  }
+
+  if (!activity) return null;
+  if (
+    method === 'item/completed' &&
+    params.item?.type === 'agentMessage' &&
+    runtime.streamedMessageItems.has(itemId ?? 'agent-message')
+  ) {
+    activity.text = '';
+  }
+  const text = sanitizeActivityText(activity.text);
+  if (!text && activity.phase !== 'completed') return null;
+  return Object.freeze({
+    kind: activity.kind,
+    phase: activity.phase,
+    itemId: typeof itemId === 'string' ? itemId : null,
+    stream: activity.stream ?? null,
+    text,
+  });
+};
 
 const createCodexAppServerProcess = ({ environment = process.env, spawnProcess = spawn } = {}) => {
   const command =
@@ -108,6 +193,7 @@ class CodexAppServerProvider {
       model,
       result: null,
       status: 'starting',
+      streamedMessageItems: new Set(),
       threadId,
       turnId: null,
     };
@@ -171,6 +257,7 @@ class CodexAppServerProvider {
     runtime.result = null;
     runtime.error = null;
     runtime.lastMessage = '';
+    runtime.streamedMessageItems.clear();
     this._emit({ type: 'working', runtime });
     return copyRuntime(runtime);
   }
@@ -367,6 +454,9 @@ class CodexAppServerProvider {
     const runtime = this._runtimeForParams(params);
     if (!runtime) return;
 
+    const activity = normalizeActivityNotification(method, params, runtime);
+    if (activity) this._emit({ type: 'activity', runtime, activity });
+
     if (method === 'turn/started') {
       runtime.turnId = params.turn?.id ?? runtime.turnId;
       runtime.status = 'working';
@@ -435,8 +525,15 @@ class CodexAppServerProvider {
     this._completionWaiters.delete(runtime.agentId);
   }
 
-  _emit({ type, runtime }) {
-    this._events.emit('event', Object.freeze({ type, runtime: copyRuntime(runtime) }));
+  _emit({ type, runtime, activity = null }) {
+    this._events.emit(
+      'event',
+      Object.freeze({
+        type,
+        runtime: copyRuntime(runtime),
+        ...(activity ? { activity } : {}),
+      }),
+    );
   }
 
   _requireRuntime(agentId) {
@@ -449,6 +546,9 @@ class CodexAppServerProvider {
 module.exports = {
   CodexAppServerProvider,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  MAX_ACTIVITY_TEXT_LENGTH,
   MAX_JSON_RPC_LINE_LENGTH,
   createCodexAppServerProcess,
+  normalizeActivityNotification,
+  sanitizeActivityText,
 };

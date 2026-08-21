@@ -119,6 +119,19 @@
         "Repository, branch, worktree, and change status refresh without starting a second Codex process.",
         "Automated renderer tests cover the transition from unassigned terminal to managed worktree."
       ]
+    },
+    {
+      "id": "T310",
+      "order": 10,
+      "title": "Stream agent activity into managed terminals",
+      "status": "done",
+      "depends_on": ["T309"],
+      "acceptance_criteria": [
+        "Managed agent terminals display live structured commands, output, file changes, plans, and agent messages.",
+        "Activity is sanitized, bounded, transient, and excluded from persisted orchestration state and application logs.",
+        "High-frequency activity events do not trigger full orchestration or Git workspace refreshes.",
+        "Automated tests cover provider normalization, service forwarding, and renderer activity handling."
+      ]
     }
   ]
 }

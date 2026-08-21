@@ -14,6 +14,39 @@ const {
 const { createAgentInstructions, createOrchestratorInstructions } = require('./prompt-factory');
 const { MAX_PERSISTED_ORCHESTRATIONS, recoverInterruptedState } = require('./orchestration-state');
 
+const MAX_ACTIVITY_TEXT_LENGTH = 16 * 1024;
+const ACTIVITY_KINDS = new Set([
+  'command',
+  'command-output',
+  'file-change',
+  'message',
+  'notice',
+  'plan',
+  'reasoning',
+  'tool',
+]);
+const ACTIVITY_PHASES = new Set(['started', 'delta', 'completed']);
+
+const normalizeProviderActivity = (activity) => {
+  if (!activity || !ACTIVITY_KINDS.has(activity.kind) || !ACTIVITY_PHASES.has(activity.phase)) {
+    return null;
+  }
+  const text = String(activity.text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, '')
+    .slice(0, MAX_ACTIVITY_TEXT_LENGTH);
+  if (!text && activity.phase !== 'completed') return null;
+  return Object.freeze({
+    kind: activity.kind,
+    phase: activity.phase,
+    itemId: typeof activity.itemId === 'string' ? activity.itemId.slice(0, 200) : null,
+    stream:
+      activity.stream === 'stderr' ? 'stderr' : activity.stream === 'stdout' ? 'stdout' : null,
+    text,
+  });
+};
+
 class OrchestrationService {
   constructor({
     committer,
@@ -522,13 +555,21 @@ class OrchestrationService {
   }
 
   _handleProviderEvent(providerName, event) {
-    if (!['working', 'waiting'].includes(event?.type)) return;
+    if (!event?.runtime?.agentId) return;
     const match = this._state?.orchestrations.find((orchestration) =>
       orchestration.agents.some(
         (agent) => agent.id === event.runtime.agentId && agent.provider === providerName,
       ),
     );
     if (!match || FINAL_ORCHESTRATION_STATUSES.has(match.status)) return;
+    if (event.type === 'activity') {
+      const activity = normalizeProviderActivity(event.activity);
+      const agent = match.agents.find(({ id }) => id === event.runtime.agentId);
+      if (!activity || !agent?.terminalId || FINAL_AGENT_STATUSES.has(agent.status)) return;
+      this._publishActivity(match.id, agent, activity);
+      return;
+    }
+    if (!['working', 'waiting'].includes(event.type)) return;
     this._mutate(match.id, (draft) => {
       const agent = draft.agents.find(({ id }) => id === event.runtime.agentId);
       if (!agent || FINAL_AGENT_STATUSES.has(agent.status)) return;
@@ -542,6 +583,19 @@ class OrchestrationService {
         }),
       )
       .catch(() => undefined);
+  }
+
+  _publishActivity(orchestrationId, agent, activity) {
+    const event = Object.freeze({
+      sequence: ++this._sequence,
+      timestamp: this._now(),
+      type: 'agent:activity',
+      orchestrationId,
+      agentId: agent.id,
+      terminalId: agent.terminalId,
+      activity,
+    });
+    for (const listener of this._listeners) listener(event);
   }
 
   async _append(orchestration) {

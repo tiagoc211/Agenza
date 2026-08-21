@@ -294,6 +294,28 @@ test('refreshes an existing agent pane after its worktree is assigned', () => {
   assert.doesNotMatch(syncImplementation, /launchSession|terminal\.start|terminal\.restart/);
 });
 
+test('streams transient agent activity into its managed terminal without full UI refreshes', () => {
+  assert.match(renderer, /const writeAgentActivity/);
+  assert.match(renderer, /agentActivityItems: new Set\(\)/);
+  assert.match(renderer, /activity\.kind === 'notice' \|\| activity\.stream === 'stderr'/);
+  assert.match(renderer, /view\.terminal\.write\(text\)/);
+  assert.match(renderer, /const sanitizeTerminalActivityText/);
+  assert.match(renderer, /replace\(\/\\u001b/);
+
+  const subscriptionStart = renderer.indexOf(
+    'const disposeOrchestrationSubscription = window.agenza.orchestration.onEvent',
+  );
+  const domainUpdateStart = renderer.indexOf(
+    'const index = knownOrchestrations.findIndex',
+    subscriptionStart,
+  );
+  const activityFastPath = renderer.slice(subscriptionStart, domainUpdateStart);
+  assert.match(activityFastPath, /event\?\.type === 'agent:activity'/);
+  assert.match(activityFastPath, /await renderAgentActivity\(event\)/);
+  assert.match(activityFastPath, /return/);
+  assert.doesNotMatch(activityFastPath, /refreshProjectWorkspaces|renderOrchestration/);
+});
+
 test('preserves independent clear, restart, and terminal-local recovery behavior', () => {
   assert.match(renderer, /window\.agenza\.terminal\.write\(view\.id, '\\x0c'\)/);
   assert.match(renderer, /view\.terminal\.reset\(\)/);

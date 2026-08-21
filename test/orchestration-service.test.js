@@ -48,6 +48,9 @@ class FakeProvider {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+  emit(event) {
+    for (const listener of this.listeners) listener(event);
+  }
   dispose() {}
 }
 
@@ -175,6 +178,7 @@ test('plans, provisions, schedules dependencies, commits, and completes through 
 
 test('stops live workers while preserving their terminal and worktree identities', async () => {
   let state = createDefaultOrchestrationState();
+  const logEntries = [];
   const provider = new BlockingWorkerProvider({
     summary: 'One task.',
     tasks: [task('worker')],
@@ -183,6 +187,7 @@ test('stops live workers while preserving their terminal and worktree identities
   providers.register('codex', provider);
   const service = new OrchestrationService({
     committer: { commit: async () => ({ commit: null, created: false }) },
+    logger: { info: (...entry) => logEntries.push(entry) },
     providerRegistry: providers,
     stateStore: {
       load: async () => ({ issue: null, state: JSON.parse(JSON.stringify(state)) }),
@@ -210,10 +215,12 @@ test('stops live workers while preserving their terminal and worktree identities
   });
   await service.initialize();
   let resolveStarted;
+  const events = [];
   const workerStarted = new Promise((resolve) => {
     resolveStarted = resolve;
   });
   service.onEvent((event) => {
+    events.push(event);
     if (event.type === 'agent:started') resolveStarted();
   });
   const orchestration = await service.start({
@@ -222,6 +229,26 @@ test('stops live workers while preserving their terminal and worktree identities
     projectWorkspaceId: 'workspace-source',
   });
   await workerStarted;
+  const liveWorker = service.get(orchestration.id).agents.find(({ taskId }) => taskId !== null);
+  provider.emit({
+    type: 'activity',
+    runtime: provider.getStatus(liveWorker.id),
+    activity: {
+      kind: 'command-output',
+      phase: 'delta',
+      itemId: 'command-1',
+      stream: 'stdout',
+      text: 'private output\u001b[31m',
+    },
+  });
+  const activityEvent = events.find(({ type }) => type === 'agent:activity');
+  assert.equal(activityEvent.agentId, liveWorker.id);
+  assert.equal(activityEvent.terminalId, 'terminal-worker');
+  assert.equal(activityEvent.activity.text, 'private output');
+  assert.equal(Object.hasOwn(activityEvent, 'orchestration'), false);
+  assert.equal(JSON.stringify(state).includes('private output'), false);
+  assert.equal(JSON.stringify(logEntries).includes('private output'), false);
+
   const stopped = await service.stop(orchestration.id);
   await service.flush();
 

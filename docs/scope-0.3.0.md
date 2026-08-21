@@ -62,8 +62,9 @@ tasks through a smaller reusable agent pool.
 5. Agenza validates task IDs, dependencies, priorities, ownership hints, and limits.
 6. For each ready task, Agenza creates a terminal definition and a new branch/worktree from the
    project base revision, then starts a Codex App Server thread in that worktree.
-7. Structured provider events update agent and task state. A dependent task is not started until
-   every declared dependency completed.
+7. Structured provider events update agent and task state and stream transient readable activity to
+   each worker's terminal pane. A dependent task is not started until every declared dependency
+   completed.
 8. If enabled, Agenza commits the completed worktree with a fixed local message.
 9. The run completes with branches and worktrees preserved and marked ready for review. No merge or
    cleanup happens automatically.

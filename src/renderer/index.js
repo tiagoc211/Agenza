@@ -678,9 +678,13 @@ const applyTerminalWorkspaceSnapshot = (view, snapshot) => {
   }
 
   if (previousKind === 'unassigned' && nextStatus.status === 'available' && !view.isConnected) {
-    view.terminal.reset();
-    view.terminal.writeln(`\x1b[1;36mAgenza · ${view.label}\x1b[0m`);
-    view.terminal.writeln('');
+    if (!view.hasAgentActivity) {
+      view.terminal.reset();
+      view.terminal.writeln(`\x1b[1;36mAgenza · ${view.label}\x1b[0m`);
+      view.terminal.writeln('');
+    } else {
+      view.terminal.writeln('');
+    }
     view.terminal.writeln(`\x1b[90mAgent workspace assigned: ${nextWorkspace.projectPath}\x1b[0m`);
     if (nextWorkspace.kind === 'git-worktree') {
       view.terminal.writeln(
@@ -1600,6 +1604,8 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
     gitStatusMessage: pane.querySelector('[data-git-status-message]'),
     gitSummary: pane.querySelector('[data-git-summary]'),
     gitWorktree: pane.querySelector('[data-git-worktree]'),
+    agentActivityItems: new Set(),
+    hasAgentActivity: false,
     id: snapshot.id,
     isBusy: false,
     isConnected: snapshot.isRunning,
@@ -1679,6 +1685,7 @@ const createTerminalView = (snapshot, { activate = true } = {}) => {
       window.agenza.terminal.write(view.id, '\x0c');
     } else {
       view.terminal.reset();
+      view.agentActivityItems.clear();
     }
 
     setActivePane(view.pane);
@@ -1888,6 +1895,68 @@ const updateOrchestrationManagedTerminals = () => {
   }
 };
 
+const agentActivityLabels = {
+  command: 'command',
+  'command-output': 'output',
+  'file-change': 'files',
+  message: 'agent',
+  notice: 'notice',
+  plan: 'plan',
+  reasoning: 'thinking',
+  tool: 'tool',
+};
+
+const sanitizeTerminalActivityText = (value) =>
+  String(value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, '')
+    .slice(0, 16 * 1024);
+
+const writeAgentActivity = (view, event) => {
+  const activity = event?.activity;
+  const label = agentActivityLabels[activity?.kind];
+  if (!label || !['started', 'delta', 'completed'].includes(activity.phase)) return;
+
+  const text = sanitizeTerminalActivityText(activity.text);
+  const keyPrefix = `${event.agentId}:${activity.itemId ?? activity.kind}:`;
+  const key = `${keyPrefix}${activity.kind}`;
+  const color =
+    activity.kind === 'notice' || activity.stream === 'stderr' ? '\x1b[33m' : '\x1b[36m';
+  view.hasAgentActivity = true;
+
+  if (activity.phase === 'delta') {
+    if (!text) return;
+    if (!view.agentActivityItems.has(key)) {
+      view.terminal.write(`\r\n${color}[${label}]\x1b[0m `);
+      view.agentActivityItems.add(key);
+    }
+    view.terminal.write(text);
+    return;
+  }
+
+  const relatedItems = [...view.agentActivityItems].filter((item) => item.startsWith(keyPrefix));
+  if (activity.phase === 'completed' && relatedItems.length > 0) {
+    const completesActiveStream = view.agentActivityItems.has(key);
+    if (text && completesActiveStream) view.terminal.write(text);
+    view.terminal.writeln('');
+    for (const item of relatedItems) view.agentActivityItems.delete(item);
+    if (completesActiveStream || !text) return;
+  }
+
+  if (text) view.terminal.writeln(`\r\n${color}[${label}]\x1b[0m ${text}`);
+};
+
+const renderAgentActivity = async (event) => {
+  let view = terminalViews.get(event.terminalId);
+  if (!view) {
+    await syncOrchestrationTerminals();
+    await refreshProjectWorkspaces();
+    view = terminalViews.get(event.terminalId);
+  }
+  if (view) writeAgentActivity(view, event);
+};
+
 const focusAgentTerminal = async (terminalId) => {
   await syncOrchestrationTerminals();
   await refreshProjectWorkspaces();
@@ -1966,6 +2035,14 @@ const initializeOrchestration = async () => {
 };
 
 const disposeOrchestrationSubscription = window.agenza.orchestration.onEvent(async (event) => {
+  if (event?.type === 'agent:activity') {
+    try {
+      await renderAgentActivity(event);
+    } catch {
+      // A later lifecycle event will retry terminal synchronization.
+    }
+    return;
+  }
   const index = knownOrchestrations.findIndex(({ id }) => id === event.orchestrationId);
   if (index === -1) knownOrchestrations.push(event.orchestration);
   else knownOrchestrations[index] = event.orchestration;

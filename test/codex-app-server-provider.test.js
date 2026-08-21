@@ -64,7 +64,7 @@ const createFakeServer = ({ autoComplete = true } = {}) => {
   child.stderr = stderr;
   child.pid = 4321;
   child.kill = () => undefined;
-  return { child, requests };
+  return { child, requests, respond };
 };
 
 test('uses structured App Server threads and turns and returns the final agent item', async () => {
@@ -124,5 +124,72 @@ test('interrupts one active turn without using terminal input', async () => {
   assert.equal(stopped.status, 'stopped');
   assert.ok(server.requests.some(({ method }) => method === 'turn/interrupt'));
   assert.ok(server.requests.every(({ method }) => method !== 'terminal/input'));
+  provider.dispose();
+});
+
+test('normalizes live App Server activity without exposing terminal control sequences', async () => {
+  const server = createFakeServer({ autoComplete: false });
+  const provider = new CodexAppServerProvider({
+    createProcess: () => server.child,
+    processTreeKiller: () => true,
+  });
+  const events = [];
+  provider.onEvent((event) => events.push(event));
+  await provider.start({
+    agentId: 'agent-live',
+    cwd: 'C:\\worktree',
+    instruction: 'Work visibly.',
+  });
+
+  server.respond({
+    method: 'item/started',
+    params: {
+      threadId: 'thread-1',
+      item: { id: 'command-1', type: 'commandExecution', command: 'npm test' },
+    },
+  });
+  server.respond({
+    method: 'item/commandExecution/outputDelta',
+    params: {
+      threadId: 'thread-1',
+      itemId: 'command-1',
+      stream: 'stdout',
+      delta: '\u001b[31m174 tests passed\u001b[0m\n',
+    },
+  });
+  server.respond({
+    method: 'item/reasoning/summaryTextDelta',
+    params: { threadId: 'thread-1', itemId: 'reasoning-1', delta: 'Checking the result.' },
+  });
+  server.respond({
+    method: 'item/agentMessage/delta',
+    params: { threadId: 'thread-1', itemId: 'message-1', delta: 'Task complete.' },
+  });
+  server.respond({
+    method: 'item/completed',
+    params: {
+      threadId: 'thread-1',
+      item: { id: 'message-1', type: 'agentMessage', text: 'Task complete.' },
+    },
+  });
+  await new Promise((resolve) => process.nextTick(resolve));
+
+  const activities = events
+    .filter(({ type }) => type === 'activity')
+    .map(({ activity }) => activity);
+  assert.deepEqual(
+    activities.map(({ kind, phase }) => [kind, phase]),
+    [
+      ['command', 'started'],
+      ['command-output', 'delta'],
+      ['reasoning', 'delta'],
+      ['message', 'delta'],
+      ['message', 'completed'],
+    ],
+  );
+  assert.equal(activities[1].text, '174 tests passed\n');
+  assert.equal(activities[4].text, '');
+  assert.ok(activities.every(({ text }) => !text.includes('\u001b')));
+  await provider.stop('agent-live');
   provider.dispose();
 });

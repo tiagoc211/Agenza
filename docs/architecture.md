@@ -49,9 +49,17 @@ terminals are grouped under their recorded repository root.
 
 The existing terminal is intentionally not redefined as an agent. Each worker gets a terminal
 definition associated with its worktree for inspection, but the running agent is its App Server
-thread. While that worker is active, the renderer prevents launching a second Codex TUI in the same
-worktree. Future clients can attach a richer conversation inspector or terminal UI without changing
-agent identity.
+thread. The provider normalizes readable plans, reasoning summaries, commands, command output,
+file-change notices, tool activity, and agent messages into bounded `activity` events. The service
+then publishes a transient `agent:activity` event containing only the graph IDs needed to route it
+to the associated pane. Activity content is never added to the orchestration snapshot, persistence,
+or application logs, and terminal control sequences are removed before rendering.
+
+The renderer treats `agent:activity` as a high-frequency fast path: it writes to the existing xterm
+without refreshing orchestration state, the project catalog, or Git status. While that worker is
+active, the renderer prevents launching a second Codex TUI in the same worktree. The pane remains a
+read-only activity view rather than an interactive App Server TUI; future clients can attach a
+richer conversation inspector without changing agent identity.
 
 ## Decision
 

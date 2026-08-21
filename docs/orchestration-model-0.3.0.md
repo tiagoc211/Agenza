@@ -93,8 +93,9 @@ onEvent(listener)
 dispose()
 ```
 
-Provider events are normalized to `started`, `working`, `waiting`, `completed`, `failed`, and
-`stopped`. Codex-specific thread, turn, and item payloads do not leak into scheduler logic or the
+Provider events are normalized to `started`, `working`, `waiting`, `activity`, `completed`, `failed`,
+and `stopped`. Activity has a provider-neutral kind, phase, item ID, stream, and bounded sanitized
+text; Codex-specific thread, turn, and item payloads do not leak into scheduler logic or the
 renderer.
 
 `CodexAppServerProvider` owns one local App Server process and independent threads for the planner
@@ -104,9 +105,11 @@ reasoning and command output are neither persisted nor logged.
 
 ## Event contract
 
-Every event contains `sequence`, `timestamp`, `type`, `orchestrationId`, and a current immutable
-orchestration snapshot. Optional `taskId`, `agentId`, `terminalId`, and `worktreeId` fields express
-graph relationships directly.
+Every lifecycle event contains `sequence`, `timestamp`, `type`, `orchestrationId`, and a current
+immutable orchestration snapshot. Optional `taskId`, `agentId`, `terminalId`, and `worktreeId` fields
+express graph relationships directly. The high-frequency `agent:activity` event is deliberately
+transient: it contains `agentId`, `terminalId`, and normalized activity but no orchestration snapshot,
+and is neither persisted nor logged.
 
 Initial event names are:
 
@@ -125,6 +128,7 @@ task:failed
 agent:created
 agent:started
 agent:status-changed
+agent:activity
 agent:completed
 agent:failed
 agent:stopped
@@ -132,8 +136,9 @@ worktree:created
 integration:ready
 ```
 
-The renderer consumes this domain stream and does not infer orchestration state from terminal
-colors, PTY output, process IDs, or Git command output.
+The renderer consumes lifecycle events for domain state and `agent:activity` only as a read-only
+observation stream. It never infers orchestration state from terminal colors, PTY output, process
+IDs, or Git command output.
 
 ## Persistence and recovery
 

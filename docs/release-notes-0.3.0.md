@@ -20,6 +20,8 @@ each terminal and worktree.
   invalidate another agent's Git confirmation.
 - Live agent panes adopt their provisioned worktree and refresh repository, branch, worktree, and
   change details instead of retaining their initial unassigned terminal display.
+- Read-only live activity in each agent pane, including plans, reasoning summaries, commands,
+  command output, file changes, tools, and agent messages from structured App Server events.
 - Complete provider process-tree shutdown and stopped-state recovery after application restart.
 
 ## Safety
@@ -32,6 +34,9 @@ or worktree cleanup.
 Stopping or closing Agenza preserves every terminal definition, worktree, branch, commit, and
 completed result. Logs exclude goals, tasks, prompts, responses, paths, branches, terminal content,
 commands, environment values, and secrets.
+
+Live activity is bounded, stripped of terminal control sequences, delivered without full state or
+Git refreshes, and never written to orchestration persistence or Agenza logs.
 
 ## Current limitations
 

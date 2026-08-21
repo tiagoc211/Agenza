@@ -20,12 +20,16 @@ All notable changes to Agenza are documented in this file.
   workspace-focus interface.
 - Separate atomic orchestration persistence and stopped-state recovery for interrupted runs.
 - A persistent Workspaces sidebar with project-scoped terminal creation and navigation.
+- Transient structured agent activity streamed into each managed terminal pane without persisting or
+  logging its contents.
 
 ### Fixed
 
 - Agent terminal panes now replace their initial unassigned snapshot after provisioning and show
   the assigned repository, branch, worktree, and current Git status without starting another Codex
   process.
+- Managed terminal panes now show live plans, reasoning summaries, commands, output, file changes,
+  tools, and agent messages while their App Server worker runs.
 
 ### Safety
 
@@ -42,7 +46,8 @@ All notable changes to Agenza are documented in this file.
 
 - Codex is the only provider, one run has at most four tasks, and nested agents are disabled.
 - Dependencies schedule work but do not transfer commits between branches.
-- The associated terminal is a workspace view rather than a TUI attached to the agent thread.
+- The associated terminal is a read-only activity/workspace view rather than an interactive TUI
+  attached to the agent thread.
 
 ## [0.2.0] - 2026-08-20
 

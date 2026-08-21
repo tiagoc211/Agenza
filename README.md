@@ -69,13 +69,16 @@ installer downloaded from the project's own GitHub Release.
    submit an arbitrary repository path.
 4. Watch the structured task and agent lists. Tasks with dependencies remain blocked until their
    prerequisites complete.
-5. Use **Open workspace** on a worker to focus its associated worktree terminal pane.
+5. Use **Open workspace** on a worker to focus its associated worktree terminal pane. While the
+   worker runs, this pane streams labelled plans, reasoning summaries, commands, command output,
+   file-change notices, tools, and agent messages.
 6. Choose **Stop** to interrupt the run. Terminals, worktrees, branches, commits, and completed
    results remain available for inspection.
 
 The worker runtime is a Codex App Server thread, not text injected into the PTY. Its associated
-terminal is an advanced workspace view and is locked against starting another Codex process while
-the orchestration agent owns that worktree.
+terminal is a read-only live activity and workspace view; it is locked against starting another
+Codex process while the orchestration agent owns that worktree. Activity comes from structured App
+Server events, so the pane is not an interactive TUI attached to the thread.
 
 With the defaults, Agenza commits changed worker worktrees with a fixed local task message, requires
 review, and never merges. A completed orchestration means that its branches are ready for review;
@@ -330,8 +333,8 @@ Release before running it.
   worktree. Tasks that require combined code wait for a later integration workflow.
 - Review readiness is represented, but automatic review execution, merge, rebase, cherry-pick,
   conflict resolution, fetch, pull, push, and branch deletion are unavailable.
-- The terminal associated with an agent shows its workspace and can be used after the run; it is not
-  yet a terminal UI attached to the same App Server thread.
+- The terminal associated with an agent streams a read-only activity view and remains usable as a
+  workspace terminal after the run; it is not an interactive TUI attached to the App Server thread.
 - Branch deletion and forced worktree cleanup are intentionally unavailable.
 - Attached external worktrees cannot be cleaned by Agenza.
 - No accounts, multi-user collaboration, cloud synchronization, or remote terminals.
