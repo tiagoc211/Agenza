@@ -6,7 +6,7 @@ const scope = readFileSync('docs/scope-0.3.0.md', 'utf8');
 const model = readFileSync('docs/orchestration-model-0.3.0.md', 'utf8');
 
 test('defines the source-neutral orchestration workflow and explicit entity boundaries', () => {
-  assert.match(scope, /startOrchestration\(\{ goal, options, projectTerminalId \}\)/);
+  assert.match(scope, /startOrchestration\(\{ goal, options, projectWorkspaceId \}\)/);
   assert.match(model, /ProjectWorkspaceContext/);
   assert.match(model, /AgentRuntime/);
   assert.match(model, /Terminal.*interactive process\/view resource/);

@@ -14,6 +14,10 @@ each terminal and worktree.
   review.
 - Real-time domain events and a minimal UI for goal input, tasks, agents, status, stop, and opening
   an agent workspace.
+- A persistent left Workspaces sidebar: select a project first, then create terminals and
+  orchestrations that inherit that project automatically.
+- Serialized worktree preview and creation per repository so parallel agent startup cannot
+  invalidate another agent's Git confirmation.
 - Complete provider process-tree shutdown and stopped-state recovery after application restart.
 
 ## Safety

@@ -13,7 +13,8 @@ and workspace services:
 
 ```text
 Renderer intent
-  -> validated orchestration IPC
+  -> validated ProjectWorkspace / orchestration IPC
+  -> ProjectWorkspaceService -> project-workspaces.json
   -> OrchestrationService / task scheduler
      -> AgentProviderRegistry -> CodexAppServerProvider -> threads and turns
      -> AgentWorkspaceProvisioner
@@ -37,6 +38,14 @@ joins window shutdown cleanup.
 bounded result metadata separately from `workspace-state.json`. Unfinished runs recover as stopped;
 resource identities and Git work remain unchanged. The renderer receives immutable domain events
 and never infers task or agent state from PTY output, process IDs, or colors.
+
+`ProjectWorkspaceService` is the project-level authority above terminal definitions. It persists a
+catalog of user-selected project folders, the active project, and terminal membership in
+`project-workspaces.json`. The renderer receives opaque project-workspace IDs; adding a folder uses
+Electron's native main-process picker, and starting orchestration resolves the path again in the
+main process. A terminal created from the sidebar is assigned to the selected project before its
+PTY starts. Existing folder terminals are imported by canonical path, and existing Git-worktree
+terminals are grouped under their recorded repository root.
 
 The existing terminal is intentionally not redefined as an agent. Each worker gets a terminal
 definition associated with its worktree for inspection, but the running agent is its App Server
@@ -89,7 +98,9 @@ registration remain isolated and observable.
 `WorkspaceService` owns the persisted terminal definitions separately from `TerminalManager`'s
 runtime PTYs. On a first launch it creates two unassigned definitions; later launches restore the
 saved IDs, labels, order, active terminal, and workspace assignments. The renderer supports an empty
-workspace, a full-width single pane, two columns, and a scrollable responsive grid for more panes.
+project, a full-width single pane, two columns, and a scrollable responsive grid for more panes.
+Only terminals belonging to the selected project workspace are visible. New user-created terminals
+inherit that project's folder and start there, while imported assignments remain non-destructive.
 Runtime snapshots combine the saved definition with current process and path-availability state,
 without writing process IDs, terminal content, or transient errors to disk.
 
@@ -133,15 +144,19 @@ output, and exit operations. The main process validates the sending frame, live 
 input type, and dimensions before routing a request. Aggregate renderer subscriptions are registered
 before PTYs start and also cover sessions created later, so initial output is not lost.
 
-Each pane has an independent folder button backed by a narrow project-selection bridge and
-Electron's native directory picker. The main process stores one folder per terminal ID and accepts
-only IDs that still belong to the dynamic terminal registry and absolute directories that can be
-read and written. A valid first selection starts only that Codex session with the folder as `cwd`; a
-later selection stops and restarts only that session. Each pane header displays its own full project
-path. Accessible restored folders are shown as ready without automatically starting Codex. Missing
-or inaccessible restored paths are shown locally as unavailable and can be replaced without
-preventing other definitions from loading. Cancellation and validation errors leave the other
-terminals untouched.
+Project selection belongs to the left Workspaces sidebar rather than individual panes. The main
+process accepts only native-picker results that are absolute, readable, and writable. It creates a
+terminal definition, assigns the selected project folder, records its project membership, and only
+then lets the renderer request PTY startup so xterm subscriptions already exist. Accessible
+restored folders are shown as ready without automatically starting Codex. Missing projects are
+marked unavailable without preventing other workspaces from loading. Legacy folder and Git
+assignments are imported without changing or deleting their files, worktrees, or branches.
+
+Agent worktree provisioning uses a separate per-repository queue around both preview and creation.
+This is narrower than the runtime scheduler: agents may still execute concurrently after their
+worktrees exist, but one successful creation cannot make another concurrently prepared preview
+stale. After assignment, the terminal is attached to the originating project workspace before its
+identity is exposed as an agent workspace.
 
 Saved Git worktrees receive a deeper read-only restore and refresh check. Agenza compares the saved
 repository, branch, worktree registration, path, and checked-out branch with current Git discovery.

@@ -11,7 +11,7 @@ each terminal manually.
 The input contract is intentionally source-neutral:
 
 ```js
-startOrchestration({ goal, options, projectTerminalId });
+startOrchestration({ goal, options, projectWorkspaceId });
 ```
 
 The goal may later come from speech-to-text, a keyboard, or another local interface. Voice capture
@@ -26,6 +26,8 @@ and transcription are not part of this release.
 - One Agenza-created branch and worktree per implementation agent.
 - One terminal definition associated with each implementation agent so the workspace remains
   inspectable through the existing terminal UI.
+- A persistent project-workspace catalog and sidebar that own project selection and terminal
+  membership independently from terminal runtime state.
 - Consistent orchestrator and worker instruction generation.
 - A narrow main-process IPC surface and a minimal goal/tasks/agents UI.
 - Safe stop, application-shutdown cleanup, persistence, and interrupted-run recovery.
@@ -53,9 +55,9 @@ tasks through a smaller reusable agent pool.
 
 ## User workflow
 
-1. The user assigns a normal folder or Git worktree to a terminal and makes it active.
+1. The user adds a project folder to **Workspaces** and selects that project.
 2. The user enters a goal, chooses `maxAgents`, and starts orchestration.
-3. The main process resolves and validates the project from that terminal.
+3. The main process resolves and validates the project from its opaque project-workspace ID.
 4. A read-only orchestrator thread returns a schema-constrained plan.
 5. Agenza validates task IDs, dependencies, priorities, ownership hints, and limits.
 6. For each ready task, Agenza creates a terminal definition and a new branch/worktree from the
@@ -75,7 +77,7 @@ merge, push, pull, or rewrite Git data.
 ## Safety and privacy
 
 - Renderer payloads never contain an executable, shell arguments, worktree path, or repository
-  path. The main process resolves the project from a live terminal ID.
+  path. The main process resolves the project from a validated project-workspace ID.
 - Provider and Git processes are launched with fixed internal commands and argument arrays.
 - Worker sandbox roots are limited to their assigned worktree and network access is disabled by
   default. Headless turns use a non-interactive approval policy.
@@ -105,7 +107,7 @@ merge, push, pull, or rewrite Git data.
 
 ## Release success
 
-Given a valid active Git project, the user can request two independent test-coverage tasks with
+Given a valid selected Git project workspace, the user can request two independent test-coverage tasks with
 `maxAgents: 2`; Agenza produces a validated plan, creates two isolated branches/worktrees and two
 associated terminal definitions, starts two structured Codex agent turns, reports their independent
 state and results, stops all provider processes cleanly, and finishes with both branches ready for

@@ -4,7 +4,7 @@ All notable changes to Agenza are documented in this file.
 
 ## [0.3.0] - 2026-08-21
 
-- Require explicit Git project selection before revealing or enabling orchestration controls.
+- Require explicit project-workspace selection before revealing or enabling orchestration controls.
 
 ### Added
 
@@ -19,11 +19,14 @@ All notable changes to Agenza are documented in this file.
 - Narrow start, list, stop, and event IPC plus a minimal goal, limit, task, agent, status, and
   workspace-focus interface.
 - Separate atomic orchestration persistence and stopped-state recovery for interrupted runs.
+- A persistent Workspaces sidebar with project-scoped terminal creation and navigation.
 
 ### Safety
 
-- The renderer supplies only a goal, validated options, and a live terminal ID; the main process
-  resolves the repository and computes every branch and worktree path.
+- The renderer supplies only a goal, validated options, and an opaque project-workspace ID; the
+  main process resolves the repository and computes every branch and worktree path.
+- Worktree planning and creation are serialized per repository while agent execution remains
+  concurrent.
 - Worker lifecycle is no longer controlled by writing instructions into PTYs.
 - Planner turns are read-only; worker turns are scoped to one worktree with network disabled.
 - Automatic merge, branch deletion, worktree cleanup, push, pull, fetch, rebase, and cherry-pick

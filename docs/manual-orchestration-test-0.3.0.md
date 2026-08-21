@@ -13,9 +13,9 @@ not be changed.
 
 ## Independent two-agent run
 
-1. Confirm the goal and Start controls are hidden until a project is selected.
-2. Choose **Choose project folder** in the Orchestrator panel and select the fixture repository.
-3. Confirm Agenza validates the Git project and then reveals the goal controls.
+1. Confirm the goal and Start controls are hidden until a project workspace is selected.
+2. Choose **+** in the left **Workspaces** sidebar and select the fixture repository.
+3. Confirm the project appears and becomes selected, then Agenza reveals the goal controls.
 4. Enter: `Analyse this project and create two independent tasks to improve test coverage.`
 5. Select `maxAgents: 2` and choose **Start**.
 6. Confirm the UI shows `planning`, two structured tasks, an Orchestrator agent, and two worker
@@ -29,6 +29,15 @@ not be changed.
     remains unchanged and no merge, push, cleanup, or branch deletion occurs.
 11. Choose **Open workspace** for each agent and confirm the correct terminal pane, branch, and
     worktree are focused.
+
+## Workspace navigation
+
+- [ ] Add a second project folder and confirm both projects remain listed after restarting Agenza.
+- [ ] Select each workspace and confirm only its terminal panes are shown.
+- [ ] Add a terminal in each workspace and confirm Codex starts in the selected project's folder
+      without a per-terminal folder prompt.
+- [ ] Start orchestration from one workspace and confirm every created agent terminal remains owned
+      by and visible inside that workspace.
 
 ## Dependencies and limits
 

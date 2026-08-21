@@ -49,23 +49,24 @@ installer downloaded from the project's own GitHub Release.
 
 ## Use Agenza
 
-1. Open Agenza. A first launch starts with two unassigned terminal panes.
-2. Choose **Choose folder** in each pane and select an ordinary project folder, or select a Git
-   repository before using **Git workspace**.
-3. Wait until the pane shows **Connected**, then use Codex normally.
-4. Choose **Add terminal** for another independent pane or **Remove** to stop and remove one pane.
+1. Open Agenza and choose **+** in the left **Workspaces** sidebar to add a project folder.
+2. Select that workspace, then choose **Add terminal**. The terminal inherits the workspace folder
+   and starts Codex there automatically; no folder selection is needed inside the pane.
+3. Add more project folders to the sidebar and switch between them without mixing their terminal
+   panes.
+4. Choose **Add terminal** for another independent pane in the active workspace or **Remove** to
+   stop and remove one pane.
 5. Close Agenza when finished; all running Codex process trees are terminated while project and Git
    work remain intact.
 
 ### Start an orchestration
 
-1. Choose **Choose project folder** in the Orchestrator panel. Agenza uses the active terminal or
-   creates one when no terminal exists, then validates that the selected folder is a supported Git
-   project.
+1. Add or select a project in the left **Workspaces** sidebar. Agenza validates that workspace as a
+   supported Git project before revealing the goal controls.
 2. Only after the project is valid, enter a high-level goal in **Orchestrator goal** and choose
    **Max agents** from 1 to 4.
-3. Choose **Start**. Agenza resolves the project from the active terminal; the renderer cannot submit
-   an arbitrary repository path.
+3. Choose **Start**. Agenza resolves the project from the selected workspace ID; the renderer cannot
+   submit an arbitrary repository path.
 4. Watch the structured task and agent lists. Tasks with dependencies remain blocked until their
    prerequisites complete.
 5. Use **Open workspace** on a worker to focus its associated worktree terminal pane.
@@ -80,15 +81,14 @@ With the defaults, Agenza commits changed worker worktrees with a fixed local ta
 review, and never merges. A completed orchestration means that its branches are ready for review;
 it does not mean that they were integrated into the source branch.
 
-The saved workspace restores zero, one, two, or several terminal definitions, their stable labels,
-order, active pane, and assignments. Restored accessible folders are shown without automatically
-starting Codex; use **Start** when you want to connect that terminal. A missing restored path is
-reported only in its affected pane and can be reassigned or detached safely.
+The saved project-workspace catalog restores the selected project and its terminal membership.
+Within each project, the terminal state restores zero, one, two, or several terminal definitions,
+their stable labels, order, active pane, and Git assignments. Restored terminals remain stopped
+until **Start** is chosen. A missing project is marked unavailable without blocking other
+workspaces.
 
 Each pane provides:
 
-- **Choose folder** or **Change folder** to assign an ordinary directory and start or restart only
-  that terminal.
 - **Git workspace** to preview a new branch worktree, an eligible existing-branch worktree, or an
   existing registered worktree.
 - **Copy**, **Paste**, **Clear**, and **Restart** (or **Start** after restore), scoped to that
@@ -99,7 +99,7 @@ Each pane provides:
 
 ### Create a new branch and worktree
 
-1. Use **Choose folder** to select a folder inside the source repository.
+1. Select the source repository in **Workspaces** and add or open one of its terminals.
 2. Choose **Git workspace** and select **Create a new branch**.
 3. Select the base branch and enter a new local branch name and new worktree path.
 4. Review the repository, exact base revision, target branch, and path shown in the preview.
@@ -179,6 +179,11 @@ Ctrl, Alt, or the Windows/Meta key remain available to Codex and the terminal.
 The versioned workspace layout is stored at `%APPDATA%\Agenza\workspace-state.json`, with the
 previous valid state retained as `workspace-state.backup.json`. Invalid or newer state is preserved
 without overwrite and opens a recoverable default view.
+
+The project list, active project, and project-to-terminal membership are stored separately in
+`%APPDATA%\Agenza\project-workspaces.json`, with the previous valid catalog retained as
+`project-workspaces.backup.json`. Folder paths enter the application only through Electron's native
+directory picker in the main process.
 
 Orchestrations, structured tasks, agent metadata, goals, and bounded final summaries are stored
 separately in `%APPDATA%\Agenza\orchestration-state.json`, with its own backup. Streamed reasoning,
@@ -292,8 +297,9 @@ worktree repair, or pruning outside Agenza after making a backup.
 ### The saved workspace state cannot be loaded
 
 Agenza preserves invalid or newer state instead of overwriting it. Close Agenza, back up
-`%APPDATA%\Agenza\workspace-state.json` and its backup file, then inspect or move the invalid source
-before reopening the app. Git directories and worktrees are not changed by this recovery view.
+`%APPDATA%\Agenza\workspace-state.json`, `%APPDATA%\Agenza\project-workspaces.json`, and their backup
+files, then inspect or move the affected invalid source before reopening the app. Git directories
+and worktrees are not changed by this recovery view.
 
 ### Codex exited unexpectedly
 

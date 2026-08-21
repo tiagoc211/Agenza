@@ -94,6 +94,19 @@
         "Linting, formatting, unit tests, and the production build pass.",
         "README and architecture documentation describe the new workflow, safety boundaries, privacy, and known limitations."
       ]
+    },
+    {
+      "id": "T308",
+      "order": 8,
+      "title": "Add project workspace navigation and workspace-scoped terminals",
+      "status": "done",
+      "depends_on": ["T307"],
+      "acceptance_criteria": [
+        "A persistent Workspaces sidebar adds and selects project folders independently from terminals.",
+        "New terminals inherit and start in the active project workspace without accepting renderer-provided paths.",
+        "Orchestration targets the active project workspace and agent terminals remain associated with it.",
+        "Parallel worktree provisioning serializes preview and creation per repository without reducing agent execution concurrency."
+      ]
     }
   ]
 }
