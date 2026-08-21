@@ -643,6 +643,56 @@ const setInitialGitSummary = (view) => {
   view.gitRefreshButton.disabled = view.isBusy || view.isGitRefreshing;
 };
 
+const applyTerminalWorkspaceSnapshot = (view, snapshot) => {
+  const nextWorkspace = snapshot.workspace ?? {
+    kind: 'unassigned',
+    projectPath: null,
+    repository: null,
+  };
+  const nextStatus = snapshot.workspaceStatus ?? { status: 'unassigned' };
+  const workspaceChanged = JSON.stringify(view.workspace) !== JSON.stringify(nextWorkspace);
+  const availabilityChanged =
+    view.workspaceStatus?.status !== nextStatus.status ||
+    view.projectFolder !== (nextStatus.status === 'available' ? nextStatus.path : null);
+
+  if (!workspaceChanged && !availabilityChanged) return false;
+
+  const previousKind = view.workspace?.kind;
+  view.workspace = nextWorkspace;
+  applyWorkspaceAvailability(view, nextStatus);
+  view.gitStatus = null;
+  view.projectButton.textContent = view.projectFolder ? 'Change folder' : 'Choose folder';
+  view.restartButton.textContent = view.isConnected ? 'Restart' : 'Start';
+  setInitialGitSummary(view);
+
+  if (!view.isConnected) {
+    if (nextStatus.status === 'available') {
+      setSessionState(view, 'waiting', 'Ready', nextWorkspace.projectPath);
+    } else if (nextStatus.status === 'missing') {
+      setSessionState(view, 'error', 'Unavailable', nextWorkspace.projectPath);
+    } else if (nextStatus.status === 'stale') {
+      setSessionState(view, 'error', 'Stale', nextStatus.message);
+    } else {
+      setSessionState(view, 'waiting', 'Waiting', 'Waiting for workspace assignment');
+    }
+  }
+
+  if (previousKind === 'unassigned' && nextStatus.status === 'available' && !view.isConnected) {
+    view.terminal.reset();
+    view.terminal.writeln(`\x1b[1;36mAgenza · ${view.label}\x1b[0m`);
+    view.terminal.writeln('');
+    view.terminal.writeln(`\x1b[90mAgent workspace assigned: ${nextWorkspace.projectPath}\x1b[0m`);
+    if (nextWorkspace.kind === 'git-worktree') {
+      view.terminal.writeln(
+        `\x1b[90mBranch: ${displayBranchName(nextWorkspace.repository.branch)}\x1b[0m`,
+      );
+    }
+  }
+
+  setControlsBusy(view, view.isBusy);
+  return true;
+};
+
 const formatGitChanges = ({ conflicted, isClean, tracked, untracked }) => {
   if (isClean) {
     return 'Clean';
@@ -1762,9 +1812,16 @@ const activateProjectWorkspace = async (workspaceId) => {
 const syncOrchestrationTerminals = async () => {
   const catalog = await window.agenza.terminal.list();
   const snapshots = Array.isArray(catalog) ? catalog : catalog.sessions;
+  const workspaceRefreshes = [];
   for (const snapshot of snapshots) {
-    if (!terminalViews.has(snapshot.id)) createTerminalView(snapshot, { activate: false });
+    const view = terminalViews.get(snapshot.id);
+    if (!view) {
+      createTerminalView(snapshot, { activate: false });
+    } else if (applyTerminalWorkspaceSnapshot(view, snapshot)) {
+      workspaceRefreshes.push(refreshGitStatus(view));
+    }
   }
+  await Promise.all(workspaceRefreshes);
 };
 
 const updateOrchestrationProjectContext = () => {

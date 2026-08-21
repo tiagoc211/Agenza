@@ -18,6 +18,8 @@ each terminal and worktree.
   orchestrations that inherit that project automatically.
 - Serialized worktree preview and creation per repository so parallel agent startup cannot
   invalidate another agent's Git confirmation.
+- Live agent panes adopt their provisioned worktree and refresh repository, branch, worktree, and
+  change details instead of retaining their initial unassigned terminal display.
 - Complete provider process-tree shutdown and stopped-state recovery after application restart.
 
 ## Safety

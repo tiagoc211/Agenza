@@ -280,6 +280,20 @@ test('inherits the active workspace before starting each new terminal session', 
   assert.match(renderer, /launchSession\(view/);
 });
 
+test('refreshes an existing agent pane after its worktree is assigned', () => {
+  assert.match(renderer, /const applyTerminalWorkspaceSnapshot/);
+  assert.match(renderer, /view\.workspace = nextWorkspace/);
+  assert.match(renderer, /previousKind === 'unassigned'/);
+  assert.match(renderer, /Agent workspace assigned:/);
+  const syncStart = renderer.indexOf('const syncOrchestrationTerminals');
+  const syncEnd = renderer.indexOf('const updateOrchestrationProjectContext', syncStart);
+  const syncImplementation = renderer.slice(syncStart, syncEnd);
+  assert.match(syncImplementation, /applyTerminalWorkspaceSnapshot\(view, snapshot\)/);
+  assert.match(syncImplementation, /workspaceRefreshes\.push\(refreshGitStatus\(view\)\)/);
+  assert.match(syncImplementation, /await Promise\.all\(workspaceRefreshes\)/);
+  assert.doesNotMatch(syncImplementation, /launchSession|terminal\.start|terminal\.restart/);
+});
+
 test('preserves independent clear, restart, and terminal-local recovery behavior', () => {
   assert.match(renderer, /window\.agenza\.terminal\.write\(view\.id, '\\x0c'\)/);
   assert.match(renderer, /view\.terminal\.reset\(\)/);

@@ -21,6 +21,12 @@ All notable changes to Agenza are documented in this file.
 - Separate atomic orchestration persistence and stopped-state recovery for interrupted runs.
 - A persistent Workspaces sidebar with project-scoped terminal creation and navigation.
 
+### Fixed
+
+- Agent terminal panes now replace their initial unassigned snapshot after provisioning and show
+  the assigned repository, branch, worktree, and current Git status without starting another Codex
+  process.
+
 ### Safety
 
 - The renderer supplies only a goal, validated options, and an opaque project-workspace ID; the

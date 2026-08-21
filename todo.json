@@ -107,6 +107,18 @@
         "Orchestration targets the active project workspace and agent terminals remain associated with it.",
         "Parallel worktree provisioning serializes preview and creation per repository without reducing agent execution concurrency."
       ]
+    },
+    {
+      "id": "T309",
+      "order": 9,
+      "title": "Refresh agent terminal workspace state",
+      "status": "done",
+      "depends_on": ["T308"],
+      "acceptance_criteria": [
+        "An existing agent terminal view adopts its assigned Git worktree snapshot after provisioning.",
+        "Repository, branch, worktree, and change status refresh without starting a second Codex process.",
+        "Automated renderer tests cover the transition from unassigned terminal to managed worktree."
+      ]
     }
   ]
 }
