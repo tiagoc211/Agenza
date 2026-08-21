@@ -504,6 +504,13 @@ class OrchestrationService {
       draft.status = 'failed';
       draft.completedAt = completedAt;
       draft.error = truncateResult(error.message);
+      for (const agent of draft.agents) {
+        if (!FINAL_AGENT_STATUSES.has(agent.status)) {
+          agent.status = 'failed';
+          agent.completedAt = completedAt;
+          agent.error = truncateResult(error.message);
+        }
+      }
       for (const task of draft.tasks) {
         if (!FINAL_TASK_STATUSES.has(task.status)) {
           task.status = 'stopped';

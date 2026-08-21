@@ -90,7 +90,7 @@ class CodexAppServerProvider {
     const threadParams = {
       approvalPolicy: 'never',
       cwd,
-      sandbox: readOnly ? 'readOnly' : 'workspaceWrite',
+      sandbox: readOnly ? 'read-only' : 'workspace-write',
       serviceName: 'agenza',
       ...(model ? { model } : {}),
     };
@@ -120,13 +120,8 @@ class CodexAppServerProvider {
         cwd,
         input: [{ type: 'text', text: instruction }],
         sandboxPolicy: readOnly
-          ? { type: 'readOnly', access: { type: 'fullAccess' } }
-          : {
-              type: 'workspaceWrite',
-              writableRoots: [cwd],
-              readOnlyAccess: { type: 'fullAccess' },
-              networkAccess: false,
-            },
+          ? { type: 'readOnly', networkAccess: false }
+          : { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false },
         threadId,
         ...(model ? { model } : {}),
         ...(outputSchema ? { outputSchema } : {}),
@@ -166,7 +161,6 @@ class CodexAppServerProvider {
       sandboxPolicy: {
         type: 'workspaceWrite',
         writableRoots: [runtime.cwd],
-        readOnlyAccess: { type: 'fullAccess' },
         networkAccess: false,
       },
       threadId: runtime.threadId,

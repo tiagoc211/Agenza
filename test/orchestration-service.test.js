@@ -233,3 +233,47 @@ test('stops live workers while preserving their terminal and worktree identities
   assert.equal(stopped.tasks[0].status, 'stopped');
   service.dispose();
 });
+
+test('marks the planner failed when its provider rejects startup', async () => {
+  let state = createDefaultOrchestrationState();
+  const provider = new FakeProvider({ summary: 'Unused.', tasks: [task('unused')] });
+  provider.start = async () => {
+    throw new Error('Provider startup rejected.');
+  };
+  const providers = new AgentProviderRegistry();
+  providers.register('codex', provider);
+  const service = new OrchestrationService({
+    committer: { commit: async () => ({ commit: null, created: false }) },
+    providerRegistry: providers,
+    stateStore: {
+      load: async () => ({ issue: null, state: JSON.parse(JSON.stringify(state)) }),
+      save: async (next) => {
+        state = JSON.parse(JSON.stringify(next));
+      },
+    },
+    workspaceProvisioner: {
+      resolveProject: async (sourceTerminalId) => ({
+        sourceTerminalId,
+        projectPath: 'C:\\project',
+        repositoryRoot: 'C:\\project',
+        baseBranch: 'main',
+        baseBranchRef: 'refs/heads/main',
+        baseRevision: 'abc123',
+      }),
+      dispose() {},
+    },
+  });
+  await service.initialize();
+  const started = await service.start({
+    goal: 'Fail during planning.',
+    projectTerminalId: 'terminal-source',
+  });
+  await service.flush();
+
+  const failed = service.get(started.id);
+  const planner = failed.agents.find(({ id }) => id === failed.orchestratorAgentId);
+  assert.equal(failed.status, 'failed');
+  assert.equal(planner.status, 'failed');
+  assert.equal(planner.error, 'Provider startup rejected.');
+  service.dispose();
+});

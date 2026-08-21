@@ -96,6 +96,13 @@ test('uses structured App Server threads and turns and returns the final agent i
     server.requests.filter(({ method }) => method).map(({ method }) => method),
     ['initialize', 'initialized', 'thread/start', 'turn/start'],
   );
+  const threadStart = server.requests.find(({ method }) => method === 'thread/start');
+  const turnStart = server.requests.find(({ method }) => method === 'turn/start');
+  assert.equal(threadStart.params.sandbox, 'read-only');
+  assert.deepEqual(turnStart.params.sandboxPolicy, {
+    type: 'readOnly',
+    networkAccess: false,
+  });
   assert.ok(events.includes('completed'));
   provider.dispose();
   assert.deepEqual(killed, [4321]);
