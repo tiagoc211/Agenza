@@ -16,13 +16,12 @@ test('archives the completed 0.1.0 release plan', () => {
 test('archives the completed 0.2.0 release plan', () => {
   assert.equal(archivedTodo020.release, '0.2.0');
   assert.equal(archivedTodo020.archived, true);
-  assert.deepEqual(archivedTodo020.tasks, currentTodo.tasks);
   assert.ok(archivedTodo020.tasks.every(({ status }) => status === 'done'));
 });
 
-test('defines an ordered and dependency-safe 0.2.0 plan', () => {
-  assert.equal(currentTodo.release, '0.2.0');
-  assert.ok(currentTodo.goal.includes('worktrees'));
+test('defines an ordered and dependency-safe current release plan', () => {
+  assert.equal(currentTodo.release, '0.3.0');
+  assert.ok(currentTodo.goal.includes('orchestration'));
   assert.ok(currentTodo.tasks.length > 0);
 
   const taskIds = new Set(currentTodo.tasks.map(({ id }) => id));
@@ -56,15 +55,13 @@ test('defines an ordered and dependency-safe 0.2.0 plan', () => {
   }
 });
 
-test('makes terminal removal and destructive Git operations explicitly safe', () => {
+test('keeps orchestration resource and integration operations explicitly safe', () => {
   assert.ok(
-    currentTodo.release_principles.some((principle) =>
-      principle.includes('Removing a terminal never deletes'),
-    ),
+    currentTodo.release_principles.some((principle) => principle.includes('separate entities')),
   );
   assert.ok(
     currentTodo.release_principles.some((principle) =>
-      principle.includes('Destructive Git operations require an explicit user action'),
+      principle.includes('Automatic merge and branch deletion remain disabled'),
     ),
   );
 });

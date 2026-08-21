@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const packageJson = require('../package.json');
 
-const EXPECTED_RELEASE_VERSION = '0.2.0';
+const EXPECTED_RELEASE_VERSION = '0.3.0';
 const projectRoot = path.resolve(__dirname, '..');
 const releaseDirectory = path.join(projectRoot, 'out', 'make', 'squirrel.windows', 'x64');
 const packagedDirectory = path.join(projectRoot, 'out', 'Agenza-win32-x64');

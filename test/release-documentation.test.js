@@ -6,13 +6,14 @@ const test = require('node:test');
 const changelog = readFileSync('CHANGELOG.md', 'utf8');
 const howToRun = readFileSync('HOWTORUN.md', 'utf8');
 const readme = readFileSync('README.md', 'utf8');
-const releaseNotes = readFileSync('docs/release-notes-0.2.0.md', 'utf8');
+const releaseNotes = readFileSync('docs/release-notes-0.3.0.md', 'utf8');
 
-test('documents 0.2.0 installation, dynamic terminals, Git workspaces, and build validation', () => {
+test('documents 0.3.0 orchestration, terminals, Git workspaces, and build validation', () => {
   for (const heading of [
     '## User requirements',
     '## Install or upgrade',
     '## Use Agenza',
+    '### Start an orchestration',
     '### Create a new branch and worktree',
     '### Use an existing branch or worktree',
     '### Remove a terminal safely',
@@ -22,18 +23,20 @@ test('documents 0.2.0 installation, dynamic terminals, Git workspaces, and build
     '## Development requirements',
     '## Tests and build commands',
     '## Troubleshooting',
-    '## Known limitations in 0.2.0',
+    '## Known limitations in 0.3.0',
   ]) {
     assert.match(readme, new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
   }
 
-  assert.match(readme, /Agenza-0\.2\.0 Setup\.exe/);
+  assert.match(readme, /Agenza-0\.3\.0 Setup\.exe/);
   assert.match(readme, /zero, one, two, or several terminal definitions/);
   assert.match(readme, /Create a new branch/);
   assert.match(readme, /Use an existing local branch/);
   assert.match(readme, /Attach a registered worktree/);
   assert.match(readme, /npm run make/);
   assert.match(readme, /npm run test:release/);
+  assert.match(readme, /Codex App Server thread/);
+  assert.match(readme, /Automatic merge remains disabled/);
 });
 
 test('documents ownership, removal, cleanup, recovery, privacy, and excluded Git operations', () => {
@@ -78,17 +81,12 @@ test('keeps runtime and agent development requirements separate', () => {
   assert.match(howToRun, /codex --version/);
 });
 
-test('publishes complete 0.2.0 release notes and changelog entries', () => {
+test('publishes complete 0.3.0 release notes and changelog entries', () => {
   for (const heading of [
-    '# Agenza 0.2.0',
+    '# Agenza 0.3.0 release notes',
     '## Highlights',
-    '## Install or upgrade',
-    '## Requirements',
-    '## Git workspace workflow',
-    '## Removal, cleanup, and recovery safety',
-    '## Privacy and diagnostics',
-    '## Release verification',
-    '## Known limitations',
+    '## Safety',
+    '## Current limitations',
   ]) {
     assert.match(
       releaseNotes,
@@ -96,16 +94,16 @@ test('publishes complete 0.2.0 release notes and changelog entries', () => {
     );
   }
 
-  assert.match(releaseNotes, /Agenza-0\.2\.0 Setup\.exe/);
-  assert.match(releaseNotes, /complete unit and integration suite/);
-  assert.match(changelog, /^## \[0\.2\.0\] - 2026-08-20$/m);
-  assert.match(changelog, /^\[0\.2\.0\]: .*\/v0\.2\.0$/m);
+  assert.match(releaseNotes, /Codex App Server/);
+  assert.match(releaseNotes, /does not authorize merge/);
+  assert.match(changelog, /^## \[0\.3\.0\] - 2026-08-21$/m);
+  assert.match(changelog, /^\[0\.3\.0\]: .*\/v0\.3\.0$/m);
 });
 
 test('keeps every local README and release-note link valid', () => {
   const linkedDocuments = [
     { filePath: 'README.md', source: readme },
-    { filePath: 'docs/release-notes-0.2.0.md', source: releaseNotes },
+    { filePath: 'docs/release-notes-0.3.0.md', source: releaseNotes },
   ];
 
   for (const { filePath, source } of linkedDocuments) {

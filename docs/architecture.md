@@ -1,9 +1,48 @@
 # Agenza technical architecture
 
-This document records the shipped `0.1.0` architecture that `0.2.0` builds on. The new release scope
-and non-destructive Git boundaries are defined in [scope-0.2.0.md](scope-0.2.0.md). The dynamic
-terminal, workspace lifecycle, ownership, and persisted schema contract are defined in
-[workspace-model-0.2.0.md](workspace-model-0.2.0.md).
+This document records the architecture that `0.3.0` evolves from the shipped `0.2.0` terminal and
+Git-worktree baseline. The orchestration scope is defined in [scope-0.3.0.md](scope-0.3.0.md), and
+the new entity, lifecycle, persistence, event, provider, and integration contracts are defined in
+[orchestration-model-0.3.0.md](orchestration-model-0.3.0.md). The non-destructive baseline remains in
+[scope-0.2.0.md](scope-0.2.0.md) and [workspace-model-0.2.0.md](workspace-model-0.2.0.md).
+
+## 0.3.0 orchestration layer
+
+The main process now owns an `OrchestrationService` above, rather than inside, the existing terminal
+and workspace services:
+
+```text
+Renderer intent
+  -> validated orchestration IPC
+  -> OrchestrationService / task scheduler
+     -> AgentProviderRegistry -> CodexAppServerProvider -> threads and turns
+     -> AgentWorkspaceProvisioner
+        -> shared GitWorkspacePlanner / GitWorkspaceExecutor queue
+        -> WorkspaceService -> TerminalDefinition and managed worktree
+```
+
+The Orchestrator is a read-only Codex thread that returns schema-constrained task data. It has no
+direct filesystem, process, Git, or agent-spawn authority. `OrchestrationService` validates the plan
+and options, resolves dependencies, enforces the agent limit, and asks the existing resource
+authorities to act. Worker lifecycle comes from App Server `thread`, `turn`, and `item` events, not
+from terminal text.
+
+The Codex adapter is behind `AgentProviderRegistry`. Scheduler state uses normalized provider events
+and therefore does not import Codex-specific JSON-RPC payloads. The local App Server uses stdio, a
+fixed executable command, read-only planner turns, workspace-write worker turns scoped to one
+worktree, disabled network access, and a non-interactive approval policy. Its complete process tree
+joins window shutdown cleanup.
+
+`OrchestrationStateStore` persists versioned orchestration, task, agent, relationship, option, and
+bounded result metadata separately from `workspace-state.json`. Unfinished runs recover as stopped;
+resource identities and Git work remain unchanged. The renderer receives immutable domain events
+and never infers task or agent state from PTY output, process IDs, or colors.
+
+The existing terminal is intentionally not redefined as an agent. Each worker gets a terminal
+definition associated with its worktree for inspection, but the running agent is its App Server
+thread. While that worker is active, the renderer prevents launching a second Codex TUI in the same
+worktree. Future clients can attach a richer conversation inspector or terminal UI without changing
+agent identity.
 
 ## Decision
 

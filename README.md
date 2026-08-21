@@ -7,14 +7,19 @@
 </p>
 
 <p align="center">
-  Run independent Codex CLI sessions side by side, each with its own project workspace.
+  Turn one development goal into isolated Codex agents, tasks, terminals, and Git worktrees.
 </p>
 
 # Agenza
 
-Agenza is a local Windows desktop workspace for running independent Codex CLI sessions. Release
-`0.2.0` adds a dynamic terminal layout and optional Git branch/worktree isolation, allowing multiple
-agents to work in the same repository without sharing a working directory.
+Agenza is a local Windows desktop workspace for running independent Codex agents. Release `0.3.0`
+adds the first functional multi-agent orchestration layer on top of the dynamic terminal and safe
+Git-worktree foundation shipped in `0.2.0`.
+
+Give the Orchestrator one text goal and a maximum of one to four agents. It creates a validated
+task plan, provisions one isolated branch/worktree and terminal definition per worker, runs Codex
+through structured App Server threads, tracks dependencies and results, and leaves completed work
+ready for review. Automatic merge remains disabled.
 
 A terminal session and a Git workspace are separate resources. Removing a terminal never deletes
 its project files, worktree, or branch.
@@ -32,13 +37,12 @@ Node.js, or npm to run the installed application.
 
 ## Install or upgrade
 
-Download `Agenza-0.2.0 Setup.exe` from the Agenza `0.2.0` GitHub Release and run it. Close every
+Download `Agenza-0.3.0 Setup.exe` from the Agenza `0.3.0` GitHub Release and run it. Close every
 Agenza window before installing or upgrading.
 
-The Squirrel application identity is unchanged from `0.1.0`, so the `0.2.0` installer upgrades the
-existing installation. Release `0.1.0` did not persist a terminal layout; the first `0.2.0` launch
-therefore starts with two unassigned terminals. Existing project directories, Git worktrees,
-branches, and repository data are not changed by the upgrade.
+The Squirrel application identity is unchanged, so the installer upgrades an existing installation.
+Existing terminal definitions, project directories, Git worktrees, branches, and repository data
+are not changed by the upgrade.
 
 The installer is not digitally signed, so Windows may show a SmartScreen warning. Only run an
 installer downloaded from the project's own GitHub Release.
@@ -52,6 +56,29 @@ installer downloaded from the project's own GitHub Release.
 4. Choose **Add terminal** for another independent pane or **Remove** to stop and remove one pane.
 5. Close Agenza when finished; all running Codex process trees are terminated while project and Git
    work remain intact.
+
+### Start an orchestration
+
+1. Choose **Choose project folder** in the Orchestrator panel. Agenza uses the active terminal or
+   creates one when no terminal exists, then validates that the selected folder is a supported Git
+   project.
+2. Only after the project is valid, enter a high-level goal in **Orchestrator goal** and choose
+   **Max agents** from 1 to 4.
+3. Choose **Start**. Agenza resolves the project from the active terminal; the renderer cannot submit
+   an arbitrary repository path.
+4. Watch the structured task and agent lists. Tasks with dependencies remain blocked until their
+   prerequisites complete.
+5. Use **Open workspace** on a worker to focus its associated worktree terminal pane.
+6. Choose **Stop** to interrupt the run. Terminals, worktrees, branches, commits, and completed
+   results remain available for inspection.
+
+The worker runtime is a Codex App Server thread, not text injected into the PTY. Its associated
+terminal is an advanced workspace view and is locked against starting another Codex process while
+the orchestration agent owns that worktree.
+
+With the defaults, Agenza commits changed worker worktrees with a fixed local task message, requires
+review, and never merges. A completed orchestration means that its branches are ready for review;
+it does not mean that they were integrated into the source branch.
 
 The saved workspace restores zero, one, two, or several terminal definitions, their stable labels,
 order, active pane, and assignments. Restored accessible folders are shown without automatically
@@ -102,7 +129,7 @@ worktree directory, Git registration, local branch, commits, and Agenza worktree
 remain present.
 
 Terminal removal, Agenza-created worktree cleanup, and branch deletion are deliberately separate
-operations. Agenza `0.2.0` has no branch-deletion operation.
+operations. Agenza `0.3.0` has no branch-deletion operation.
 
 ### Clean an Agenza-created worktree
 
@@ -153,6 +180,11 @@ The versioned workspace layout is stored at `%APPDATA%\Agenza\workspace-state.js
 previous valid state retained as `workspace-state.backup.json`. Invalid or newer state is preserved
 without overwrite and opens a recoverable default view.
 
+Orchestrations, structured tasks, agent metadata, goals, and bounded final summaries are stored
+separately in `%APPDATA%\Agenza\orchestration-state.json`, with its own backup. Streamed reasoning,
+commands, command output, terminal content, approvals, environment values, and credentials are not
+persisted. Runs interrupted by application shutdown recover as stopped; their Git work is preserved.
+
 Agenza stores newline-delimited JSON diagnostics at `%APPDATA%\Agenza\logs\agenza.log`. Logs may
 include application, process, and safe workspace lifecycle categories, but never terminal input,
 terminal output, commands, repository paths, branch or file names, remote URLs, credentials,
@@ -166,7 +198,11 @@ environment values, or authentication secrets.
 - Removing or reassigning a terminal never cleans a previous worktree.
 - A failure is contained to the affected pane or operation.
 - Agenza does not automatically merge, rebase, cherry-pick, commit, fetch, pull, push, resolve
-  conflicts, prune worktrees, or delete branches.
+  conflicts, prune worktrees, or delete branches during manual terminal workflows. Orchestration
+  may create a bounded local task commit only when its validated `autoCommit` option is enabled.
+- The Orchestrator can request resource intentions only. The main process validates and performs
+  every provider, terminal, filesystem, and Git operation.
+- One canonical worktree cannot be assigned to two terminals or agents.
 - Closing Agenza terminates Codex process trees but preserves every Git workspace.
 
 ## Development requirements
@@ -211,7 +247,7 @@ conda run -n agenza npm run test:release
   persistence, cleanup reconciliation, shutdown, and orphan detection.
 - `npm run test:all` runs the unit suite, creates a fresh package, and runs the smoke test.
 - `npm run build` creates the unpacked app under `out/Agenza-win32-x64`.
-- `npm run make` creates `Agenza-0.2.0 Setup.exe` and its Squirrel package under
+- `npm run make` creates `Agenza-0.3.0 Setup.exe` and its Squirrel package under
   `out/make/squirrel.windows/x64`.
 - `npm run test:release` checks the expected version, executable metadata, installer, Squirrel
   manifest, application archive, executable, and native ConPTY runtime.
@@ -276,23 +312,29 @@ development instance keeps the native node-pty module open on Windows.
 
 ### Windows warns about the installer
 
-Release `0.2.0` is not code-signed. Confirm that the installer came from the project's own GitHub
+Release `0.3.0` is not code-signed. Confirm that the installer came from the project's own GitHub
 Release before running it.
 
-## Known limitations in 0.2.0
+## Known limitations in 0.3.0
 
-- Windows only and Codex is the only supported CLI.
-- Terminal sessions do not communicate, link, delegate, or orchestrate work with each other.
-- Git operations are local only; Agenza does not manage remotes, hosting accounts, authentication,
-  fetch, pull, push, merge, rebase, commits, or conflict resolution.
+- Windows only and Codex App Server is the only supported agent provider.
+- One run plans at most four worker tasks and uses one worker agent per task. Workers cannot create
+  nested agents.
+- Dependencies control scheduling but do not propagate completed commits into a downstream
+  worktree. Tasks that require combined code wait for a later integration workflow.
+- Review readiness is represented, but automatic review execution, merge, rebase, cherry-pick,
+  conflict resolution, fetch, pull, push, and branch deletion are unavailable.
+- The terminal associated with an agent shows its workspace and can be used after the run; it is not
+  yet a terminal UI attached to the same App Server thread.
 - Branch deletion and forced worktree cleanup are intentionally unavailable.
 - Attached external worktrees cannot be cleaned by Agenza.
 - No accounts, multi-user collaboration, cloud synchronization, or remote terminals.
 - No automatic updates or code signing.
 
-See [docs/release-notes-0.2.0.md](docs/release-notes-0.2.0.md) for the publication-ready release
-notes, [CHANGELOG.md](CHANGELOG.md) for the complete change summary, and
-[docs/manual-release-test.md](docs/manual-release-test.md) for the validated workspace checklist.
-The completed release plans are archived in [todo-v0.2.0.json](todo-v0.2.0.json) and
-[todo-v0.1.0.json](todo-v0.1.0.json). The current `0.2.0` plan also remains in
-[todo.json](todo.json).
+See [docs/release-notes-0.3.0.md](docs/release-notes-0.3.0.md) for the release notes,
+[CHANGELOG.md](CHANGELOG.md) for the complete change summary, and
+[docs/manual-orchestration-test-0.3.0.md](docs/manual-orchestration-test-0.3.0.md) for the new
+orchestration checklist. The validated 0.2.0 baseline remains in
+[docs/manual-release-test.md](docs/manual-release-test.md).
+The completed baseline plans are archived in [todo-v0.2.0.json](todo-v0.2.0.json) and
+[todo-v0.1.0.json](todo-v0.1.0.json); [todo.json](todo.json) tracks `0.3.0`.

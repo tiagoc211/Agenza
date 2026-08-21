@@ -10,7 +10,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const executablePath = path.join(projectRoot, 'out', 'Agenza-win32-x64', 'Agenza.exe');
 
 if (process.platform !== 'win32') {
-  console.error('The Agenza 0.2.0 smoke test requires Windows.');
+  console.error('The Agenza 0.3.0 smoke test requires Windows.');
   process.exit(1);
 }
 

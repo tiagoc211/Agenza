@@ -2,6 +2,39 @@
 
 All notable changes to Agenza are documented in this file.
 
+## [0.3.0] - 2026-08-21
+
+- Require explicit Git project selection before revealing or enabling orchestration controls.
+
+### Added
+
+- Persistent orchestrations, dependency-aware tasks, logical agents, provider runtimes, structured
+  results, and review-ready integration state.
+- A provider registry and Codex App Server adapter using JSON-RPC threads, turns, items, structured
+  planner output, interruption, and lifecycle events.
+- Safe automatic provisioning of one terminal definition, local branch, and isolated managed
+  worktree per implementation agent through the existing Git transaction layer.
+- Consistent orchestrator and worker prompt contracts with explicit roles, ownership, constraints,
+  acceptance criteria, and completion reporting.
+- Narrow start, list, stop, and event IPC plus a minimal goal, limit, task, agent, status, and
+  workspace-focus interface.
+- Separate atomic orchestration persistence and stopped-state recovery for interrupted runs.
+
+### Safety
+
+- The renderer supplies only a goal, validated options, and a live terminal ID; the main process
+  resolves the repository and computes every branch and worktree path.
+- Worker lifecycle is no longer controlled by writing instructions into PTYs.
+- Planner turns are read-only; worker turns are scoped to one worktree with network disabled.
+- Automatic merge, branch deletion, worktree cleanup, push, pull, fetch, rebase, and cherry-pick
+  remain unavailable. Completed worktrees are preserved for review.
+
+### Known limitations
+
+- Codex is the only provider, one run has at most four tasks, and nested agents are disabled.
+- Dependencies schedule work but do not transfer commits between branches.
+- The associated terminal is a workspace view rather than a TUI attached to the agent thread.
+
 ## [0.2.0] - 2026-08-20
 
 ### Added
@@ -82,4 +115,5 @@ All notable changes to Agenza are documented in this file.
 - The installer is not digitally signed and automatic updates are not configured.
 
 [0.2.0]: https://github.com/tiagoc211/Agenza/releases/tag/v0.2.0
+[0.3.0]: https://github.com/tiagoc211/Agenza/releases/tag/v0.3.0
 [0.1.0]: https://github.com/tiagoc211/Agenza/releases/tag/v0.1.0

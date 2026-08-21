@@ -12,13 +12,13 @@ const {
   WorkspaceStateStore,
 } = require('../src/workspace/workspace-state');
 
-const RELEASE_VERSION = '0.2.0';
+const RELEASE_VERSION = '0.3.0';
 const TERMINAL_IDS = [
   'terminal-11111111-1111-4111-8111-111111111111',
   'terminal-22222222-2222-4222-8222-222222222222',
 ];
 
-test('uses 0.2.0 metadata while retaining the 0.1.0 Squirrel upgrade identity', () => {
+test('uses 0.3.0 metadata while retaining the existing Squirrel upgrade identity', () => {
   const squirrelMaker = forgeConfig.makers.find(
     ({ name }) => name === '@electron-forge/maker-squirrel',
   );
@@ -79,4 +79,6 @@ test('ships actionable Codex and Git prerequisite guidance with dynamic terminal
   assert.match(rendererMarkup, /data-add-terminal/);
   assert.match(rendererMarkup, /id="terminal-pane-template"/);
   assert.match(rendererMarkup, />Git workspace</);
+  assert.match(rendererMarkup, /data-orchestration-goal/);
+  assert.match(rendererMarkup, /data-orchestration-agents/);
 });
