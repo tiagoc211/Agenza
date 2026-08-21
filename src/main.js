@@ -6,9 +6,18 @@ const path = require('node:path');
 
 const { registerClipboardIpc } = require('./clipboard/clipboard-ipc');
 const { registerGitIpc } = require('./git/git-ipc');
+const { GitWorkspaceExecutor } = require('./git/git-workspace-executor');
+const { GitWorkspacePlanner } = require('./git/git-workspace-planner');
 const { inspectSavedGitWorkspace } = require('./git/git-workspace-recovery');
 const { createResourceDisposer } = require('./lifecycle/resource-disposer');
 const { createAppLogger, createNoopLogger } = require('./logging/app-logger');
+const { AgentProviderRegistry } = require('./orchestration/agent-provider-registry');
+const { AgentWorkspaceProvisioner } = require('./orchestration/agent-workspace-provisioner');
+const { GitTaskCommitter } = require('./orchestration/git-task-committer');
+const { registerOrchestrationIpc } = require('./orchestration/orchestration-ipc');
+const { OrchestrationService } = require('./orchestration/orchestration-service');
+const { OrchestrationStateStore } = require('./orchestration/orchestration-state');
+const { CodexAppServerProvider } = require('./orchestration/providers/codex-app-server-provider');
 const { registerProjectFolderIpc } = require('./project/project-folder');
 const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
 const { TerminalManager } = require('./terminal/terminal-manager');
@@ -127,6 +136,22 @@ const createMainWindow = async () => {
     terminalManager,
   });
   await workspaceService.initialize();
+  const gitWorkspacePlanner = new GitWorkspacePlanner();
+  const gitWorkspaceExecutor = new GitWorkspaceExecutor({ planner: gitWorkspacePlanner });
+  const providerRegistry = new AgentProviderRegistry();
+  providerRegistry.register('codex', new CodexAppServerProvider());
+  const orchestrationService = new OrchestrationService({
+    committer: new GitTaskCommitter(),
+    logger: appLogger,
+    providerRegistry,
+    stateStore: new OrchestrationStateStore({ directory: workspaceDirectory }),
+    workspaceProvisioner: new AgentWorkspaceProvisioner({
+      executor: gitWorkspaceExecutor,
+      planner: gitWorkspacePlanner,
+      workspaceService,
+    }),
+  });
+  await orchestrationService.initialize();
   const window = new BrowserWindow(createWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
   const prepareTerminal = isStartupCheck
     ? async () => undefined
@@ -154,11 +179,18 @@ const createMainWindow = async () => {
   appLogger.info('window.created');
   const disposeClipboardIpc = registerClipboardIpc({ clipboard, ipcMain, window });
   const disposeGitIpc = registerGitIpc({
+    executor: gitWorkspaceExecutor,
     ipcMain,
     logger: appLogger,
+    planner: gitWorkspacePlanner,
     startTerminal,
     window,
     workspaceService,
+  });
+  const disposeOrchestrationIpc = registerOrchestrationIpc({
+    ipcMain,
+    service: orchestrationService,
+    window,
   });
   const projectFolderIpc = registerProjectFolderIpc({
     defaultFolder: startupCheckRepository?.repositoryRoot ?? null,
@@ -179,6 +211,9 @@ const createMainWindow = async () => {
     prepare: prepareTerminal,
   });
   const disposeWindowResources = createResourceDisposer([
+    { dispose: disposeOrchestrationIpc, label: 'orchestration IPC' },
+    { dispose: () => orchestrationService.dispose(), label: 'orchestration service' },
+    { dispose: () => providerRegistry.dispose(), label: 'agent providers' },
     { dispose: disposeTerminalIpc, label: 'terminal IPC' },
     { dispose: projectFolderIpc.dispose, label: 'project folder IPC' },
     { dispose: disposeGitIpc, label: 'Git discovery IPC' },
