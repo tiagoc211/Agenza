@@ -126,8 +126,8 @@ test('plans, provisions, schedules dependencies, commits, and completes through 
     providerRegistry: providers,
     stateStore: store,
     workspaceProvisioner: {
-      resolveProject: async (sourceTerminalId) => ({
-        sourceTerminalId,
+      resolveProject: async (projectWorkspaceId) => ({
+        projectWorkspaceId,
         projectPath: 'C:\\project',
         repositoryRoot: 'C:\\project',
         baseBranch: 'main',
@@ -152,7 +152,7 @@ test('plans, provisions, schedules dependencies, commits, and completes through 
   const started = await service.start({
     goal: 'Implement API coverage.',
     options: { maxAgents: 2 },
-    projectTerminalId: 'terminal-source',
+    projectWorkspaceId: 'workspace-source',
   });
   await service.flush();
   const completed = service.get(started.id);
@@ -191,8 +191,8 @@ test('stops live workers while preserving their terminal and worktree identities
       },
     },
     workspaceProvisioner: {
-      resolveProject: async (sourceTerminalId) => ({
-        sourceTerminalId,
+      resolveProject: async (projectWorkspaceId) => ({
+        projectWorkspaceId,
         projectPath: 'C:\\project',
         repositoryRoot: 'C:\\project',
         baseBranch: 'main',
@@ -219,7 +219,7 @@ test('stops live workers while preserving their terminal and worktree identities
   const orchestration = await service.start({
     goal: 'Run until stopped.',
     options: { maxAgents: 1 },
-    projectTerminalId: 'terminal-source',
+    projectWorkspaceId: 'workspace-source',
   });
   await workerStarted;
   const stopped = await service.stop(orchestration.id);
@@ -252,8 +252,8 @@ test('marks the planner failed when its provider rejects startup', async () => {
       },
     },
     workspaceProvisioner: {
-      resolveProject: async (sourceTerminalId) => ({
-        sourceTerminalId,
+      resolveProject: async (projectWorkspaceId) => ({
+        projectWorkspaceId,
         projectPath: 'C:\\project',
         repositoryRoot: 'C:\\project',
         baseBranch: 'main',
@@ -266,7 +266,7 @@ test('marks the planner failed when its provider rejects startup', async () => {
   await service.initialize();
   const started = await service.start({
     goal: 'Fail during planning.',
-    projectTerminalId: 'terminal-source',
+    projectWorkspaceId: 'workspace-source',
   });
   await service.flush();
 

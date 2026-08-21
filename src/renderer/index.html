@@ -55,6 +55,7 @@
             type="button"
             aria-label="Add a new terminal"
             data-add-terminal
+            disabled
           >
             <span aria-hidden="true">+</span>
             Add terminal
@@ -62,101 +63,122 @@
         </div>
       </header>
 
-      <section class="orchestration-panel" aria-labelledby="orchestration-title">
-        <form class="orchestration-form" data-orchestration-form>
-          <div class="orchestration-heading">
+      <div class="workspace-layout">
+        <aside class="workspace-sidebar" aria-labelledby="workspace-sidebar-title">
+          <div class="workspace-sidebar-heading">
             <div>
-              <p class="orchestration-eyebrow">Multi-agent orchestration</p>
-              <h2 id="orchestration-title" data-orchestration-title>Choose a project</h2>
+              <p>Projects</p>
+              <h2 id="workspace-sidebar-title">Workspaces</h2>
             </div>
-            <span
-              class="orchestration-state"
-              role="status"
-              aria-live="polite"
-              data-orchestration-status
-            >
-              Project required
-            </span>
+            <button type="button" aria-label="Add a project workspace" data-add-workspace>+</button>
           </div>
-          <div class="orchestration-project-step" data-orchestration-project-step>
-            <div class="orchestration-project-copy">
-              <span>Project workspace</span>
-              <strong data-orchestration-project-name>No project selected</strong>
-              <small data-orchestration-project-path>
-                Choose the folder that the Orchestrator should analyse and modify.
-              </small>
-            </div>
-            <button type="button" data-orchestration-choose-project>Choose project folder</button>
-          </div>
-          <div data-orchestration-goal-step hidden>
-            <label class="orchestration-goal-field">
-              <span>Goal for the selected project</span>
-              <textarea
-                maxlength="20000"
-                rows="2"
-                placeholder="Analyse this project and create two independent tasks to improve test coverage."
-                data-orchestration-goal
-                required
-              ></textarea>
-            </label>
-            <div class="orchestration-controls">
-              <label>
-                <span>Max agents</span>
-                <select data-orchestration-max-agents>
-                  <option value="1">1</option>
-                  <option value="2" selected>2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                </select>
-              </label>
-              <button type="submit" data-orchestration-start>Start</button>
-              <button type="button" data-orchestration-stop disabled>Stop</button>
-            </div>
-          </div>
-          <p class="orchestration-message" role="alert" data-orchestration-message></p>
-        </form>
-        <div class="orchestration-results" aria-live="polite" data-orchestration-results hidden>
-          <section>
-            <h3>Tasks</h3>
-            <ol class="orchestration-list" data-orchestration-tasks>
-              <li class="orchestration-placeholder">No plan yet.</li>
-            </ol>
-          </section>
-          <section>
-            <h3>Agents</h3>
-            <ol class="orchestration-list" data-orchestration-agents>
-              <li class="orchestration-placeholder">No agents yet.</li>
-            </ol>
-          </section>
-        </div>
-      </section>
+          <ol class="workspace-list" data-workspace-list>
+            <li class="workspace-list-placeholder">No workspaces yet.</li>
+          </ol>
+          <p class="workspace-sidebar-message" role="status" data-workspace-message>
+            Add a folder to begin.
+          </p>
+        </aside>
 
-      <main
-        class="terminal-grid"
-        data-terminal-grid
-        data-terminal-count="0"
-        data-workspace-ready="false"
-        aria-label="Codex terminal workspace"
-        aria-describedby="terminal-keyboard-help"
-        aria-keyshortcuts="F6 Shift+F6"
-      >
-        <span class="visually-hidden" id="terminal-keyboard-help">
-          Press F6 to focus the next terminal or Shift plus F6 to focus the previous terminal.
-        </span>
-        <section class="empty-workspace" data-empty-workspace>
-          <span class="empty-workspace-mark" aria-hidden="true">&gt;_</span>
-          <h2>No terminals open</h2>
-          <p>Add a terminal to choose a project folder and start Codex.</p>
-          <button
-            class="empty-workspace-action"
-            type="button"
-            aria-label="Add a new terminal"
-            data-empty-add-terminal
+        <div class="workspace-content">
+          <section class="orchestration-panel" aria-labelledby="orchestration-title">
+            <form class="orchestration-form" data-orchestration-form>
+              <div class="orchestration-heading">
+                <div>
+                  <p class="orchestration-eyebrow">Multi-agent orchestration</p>
+                  <h2 id="orchestration-title" data-orchestration-title>Choose a project</h2>
+                </div>
+                <span
+                  class="orchestration-state"
+                  role="status"
+                  aria-live="polite"
+                  data-orchestration-status
+                >
+                  Project required
+                </span>
+              </div>
+              <div class="orchestration-project-step" data-orchestration-project-step>
+                <div class="orchestration-project-copy">
+                  <span>Project workspace</span>
+                  <strong data-orchestration-project-name>No project selected</strong>
+                  <small data-orchestration-project-path>
+                    Choose the folder that the Orchestrator should analyse and modify.
+                  </small>
+                </div>
+                <small>Select a workspace from the sidebar.</small>
+              </div>
+              <div data-orchestration-goal-step hidden>
+                <label class="orchestration-goal-field">
+                  <span>Goal for the selected project</span>
+                  <textarea
+                    maxlength="20000"
+                    rows="2"
+                    placeholder="Analyse this project and create two independent tasks to improve test coverage."
+                    data-orchestration-goal
+                    required
+                  ></textarea>
+                </label>
+                <div class="orchestration-controls">
+                  <label>
+                    <span>Max agents</span>
+                    <select data-orchestration-max-agents>
+                      <option value="1">1</option>
+                      <option value="2" selected>2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select>
+                  </label>
+                  <button type="submit" data-orchestration-start>Start</button>
+                  <button type="button" data-orchestration-stop disabled>Stop</button>
+                </div>
+              </div>
+              <p class="orchestration-message" role="alert" data-orchestration-message></p>
+            </form>
+            <div class="orchestration-results" aria-live="polite" data-orchestration-results hidden>
+              <section>
+                <h3>Tasks</h3>
+                <ol class="orchestration-list" data-orchestration-tasks>
+                  <li class="orchestration-placeholder">No plan yet.</li>
+                </ol>
+              </section>
+              <section>
+                <h3>Agents</h3>
+                <ol class="orchestration-list" data-orchestration-agents>
+                  <li class="orchestration-placeholder">No agents yet.</li>
+                </ol>
+              </section>
+            </div>
+          </section>
+
+          <main
+            class="terminal-grid"
+            data-terminal-grid
+            data-terminal-count="0"
+            data-workspace-ready="false"
+            aria-label="Codex terminal workspace"
+            aria-describedby="terminal-keyboard-help"
+            aria-keyshortcuts="F6 Shift+F6"
           >
-            Add terminal
-          </button>
-        </section>
-      </main>
+            <span class="visually-hidden" id="terminal-keyboard-help">
+              Press F6 to focus the next terminal or Shift plus F6 to focus the previous terminal.
+            </span>
+            <section class="empty-workspace" data-empty-workspace>
+              <span class="empty-workspace-mark" aria-hidden="true">&gt;_</span>
+              <h2>No workspace selected</h2>
+              <p>Add or select a workspace from the sidebar.</p>
+              <button
+                class="empty-workspace-action"
+                type="button"
+                aria-label="Add a terminal to the active workspace"
+                data-empty-add-terminal
+                disabled
+              >
+                Add terminal
+              </button>
+            </section>
+          </main>
+        </div>
+      </div>
 
       <template id="terminal-pane-template">
         <section class="terminal-pane" data-session-state="waiting" aria-busy="false">
@@ -173,8 +195,9 @@
                 class="pane-action-button pane-project-button"
                 type="button"
                 data-project-button
+                hidden
               >
-                Choose folder
+                Workspace folder
               </button>
               <button
                 class="pane-action-button pane-worktree-button"

@@ -4,6 +4,7 @@ const { CLIPBOARD_CHANNELS } = require('./clipboard/ipc-channels');
 const { GIT_CHANNELS } = require('./git/ipc-channels');
 const { ORCHESTRATION_CHANNELS } = require('./orchestration/ipc-channels');
 const { PROJECT_CHANNELS } = require('./project/ipc-channels');
+const { PROJECT_WORKSPACE_CHANNELS } = require('./project-workspaces/ipc-channels');
 const { TERMINAL_CHANNELS } = require('./terminal/ipc-channels');
 
 const subscribe = (channel, callback) => {
@@ -34,6 +35,15 @@ const projectApi = Object.freeze({
   selectFolder: (id) => ipcRenderer.invoke(PROJECT_CHANNELS.selectFolder, { id }),
 });
 
+const projectWorkspaceApi = Object.freeze({
+  activate: (workspaceId) =>
+    ipcRenderer.invoke(PROJECT_WORKSPACE_CHANNELS.activate, { workspaceId }),
+  add: () => ipcRenderer.invoke(PROJECT_WORKSPACE_CHANNELS.add),
+  createTerminal: (workspaceId) =>
+    ipcRenderer.invoke(PROJECT_WORKSPACE_CHANNELS.createTerminal, { workspaceId }),
+  list: () => ipcRenderer.invoke(PROJECT_WORKSPACE_CHANNELS.list),
+});
+
 const gitApi = Object.freeze({
   attachWorktree: (id, operationId) =>
     ipcRenderer.invoke(GIT_CHANNELS.attachWorktree, { id, operationId }),
@@ -56,8 +66,8 @@ const clipboardApi = Object.freeze({
 
 const orchestrationApi = Object.freeze({
   list: () => ipcRenderer.invoke(ORCHESTRATION_CHANNELS.list),
-  start: (goal, options, projectTerminalId) =>
-    ipcRenderer.invoke(ORCHESTRATION_CHANNELS.start, { goal, options, projectTerminalId }),
+  start: (goal, options, projectWorkspaceId) =>
+    ipcRenderer.invoke(ORCHESTRATION_CHANNELS.start, { goal, options, projectWorkspaceId }),
   stop: (orchestrationId) => ipcRenderer.invoke(ORCHESTRATION_CHANNELS.stop, { orchestrationId }),
   onEvent: (callback) => subscribe(ORCHESTRATION_CHANNELS.event, callback),
 });
@@ -70,6 +80,7 @@ contextBridge.exposeInMainWorld(
     orchestration: orchestrationApi,
     platform: process.platform,
     project: projectApi,
+    projectWorkspaces: projectWorkspaceApi,
     terminal: terminalApi,
   }),
 );

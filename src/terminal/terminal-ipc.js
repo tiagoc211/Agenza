@@ -32,9 +32,10 @@ const registerTerminalIpc = ({
   window,
   manager,
   logger,
+  onRemoved = async () => undefined,
   prepare = () => undefined,
 }) => {
-  if (!ipcMain || !window || !manager) {
+  if (!ipcMain || !window || !manager || typeof onRemoved !== 'function') {
     throw new TypeError('Terminal IPC requires ipcMain, a window, and a terminal manager.');
   }
 
@@ -120,6 +121,14 @@ const registerTerminalIpc = ({
 
     try {
       await sessionCatalog.remove(id);
+      try {
+        await onRemoved(id);
+      } catch (error) {
+        writeLog(logger, 'warn', 'terminal.workspace_membership_cleanup_failed', {
+          error,
+          terminalId: id,
+        });
+      }
       writeLog(logger, 'info', 'terminal.remove_succeeded', { terminalId: id });
       return { id, removed: true };
     } catch (error) {

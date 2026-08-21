@@ -19,6 +19,9 @@ const { OrchestrationService } = require('./orchestration/orchestration-service'
 const { OrchestrationStateStore } = require('./orchestration/orchestration-state');
 const { CodexAppServerProvider } = require('./orchestration/providers/codex-app-server-provider');
 const { registerProjectFolderIpc } = require('./project/project-folder');
+const { registerProjectWorkspaceIpc } = require('./project-workspaces/project-workspace-ipc');
+const { ProjectWorkspaceService } = require('./project-workspaces/project-workspace-service');
+const { ProjectWorkspaceStateStore } = require('./project-workspaces/project-workspace-state');
 const { prepareCodexSessionOptions } = require('./terminal/codex-launcher');
 const { TerminalManager } = require('./terminal/terminal-manager');
 const { registerTerminalIpc } = require('./terminal/terminal-ipc');
@@ -136,6 +139,23 @@ const createMainWindow = async () => {
     terminalManager,
   });
   await workspaceService.initialize();
+  const projectWorkspaceService = new ProjectWorkspaceService({
+    stateStore: new ProjectWorkspaceStateStore({ directory: workspaceDirectory }),
+    terminalWorkspaceService: workspaceService,
+  });
+  await projectWorkspaceService.initialize();
+
+  if (startupCheckRepository) {
+    const projectWorkspace = await projectWorkspaceService.add(
+      startupCheckRepository.repositoryRoot,
+    );
+
+    for (const terminal of workspaceService.list().sessions) {
+      await workspaceService.assignFolder(terminal.id, startupCheckRepository.repositoryRoot);
+      await projectWorkspaceService.attachTerminal(projectWorkspace.id, terminal.id);
+    }
+  }
+
   const gitWorkspacePlanner = new GitWorkspacePlanner();
   const gitWorkspaceExecutor = new GitWorkspaceExecutor({ planner: gitWorkspacePlanner });
   const providerRegistry = new AgentProviderRegistry();
@@ -148,6 +168,7 @@ const createMainWindow = async () => {
     workspaceProvisioner: new AgentWorkspaceProvisioner({
       executor: gitWorkspaceExecutor,
       planner: gitWorkspacePlanner,
+      projectWorkspaceService,
       workspaceService,
     }),
   });
@@ -192,6 +213,12 @@ const createMainWindow = async () => {
     service: orchestrationService,
     window,
   });
+  const disposeProjectWorkspaceIpc = registerProjectWorkspaceIpc({
+    dialog,
+    ipcMain,
+    service: projectWorkspaceService,
+    window,
+  });
   const projectFolderIpc = registerProjectFolderIpc({
     defaultFolder: startupCheckRepository?.repositoryRoot ?? null,
     dialog,
@@ -208,12 +235,14 @@ const createMainWindow = async () => {
     logger: appLogger,
     window,
     manager: terminalManager,
+    onRemoved: (id) => projectWorkspaceService.detachTerminal(id),
     prepare: prepareTerminal,
   });
   const disposeWindowResources = createResourceDisposer([
     { dispose: disposeOrchestrationIpc, label: 'orchestration IPC' },
     { dispose: () => orchestrationService.dispose(), label: 'orchestration service' },
     { dispose: () => providerRegistry.dispose(), label: 'agent providers' },
+    { dispose: disposeProjectWorkspaceIpc, label: 'project workspace IPC' },
     { dispose: disposeTerminalIpc, label: 'terminal IPC' },
     { dispose: projectFolderIpc.dispose, label: 'project folder IPC' },
     { dispose: disposeGitIpc, label: 'Git discovery IPC' },
@@ -311,8 +340,11 @@ const createMainWindow = async () => {
           };
           const addTerminal = async () => {
             const previousCount = getPanes().length;
+            const knownIds = new Set(getIds());
             document.querySelector('[data-add-terminal]')?.click();
-            return waitFor(() => getPanes().length === previousCount + 1);
+            await waitFor(() => getPanes().length === previousCount + 1);
+            const addedPane = getPanes().find((pane) => !knownIds.has(pane.dataset.paneId));
+            return waitFor(() => addedPane?.dataset.sessionState === 'connected');
           };
           const removeTerminal = async (id) => {
             getPane(id)?.querySelector('[data-remove-button]')?.click();
@@ -337,7 +369,7 @@ const createMainWindow = async () => {
           const firstInitialPane = getPane(initialIds[0]);
           const secondInitialPane = getPane(initialIds[1]);
           grid?.insertBefore(secondInitialPane, firstInitialPane);
-          secondInitialPane?.querySelector('[data-project-button]')?.focus();
+          secondInitialPane?.querySelector('[data-clear-button]')?.focus();
           document.dispatchEvent(
             new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'F6' }),
           );
@@ -380,10 +412,6 @@ const createMainWindow = async () => {
           const stableLabels = terminalIds.map(
             (id) => getPane(id)?.querySelector('[data-terminal-title]')?.textContent,
           );
-
-          for (const id of terminalIds) {
-            getPane(id)?.querySelector('[data-project-button]')?.click();
-          }
 
           await waitFor(
             () => document.querySelectorAll('[data-session-state="connected"]').length === 2,
@@ -558,7 +586,9 @@ const createMainWindow = async () => {
             const knownIds = new Set(getPanes().map((pane) => pane.dataset.paneId));
             document.querySelector('[data-add-terminal]')?.click();
             await waitFor(() => getPanes().length === knownIds.size + 1);
-            return getPanes().find((pane) => !knownIds.has(pane.dataset.paneId))?.dataset.paneId;
+            const addedPane = getPanes().find((pane) => !knownIds.has(pane.dataset.paneId));
+            await waitFor(() => addedPane?.dataset.sessionState === 'connected');
+            return addedPane?.dataset.paneId;
           };
           const assignWorktree = async (id, branch, worktreePath) => {
             const discovery = await window.agenza.git.discover(id);
@@ -616,7 +646,6 @@ const createMainWindow = async () => {
 
           const removedTerminalId = await createTerminal();
           const removedTerminalPane = getPane(removedTerminalId);
-          removedTerminalPane?.querySelector('[data-project-button]')?.click();
           await waitFor(
             () => removedTerminalPane?.dataset.sessionState === 'connected',
             10000,

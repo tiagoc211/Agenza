@@ -44,7 +44,7 @@ test('exposes only validated orchestration intents to the owning renderer', asyn
   const started = await harness.handlers.get(ORCHESTRATION_CHANNELS.start)(harness.trustedEvent, {
     goal: 'Improve tests',
     options: { maxAgents: 2 },
-    projectTerminalId: 'terminal-1',
+    projectWorkspaceId: 'workspace-00000000-0000-4000-8000-000000000001',
   });
   assert.equal(started.goal, 'Improve tests');
   assert.throws(
@@ -52,7 +52,7 @@ test('exposes only validated orchestration intents to the owning renderer', asyn
       harness.handlers.get(ORCHESTRATION_CHANNELS.start)(harness.trustedEvent, {
         goal: 'Unsafe',
         options: {},
-        projectTerminalId: 'terminal-1',
+        projectWorkspaceId: 'workspace-00000000-0000-4000-8000-000000000001',
         projectPath: 'C:\\arbitrary',
       }),
     /Invalid orchestration start/,

@@ -76,11 +76,11 @@ class OrchestrationService {
     return copyValue(orchestration);
   }
 
-  async start({ goal, options = {}, projectTerminalId } = {}) {
+  async start({ goal, options = {}, projectWorkspaceId } = {}) {
     this._requireInitialized();
     const validatedGoal = assertGoal(goal);
     const validatedOptions = normalizeOrchestrationOptions(options);
-    const project = await this._workspaceProvisioner.resolveProject(projectTerminalId);
+    const project = await this._workspaceProvisioner.resolveProject(projectWorkspaceId);
 
     const conflicting = this._state.orchestrations.find(
       (orchestration) =>

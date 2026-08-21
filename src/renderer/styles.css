@@ -44,9 +44,129 @@ body {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   width: 100%;
   height: 100%;
+}
+
+.workspace-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.workspace-sidebar {
+  min-width: 0;
+  padding: 0.85rem 0.65rem;
+  overflow: auto;
+  border-right: 1px solid #222936;
+  background: #0b1018;
+}
+
+.workspace-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.25rem 0.7rem;
+}
+
+.workspace-sidebar-heading p,
+.workspace-sidebar-heading h2,
+.workspace-sidebar-message,
+.workspace-list {
+  margin: 0;
+}
+
+.workspace-sidebar-heading p {
+  color: #718096;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-sidebar-heading h2 {
+  margin-top: 0.1rem;
+  font-size: 0.95rem;
+}
+
+.workspace-sidebar-heading button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #39708c;
+  border-radius: 7px;
+  background: #123044;
+  color: #a8e8ff;
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.workspace-list {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-list button {
+  display: grid;
+  width: 100%;
+  gap: 0.12rem;
+  padding: 0.55rem 0.6rem;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #c8d0dc;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-list button:hover {
+  background: #121b27;
+}
+
+.workspace-list button[aria-current='true'] {
+  border-color: #315e77;
+  background: #132433;
+  color: #e9f8ff;
+}
+
+.workspace-list strong,
+.workspace-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-list strong {
+  font-size: 0.75rem;
+}
+
+.workspace-list small,
+.workspace-sidebar-message,
+.workspace-list-placeholder {
+  color: #7f8da2;
+  font-size: 0.64rem;
+}
+
+.workspace-list-placeholder {
+  padding: 0.55rem 0.6rem;
+}
+
+.workspace-sidebar-message {
+  margin-top: 0.7rem;
+  padding: 0 0.25rem;
+}
+
+.workspace-content {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
 }
 
 .orchestration-panel {
@@ -305,6 +425,10 @@ body {
 }
 
 @media (max-width: 900px) {
+  .workspace-layout {
+    grid-template-columns: 170px minmax(0, 1fr);
+  }
+
   .orchestration-panel {
     grid-template-columns: 1fr;
     max-height: 320px;
@@ -633,6 +757,7 @@ body {
   color: #f4ca78;
 }
 
+.pane-project-button[hidden],
 .pane-recovery-button[hidden] {
   display: none;
 }

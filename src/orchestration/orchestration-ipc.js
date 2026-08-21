@@ -1,5 +1,6 @@
 const { ORCHESTRATION_ID_PATTERN } = require('./orchestration-model');
 const { ORCHESTRATION_CHANNELS } = require('./ipc-channels');
+const { PROJECT_WORKSPACE_ID_PATTERN } = require('../project-workspaces/project-workspace-state');
 
 const isTrustedEvent = (event, window) =>
   event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
@@ -38,7 +39,10 @@ const registerOrchestrationIpc = ({ ipcMain, service, window } = {}) => {
   };
   const handleStart = (event, payload) => {
     requireTrusted(event, 'start');
-    assertExactKeys(payload, ['goal', 'options', 'projectTerminalId'], 'start');
+    assertExactKeys(payload, ['goal', 'options', 'projectWorkspaceId'], 'start');
+    if (!PROJECT_WORKSPACE_ID_PATTERN.test(payload.projectWorkspaceId ?? '')) {
+      throw new TypeError('Invalid orchestration project workspace id.');
+    }
     return service.start(payload);
   };
   const handleStop = (event, payload) => {

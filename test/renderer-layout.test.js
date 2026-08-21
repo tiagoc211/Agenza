@@ -6,8 +6,9 @@ const html = readFileSync('src/renderer/index.html', 'utf8');
 const renderer = readFileSync('src/renderer/index.js', 'utf8');
 const styles = readFileSync('src/renderer/styles.css', 'utf8');
 
-test('requires an explicit Git project before showing orchestration goal controls', () => {
-  assert.match(html, /data-orchestration-choose-project/);
+test('uses a workspace sidebar before showing orchestration goal controls', () => {
+  assert.match(html, /data-add-workspace/);
+  assert.match(html, /data-workspace-list/);
   assert.match(html, /data-orchestration-goal-step hidden/);
   assert.match(html, /data-orchestration-results hidden/);
   assert.match(html, /data-orchestration-goal/);
@@ -21,9 +22,10 @@ test('requires an explicit Git project before showing orchestration goal control
   assert.match(renderer, /window\.agenza\.orchestration\.onEvent/);
   assert.match(renderer, /focusAgentTerminal/);
   assert.match(renderer, /const updateOrchestrationProjectContext/);
-  assert.match(renderer, /activeView\?\.gitStatus\?\.repositoryRoot/);
+  assert.match(renderer, /window\.agenza\.projectWorkspaces\.list/);
+  assert.match(renderer, /window\.agenza\.projectWorkspaces\.activate/);
   assert.match(renderer, /orchestrationGoalStep\.hidden = !isValidProject/);
-  assert.match(renderer, /orchestration\.project\?\.sourceTerminalId/);
+  assert.match(renderer, /currentOrchestration\.project\?\.projectWorkspaceId/);
   assert.doesNotMatch(renderer, /orchestration\.start\([^)]*projectPath/s);
   assert.match(styles, /\.orchestration-panel/);
 });
@@ -46,7 +48,7 @@ test('adds and removes dynamic terminal sessions through the narrow bridge', () 
   assert.match(html, /data-confirmation-dialog/);
   assert.match(html, /data-confirm-action/);
   assert.match(renderer, /window\.agenza\.terminal\.list\(\)/);
-  assert.match(renderer, /window\.agenza\.terminal\.create\(\)/);
+  assert.match(renderer, /window\.agenza\.projectWorkspaces\.createTerminal/);
   assert.match(renderer, /window\.agenza\.terminal\.remove\(view\.id\)/);
   assert.match(renderer, /terminalViews\.delete\(view\.id\)/);
   assert.match(renderer, /view\.terminal\.dispose\(\)/);
@@ -269,15 +271,13 @@ test('recovers stale Git assignments without deleting Git resources', () => {
   assert.match(styles, /\.pane-recovery-button\[hidden\]/);
 });
 
-test('selects and displays an independent project folder before starting each session', () => {
-  assert.match(renderer, /window\.agenza\.project\.selectFolder\(view\.id\)/);
+test('inherits the active workspace before starting each new terminal session', () => {
+  assert.match(html, /data-project-button[\s\S]*hidden/);
+  assert.match(renderer, /activeProjectWorkspaceId/);
+  assert.match(renderer, /window\.agenza\.projectWorkspaces\.createTerminal/);
   assert.match(renderer, /window\.agenza\.terminal\.start\(view\.id\)/);
   assert.match(renderer, /window\.agenza\.terminal\.restart\(view\.id\)/);
-  assert.match(
-    renderer,
-    /applyWorkspaceAvailability\(view, \{ path: result\.path, status: 'available' \}\)/,
-  );
-  assert.match(renderer, /Choose a project folder to start Codex/);
+  assert.match(renderer, /launchSession\(view/);
 });
 
 test('preserves independent clear, restart, and terminal-local recovery behavior', () => {

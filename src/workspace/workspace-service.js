@@ -87,6 +87,10 @@ class WorkspaceService {
     return this.getCatalog();
   }
 
+  get(id) {
+    return this._createSessionSnapshot(this._getDefinition(id));
+  }
+
   create() {
     return this._enqueueMutation(async () => {
       const runtimeSnapshot = this._terminalManager.create();

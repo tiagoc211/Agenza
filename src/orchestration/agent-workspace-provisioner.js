@@ -17,26 +17,27 @@ class AgentWorkspaceProvisioner {
     executor = null,
     pathModule = path,
     planner = null,
+    projectWorkspaceService,
     workspaceService,
   } = {}) {
-    if (!workspaceService || typeof discover !== 'function') {
+    if (!projectWorkspaceService || !workspaceService || typeof discover !== 'function') {
       throw new TypeError('Agent workspace provisioning requires workspace and Git discovery.');
     }
     this._discover = discover;
     this._path = pathModule;
+    this._projectWorkspaceService = projectWorkspaceService;
     this._workspaceService = workspaceService;
     this._planner = planner ?? new GitWorkspacePlanner({ discover, pathModule });
     this._executor = executor ?? new GitWorkspaceExecutor({ discover, planner: this._planner });
+    this._provisionQueues = new Map();
   }
 
-  async resolveProject(sourceTerminalId) {
-    if (typeof sourceTerminalId !== 'string' || !this._workspaceService.has(sourceTerminalId)) {
-      throw new Error('Select a valid project terminal before starting orchestration.');
+  async resolveProject(projectWorkspaceId) {
+    const selectedWorkspace = this._projectWorkspaceService.get(projectWorkspaceId);
+    if (selectedWorkspace.status !== 'available') {
+      throw new Error('The selected project workspace is unavailable.');
     }
-    const projectPath = this._workspaceService.getCurrentFolder(sourceTerminalId);
-    if (!projectPath) {
-      throw new Error('The selected terminal must have an accessible project workspace.');
-    }
+    const projectPath = selectedWorkspace.projectPath;
     const repository = await this._discover(projectPath);
     if (
       !repository.currentBranch ||
@@ -49,7 +50,7 @@ class AgentWorkspaceProvisioner {
       throw new Error('The selected project must be on a supported local branch and worktree.');
     }
     return Object.freeze({
-      sourceTerminalId,
+      projectWorkspaceId,
       projectPath,
       repositoryRoot: repository.root,
       baseBranch: repository.currentBranch,
@@ -59,6 +60,12 @@ class AgentWorkspaceProvisioner {
   }
 
   async provision({ orchestrationId, project, task }) {
+    return this._enqueueProvision(project.repositoryRoot, () =>
+      this._provision({ orchestrationId, project, task }),
+    );
+  }
+
+  async _provision({ orchestrationId, project, task }) {
     const terminal = await this._workspaceService.create();
     const shortRun = orchestrationId.replace('orchestration-', '').slice(0, 8);
     const taskSlug = slugify(task.planKey || task.title);
@@ -69,6 +76,7 @@ class AgentWorkspaceProvisioner {
       `${repositoryName}-agenza-${shortRun}-${taskSlug}`,
     );
 
+    let assigned = false;
     try {
       const preview = await this._planner.plan({
         assignedWorktrees: this._workspaceService.getAssignedGitWorktrees(terminal.id),
@@ -90,6 +98,8 @@ class AgentWorkspaceProvisioner {
         projectPath: project.projectPath,
         terminalId: terminal.id,
       });
+      assigned = true;
+      await this._projectWorkspaceService.attachTerminal(project.projectWorkspaceId, terminal.id);
       return Object.freeze({
         branch,
         terminalId: terminal.id,
@@ -97,13 +107,26 @@ class AgentWorkspaceProvisioner {
         worktreePath: operation.workspace.projectPath,
       });
     } catch (error) {
-      try {
-        await this._workspaceService.remove(terminal.id);
-      } catch {
-        // Preserve the provisioning error; failed Git transactions already guard their resources.
+      if (!assigned) {
+        try {
+          await this._workspaceService.remove(terminal.id);
+        } catch {
+          // Preserve the provisioning error; failed Git transactions already guard their resources.
+        }
       }
       throw error;
     }
+  }
+
+  _enqueueProvision(repositoryRoot, operation) {
+    const key = this._path.normalize(repositoryRoot).toLowerCase();
+    const previous = this._provisionQueues.get(key) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(operation);
+    const tail = result.catch(() => undefined);
+    this._provisionQueues.set(key, tail);
+    return result.finally(() => {
+      if (this._provisionQueues.get(key) === tail) this._provisionQueues.delete(key);
+    });
   }
 
   enqueueRepository(repositoryRoot, operation) {
@@ -115,6 +138,7 @@ class AgentWorkspaceProvisioner {
 
   dispose() {
     this._planner.clearPreviews?.();
+    this._provisionQueues.clear();
   }
 }
 
